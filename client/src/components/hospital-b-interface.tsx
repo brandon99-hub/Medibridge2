@@ -76,6 +76,66 @@ export default function HospitalBInterface({ onShowConsentModal }: HospitalBInte
     },
   });
 
+  // Web3 consent issuance mutation
+  const issueWeb3ConsentMutation = useMutation({
+    mutationFn: async () => {
+      if (!authenticatedPatient || !patientData) {
+        throw new Error("Patient not authenticated or no records found");
+      }
+      
+      const response = await apiRequest("POST", "/api/issue-consent/", {
+        patientId: authenticatedPatient.phoneNumber,
+        hospitalId: 2, // Hospital B
+        recordId: patientData.records[0]?.id,
+        validForHours: 24,
+      });
+      return response.json();
+    },
+    onSuccess: (data) => {
+      setWeb3ConsentData(data);
+      toast({
+        title: "Verifiable Credential Issued",
+        description: "Patient has granted cryptographic consent via Web3",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Consent Failed",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Access record with verifiable credential
+  const accessRecordMutation = useMutation({
+    mutationFn: async () => {
+      if (!web3ConsentData?.verifiableCredential) {
+        throw new Error("No verifiable credential available");
+      }
+      
+      const response = await apiRequest("POST", "/api/get-record/", {
+        verifiableCredential: web3ConsentData.verifiableCredential,
+        hospitalDID: "did:medbridge:hospital:brandon",
+      });
+      return response.json();
+    },
+    onSuccess: (data) => {
+      toast({
+        title: "Web3 Record Access Successful",
+        description: "Medical record retrieved using verifiable credential",
+      });
+      console.log("Decrypted Web3 record:", data.record);
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Web3 Access Failed",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
   const web3SearchMutation = useMutation({
     mutationFn: async (patientDID: string) => {
       return await requestRecordAccess(patientDID);

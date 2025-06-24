@@ -56,10 +56,22 @@ export default function NavigationHeader({ currentHospital, onHospitalSwitch, us
               </Button>
             </Link>
             
-            <div className="flex items-center space-x-2 text-sm text-slate-600">
-              <UserRound className="h-4 w-4" />
-              <span>{user.hospitalName}</span>
-              <Shield className="h-4 w-4 text-green-600 ml-2" />
+            <div className="flex items-center space-x-4">
+              <div className="text-right">
+                <p className="text-sm font-medium text-slate-900">{user.hospitalName || user.username}</p>
+                <p className="text-xs text-slate-600">
+                  Hospital {user.hospitalType} • {user.username}
+                  {user.hospitalType && (
+                    <span className="ml-2">
+                      {user.hospitalType === "A" ? "Record Submitter" : "Record Accessor"}
+                    </span>
+                  )}
+                </p>
+              </div>
+              <div className="flex items-center space-x-1">
+                <Shield className="h-4 w-4 text-green-600" />
+                <Globe className="h-4 w-4 text-purple-600" />
+              </div>
             </div>
             
             <Button
