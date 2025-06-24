@@ -8,6 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Stethoscope, Shield, Users, Lock } from "lucide-react";
+import { Link } from "wouter";
 
 export default function AuthPage() {
   const { user, loginMutation, registerMutation } = useAuth();
@@ -48,6 +49,14 @@ export default function AuthPage() {
               <h1 className="text-2xl font-bold text-slate-900">MediBridge</h1>
             </div>
             <p className="text-slate-600">Healthcare Record Interoperability System</p>
+            <div className="mt-4 p-3 bg-purple-50 rounded-lg">
+              <p className="text-sm text-purple-800">
+                <strong>Looking for patient access?</strong>{" "}
+                <Link href="/patient-portal" className="underline hover:text-purple-600">
+                  Visit the Patient Portal →
+                </Link>
+              </p>
+            </div>
           </div>
 
           <Tabs defaultValue="login" className="w-full">

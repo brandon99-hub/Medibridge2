@@ -9,14 +9,16 @@ import { ProtectedRoute } from "./lib/protected-route";
 import HomePage from "@/pages/home-page";
 import AuthPage from "@/pages/auth-page";
 import NotFound from "@/pages/not-found";
+import PatientPortal from "@/pages/patient-portal";
 import Web3PatientDashboard from "@/components/web3-patient-dashboard";
 
 function Router() {
   return (
     <Switch>
       <ProtectedRoute path="/" component={HomePage} />
-      <Route path="/web3-patient" component={Web3PatientDashboard} />
       <Route path="/auth" component={AuthPage} />
+      <Route path="/patient-portal" component={PatientPortal} />
+      <Route path="/web3-patient" component={Web3PatientDashboard} />
       <Route component={NotFound} />
     </Switch>
   );

@@ -2,7 +2,7 @@ import { User } from "@shared/schema";
 import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
 import { Link } from "wouter";
-import { Stethoscope, UserRound, Shield, LogOut, Globe } from "lucide-react";
+import { Stethoscope, UserRound, Shield, LogOut, Globe, User as UserIcon } from "lucide-react";
 
 interface NavigationHeaderProps {
   currentHospital: "A" | "B";
@@ -48,11 +48,11 @@ export default function NavigationHeader({ currentHospital, onHospitalSwitch, us
               </div>
             )}
 
-            {/* Web3 Patient Dashboard Link */}
-            <Link href="/web3-patient">
+            {/* Patient Portal Link */}
+            <Link href="/patient-portal">
               <Button variant="outline" size="sm" className="text-purple-600 border-purple-200 hover:bg-purple-50">
-                <Globe className="h-4 w-4 mr-2" />
-                Web3 Patient
+                <UserIcon className="h-4 w-4 mr-2" />
+                Patient Portal
               </Button>
             </Link>
             
