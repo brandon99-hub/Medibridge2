@@ -25,7 +25,7 @@ interface RecordFormData {
 }
 
 interface Web3RecordFormData extends RecordFormData {
-  patientDID: string;
+  phoneNumber: string;
 }
 
 export default function HospitalAInterface() {
@@ -47,7 +47,7 @@ export default function HospitalAInterface() {
   const [web3FormData, setWeb3FormData] = useState<Web3RecordFormData>({
     patientName: "",
     nationalId: "",
-    patientDID: "",
+    phoneNumber: "",
     visitDate: "",
     visitType: "",
     diagnosis: "",
@@ -98,7 +98,7 @@ export default function HospitalAInterface() {
       setWeb3FormData({
         patientName: "",
         nationalId: "",
-        patientDID: "",
+        phoneNumber: "",
         visitDate: "",
         visitType: "",
         diagnosis: "",
@@ -140,10 +140,10 @@ export default function HospitalAInterface() {
       });
       return;
     }
-    if (!web3FormData.patientDID) {
+    if (!web3FormData.phoneNumber) {
       toast({
-        title: "Patient DID Required",
-        description: "Please provide the patient's decentralized identifier",
+        title: "Patient Phone Required",
+        description: "Please provide the patient's phone number",
         variant: "destructive",
       });
       return;
@@ -361,7 +361,7 @@ export default function HospitalAInterface() {
                 <CardHeader>
                   <CardTitle className="flex items-center space-x-2">
                     <Globe className="h-5 w-5 text-purple-600" />
-                    <span>Web3 Patient Record (IPFS + DID)</span>
+                    <span>Web3 Patient Record (IPFS + Phone)</span>
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
@@ -390,16 +390,16 @@ export default function HospitalAInterface() {
                     </div>
 
                     <div>
-                      <Label htmlFor="web3PatientDID">Patient DID (Decentralized Identifier) *</Label>
+                      <Label htmlFor="web3PhoneNumber">Patient Phone Number *</Label>
                       <Input
-                        id="web3PatientDID"
-                        value={web3FormData.patientDID}
-                        onChange={(e) => setWeb3FormData({ ...web3FormData, patientDID: e.target.value })}
-                        placeholder="did:key:z..."
+                        id="web3PhoneNumber"
+                        value={web3FormData.phoneNumber}
+                        onChange={(e) => setWeb3FormData({ ...web3FormData, phoneNumber: e.target.value })}
+                        placeholder="+254 700 123 456"
                         required
                       />
                       <p className="text-xs text-slate-500 mt-1">
-                        Patient's decentralized identifier for Web3 record ownership
+                        Patient's phone number (system auto-generates DID for Web3 record ownership)
                       </p>
                     </div>
                     
@@ -499,7 +499,7 @@ export default function HospitalAInterface() {
                           setWeb3FormData({
                             patientName: "",
                             nationalId: "",
-                            patientDID: "",
+                            phoneNumber: "",
                             visitDate: "",
                             visitType: "",
                             diagnosis: "",
@@ -535,8 +535,8 @@ export default function HospitalAInterface() {
                   <div className="flex items-center space-x-3 p-3 bg-purple-50 rounded-lg">
                     <Key className="h-5 w-5 text-purple-600" />
                     <div className="text-sm">
-                      <p className="font-medium text-slate-900">Patient DID Control</p>
-                      <p className="text-slate-600">Patient owns their identity</p>
+                      <p className="font-medium text-slate-900">Phone-to-DID Mapping</p>
+                      <p className="text-slate-600">Auto-generates patient DID</p>
                     </div>
                   </div>
                   <div className="flex items-center space-x-3 p-3 bg-green-50 rounded-lg">

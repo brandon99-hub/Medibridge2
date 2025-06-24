@@ -44,7 +44,7 @@ export function registerWeb3Routes(app: Express): void {
     }
   });
 
-  // Submit Medical Record to IPFS with DID
+  // Submit Medical Record to IPFS with Phone Number
   app.post("/api/web3/submit-record", async (req, res, next) => {
     try {
       if (!req.isAuthenticated()) {
@@ -57,7 +57,7 @@ export function registerWeb3Routes(app: Express): void {
       }
 
       const recordData = z.object({
-        patientDID: z.string(),
+        phoneNumber: z.string(),
         patientName: z.string(),
         nationalId: z.string(),
         visitDate: z.string(),
@@ -68,10 +68,21 @@ export function registerWeb3Routes(app: Express): void {
         department: z.string().optional(),
       }).parse(req.body);
 
-      // Verify patient identity exists
-      const patientIdentity = await storage.getPatientIdentityByDID(recordData.patientDID);
+      // Find or create patient identity by phone number
+      let patientIdentity = await storage.getPatientIdentityByPhone(recordData.phoneNumber);
       if (!patientIdentity) {
-        return res.status(404).json({ message: "Patient DID not found" });
+        // Auto-generate DID for patient using phone number
+        const publicKey = `pub_${recordData.phoneNumber}_${Date.now()}`;
+        const did = didService.generateDID(publicKey);
+        const didDocument = didService.createDIDDocument(did, publicKey);
+
+        patientIdentity = await storage.createPatientIdentity({
+          did,
+          phoneNumber: recordData.phoneNumber,
+          walletAddress: null, // Will be set if patient connects wallet later
+          publicKey,
+          didDocument,
+        });
       }
 
       // Generate encryption key for patient-controlled access
@@ -120,10 +131,11 @@ export function registerWeb3Routes(app: Express): void {
 
       res.status(201).json({
         success: true,
-        message: "Medical record stored on IPFS with patient DID",
+        message: "Medical record stored on IPFS with patient phone lookup",
         recordId: patientRecord.id,
         ipfsHash,
-        patientDID: recordData.patientDID
+        patientDID: patientIdentity.patientDID,
+        phoneNumber: recordData.phoneNumber
       });
     } catch (error) {
       next(error);
