@@ -47,6 +47,35 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
+  // Phone-based patient lookup for Web3 (Hospital B)
+  app.post("/api/patient-lookup/phone", async (req, res, next) => {
+    try {
+      if (!req.isAuthenticated()) {
+        return res.status(401).json({ message: "Authentication required" });
+      }
+
+      const user = req.user!;
+      if (user.hospitalType !== "B") {
+        return res.status(403).json({ message: "Only Hospital B can perform patient lookup" });
+      }
+
+      const { phoneNumber } = req.body;
+      if (!phoneNumber || typeof phoneNumber !== 'string') {
+        return res.status(400).json({ message: "Phone number is required" });
+      }
+
+      const searchResult = await patientLookupService.searchByPhoneNumber(
+        phoneNumber,
+        user.id.toString(), // hospitalId
+        user.username // staffId
+      );
+
+      res.json(searchResult);
+    } catch (error) {
+      next(error);
+    }
+  });
+
   // Get patient records (Hospital B)
   app.post("/api/get_records", async (req, res, next) => {
     try {

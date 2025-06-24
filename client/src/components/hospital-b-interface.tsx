@@ -49,14 +49,15 @@ export default function HospitalBInterface({ onShowConsentModal }: HospitalBInte
   });
   
   const [web3SearchData, setWeb3SearchData] = useState({
-    patientDID: "",
-    requesterDID: "",
+    phoneNumber: "",
   });
   
   const [patientData, setPatientData] = useState<PatientData | null>(null);
   const [web3PatientData, setWeb3PatientData] = useState<any>(null);
   const [showRecords, setShowRecords] = useState(false);
   const [showWeb3Records, setShowWeb3Records] = useState(false);
+  const [authenticatedPatient, setAuthenticatedPatient] = useState<any>(null);
+  const [web3ConsentData, setWeb3ConsentData] = useState<any>(null);
 
   const searchMutation = useMutation({
     mutationFn: async (data: { nationalId: string }) => {
@@ -137,19 +138,30 @@ export default function HospitalBInterface({ onShowConsentModal }: HospitalBInte
   });
 
   const web3SearchMutation = useMutation({
-    mutationFn: async (patientDID: string) => {
-      return await requestRecordAccess(patientDID);
+    mutationFn: async (phoneNumber: string) => {
+      const response = await apiRequest("POST", "/api/patient-lookup/phone", {
+        phoneNumber: phoneNumber
+      });
+      return await response.json();
     },
     onSuccess: (data) => {
       setWeb3PatientData(data);
-      toast({
-        title: "Web3 Records Found",
-        description: `Found ${data.recordCount} records for patient DID`,
-      });
+      if (data.found) {
+        toast({
+          title: "Patient Found",
+          description: `Found patient with ${data.recordsSummary?.totalRecords || 0} records`,
+        });
+      } else {
+        toast({
+          title: "No Patient Found",
+          description: data.message || "No patient found with this phone number",
+          variant: "destructive",
+        });
+      }
     },
     onError: (error: Error) => {
       toast({
-        title: "Web3 Search Failed",
+        title: "Search Failed",
         description: error.message,
         variant: "destructive",
       });
@@ -171,15 +183,15 @@ export default function HospitalBInterface({ onShowConsentModal }: HospitalBInte
 
   const handleWeb3Search = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!web3SearchData.patientDID.trim()) {
+    if (!web3SearchData.phoneNumber.trim()) {
       toast({
         title: "Search Error",
-        description: "Please enter a patient DID",
+        description: "Please enter a patient phone number",
         variant: "destructive",
       });
       return;
     }
-    web3SearchMutation.mutate(web3SearchData.patientDID);
+    web3SearchMutation.mutate(web3SearchData.phoneNumber);
   };
 
   const handleConsentGranted = (records: PatientRecord[]) => {
@@ -198,7 +210,7 @@ export default function HospitalBInterface({ onShowConsentModal }: HospitalBInte
           </div>
           <h2 className="text-2xl font-semibold text-slate-900">Hospital B - Record Retrieval</h2>
         </div>
-        <p className="text-slate-600">Search and retrieve patient records using traditional ID or Web3 DID</p>
+        <p className="text-slate-600">Search and retrieve patient records using traditional ID or patient phone number</p>
       </div>
 
       <Tabs defaultValue="traditional" className="space-y-6">
@@ -410,35 +422,22 @@ export default function HospitalBInterface({ onShowConsentModal }: HospitalBInte
                 <CardHeader>
                   <CardTitle className="flex items-center space-x-2">
                     <Key className="h-5 w-5 text-purple-600" />
-                    <span>Web3 DID Search</span>
+                    <span>Web3 Phone Search</span>
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
                   <form onSubmit={handleWeb3Search} className="space-y-4">
                     <div>
-                      <Label htmlFor="patientDID">Patient DID *</Label>
+                      <Label htmlFor="phoneNumber">Patient Phone Number *</Label>
                       <Input
-                        id="patientDID"
-                        value={web3SearchData.patientDID}
-                        onChange={(e) => setWeb3SearchData({ ...web3SearchData, patientDID: e.target.value })}
-                        placeholder="did:key:z..."
+                        id="phoneNumber"
+                        value={web3SearchData.phoneNumber}
+                        onChange={(e) => setWeb3SearchData({ ...web3SearchData, phoneNumber: e.target.value })}
+                        placeholder="+254 700 123 456"
                         required
                       />
                       <p className="text-xs text-slate-500 mt-1">
-                        Patient's decentralized identifier
-                      </p>
-                    </div>
-
-                    <div>
-                      <Label htmlFor="requesterDID">Your Hospital DID</Label>
-                      <Input
-                        id="requesterDID"
-                        value={web3SearchData.requesterDID}
-                        onChange={(e) => setWeb3SearchData({ ...web3SearchData, requesterDID: e.target.value })}
-                        placeholder="did:ethr:0x..."
-                      />
-                      <p className="text-xs text-slate-500 mt-1">
-                        Your hospital's DID for access request
+                        Patient provides phone number for secure lookup
                       </p>
                     </div>
                     
@@ -489,79 +488,97 @@ export default function HospitalBInterface({ onShowConsentModal }: HospitalBInte
                 </CardContent>
               </Card>
               
-              {web3PatientData ? (
+              {web3PatientData && web3PatientData.found && (
                 <Card>
                   <CardContent className="pt-6">
-                    <div className="space-y-4">
-                      <div className="flex items-start justify-between">
-                        <div>
-                          <h4 className="text-lg font-semibold text-slate-900">Patient DID Found</h4>
-                          <p className="text-slate-600 font-mono text-sm">{web3PatientData.patientDID}</p>
-                          {web3PatientData.patientIdentity?.walletAddress && (
-                            <p className="text-slate-500 text-xs">
-                              Wallet: {web3PatientData.patientIdentity.walletAddress}
-                            </p>
-                          )}
-                        </div>
-                        <Badge className="bg-purple-100 text-purple-800 hover:bg-purple-100">
-                          <Key className="h-3 w-3 mr-1" />
-                          Web3 Identity
-                        </Badge>
+                    <div className="flex items-start justify-between mb-4">
+                      <div>
+                        <h4 className="text-lg font-semibold text-slate-900">{web3PatientData.patientInfo?.name || 'Patient'}</h4>
+                        <p className="text-slate-600">Phone: {web3PatientData.patientInfo?.phoneNumber}</p>
+                        <p className="text-slate-600 text-xs">DID: {web3PatientData.patientDID}</p>
                       </div>
-                      
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-                        <div>
-                          <p className="text-slate-500">Total Records</p>
-                          <p className="font-semibold text-slate-900">{web3PatientData.recordCount}</p>
-                        </div>
-                        <div>
-                          <p className="text-slate-500">Storage</p>
-                          <p className="font-semibold text-slate-900">IPFS Decentralized</p>
-                        </div>
+                      <Badge className="bg-purple-100 text-purple-800 hover:bg-purple-100">
+                        <Globe className="h-3 w-3 mr-1" />
+                        Web3 Verified
+                      </Badge>
+                    </div>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm mb-6">
+                      <div>
+                        <p className="text-slate-500">Total Records</p>
+                        <p className="font-semibold text-slate-900">{web3PatientData.recordsSummary?.totalRecords || 0}</p>
                       </div>
+                      <div>
+                        <p className="text-slate-500">Encrypted on IPFS</p>
+                        <p className="font-semibold text-slate-900">Yes</p>
+                      </div>
+                      <div>
+                        <p className="text-slate-500">Search Method</p>
+                        <p className="font-semibold text-slate-900 capitalize">{web3PatientData.searchMethod}</p>
+                      </div>
+                    </div>
 
-                      <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
-                        <div className="flex items-center space-x-2 mb-2">
-                          <Shield className="h-4 w-4 text-amber-600" />
-                          <p className="text-sm font-medium text-amber-800">Patient Consent Required</p>
-                        </div>
-                        <p className="text-sm text-amber-700">
-                          {web3PatientData.message} Patient must grant verifiable credential consent to access their encrypted medical records.
-                        </p>
-                      </div>
-
-                      {web3PatientData.recordMetadata && (
+                    <div className="bg-amber-50 rounded-lg p-4 mb-4">
+                      <div className="flex items-start space-x-3">
+                        <AlertTriangle className="h-5 w-5 text-amber-600 mt-0.5" />
                         <div>
-                          <h5 className="font-medium text-slate-900 mb-2">Available Record Metadata</h5>
-                          <div className="space-y-2">
-                            {web3PatientData.recordMetadata.map((record: any, index: number) => (
-                              <div key={index} className="bg-slate-50 rounded p-3">
-                                <div className="flex items-center justify-between">
-                                  <span className="text-sm font-medium">IPFS Hash:</span>
-                                  <code className="text-xs bg-white px-2 py-1 rounded">
-                                    {record.contentHash.substring(0, 20)}...
-                                  </code>
-                                </div>
-                                <div className="flex items-center justify-between mt-1">
-                                  <span className="text-xs text-slate-600">Type: {record.contentType}</span>
-                                  <span className="text-xs text-slate-600">Size: {record.size} bytes</span>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
+                          <h5 className="font-medium text-amber-900">Patient Consent Required</h5>
+                          <p className="text-sm text-amber-700 mt-1">
+                            This patient's records are encrypted and stored on IPFS. Patient must provide consent via phone authentication to access the data.
+                          </p>
                         </div>
-                      )}
+                      </div>
+                    </div>
+
+                    <div className="flex space-x-3">
+                      <Button 
+                        onClick={() => {
+                          // Set patient data for consent modal
+                          setAuthenticatedPatient(web3PatientData.patientInfo);
+                          setPatientData({
+                            patientName: web3PatientData.patientInfo?.name || 'Patient',
+                            nationalId: web3PatientData.patientInfo?.nationalId || '',
+                            recordCount: web3PatientData.recordsSummary?.totalRecords || 0,
+                            records: []
+                          });
+                          onShowConsentModal({
+                            patientName: web3PatientData.patientInfo?.name || 'Patient',
+                            nationalId: web3PatientData.patientInfo?.nationalId || '',
+                            recordCount: web3PatientData.recordsSummary?.totalRecords || 0,
+                            records: []
+                          });
+                        }}
+                        className="bg-purple-600 hover:bg-purple-700"
+                      >
+                        <Shield className="h-4 w-4 mr-2" />
+                        Request Patient Consent
+                      </Button>
                     </div>
                   </CardContent>
                 </Card>
-              ) : (
+              )}
+
+              {web3PatientData && !web3PatientData.found && (
+                <Card>
+                  <CardContent className="pt-12 pb-12 text-center">
+                    <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                      <Search className="h-6 w-6 text-slate-400" />
+                    </div>
+                    <h3 className="text-lg font-medium text-slate-900 mb-2">No Web3 Patient Found</h3>
+                    <p className="text-slate-600 mb-4">{web3PatientData.message || 'No patient found with this phone number'}</p>
+                    <p className="text-xs text-slate-500">Patient may not have registered for Web3 healthcare identity</p>
+                  </CardContent>
+                </Card>
+              )}
+
+              {!web3PatientData && (
                 <Card>
                   <CardContent className="pt-12 pb-12 text-center">
                     <div className="w-16 h-16 bg-purple-100 rounded-full flex items-center justify-center mx-auto mb-4">
                       <Globe className="h-6 w-6 text-purple-600" />
                     </div>
                     <h3 className="text-lg font-medium text-slate-900 mb-2">No Web3 Records Found</h3>
-                    <p className="text-slate-600 mb-4">Enter a patient DID to search for decentralized medical records</p>
+                    <p className="text-slate-600 mb-4">Enter a patient phone number to search for decentralized medical records</p>
                   </CardContent>
                 </Card>
               )}
