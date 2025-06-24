@@ -9,11 +9,13 @@ export const users = pgTable("users", {
   password: text("password").notNull(),
   hospitalName: text("hospital_name").notNull(),
   hospitalType: text("hospital_type").notNull(), // "A" or "B"
+  walletAddress: text("wallet_address"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
 export const patientRecords = pgTable("patient_records", {
   id: serial("id").primaryKey(),
+  patientDID: text("patient_did").notNull(), // Decentralized Identifier
   patientName: text("patient_name").notNull(),
   nationalId: text("national_id").notNull(),
   visitDate: text("visit_date").notNull(),
@@ -25,6 +27,8 @@ export const patientRecords = pgTable("patient_records", {
   submittedBy: integer("submitted_by").notNull().references(() => users.id),
   submittedAt: timestamp("submitted_at").defaultNow(),
   consentGiven: boolean("consent_given").default(false),
+  ipfsHash: text("ipfs_hash"), // IPFS content hash
+  encryptionKey: text("encryption_key"), // For patient-controlled encryption
 });
 
 export const consentRecords = pgTable("consent_records", {
@@ -71,6 +75,8 @@ export const insertPatientRecordSchema = createInsertSchema(patientRecords).omit
   id: true,
   submittedBy: true,
   submittedAt: true,
+  ipfsHash: true,
+  encryptionKey: true,
 });
 
 export const insertConsentRecordSchema = createInsertSchema(consentRecords).omit({

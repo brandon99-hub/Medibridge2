@@ -138,213 +138,206 @@ export default function HospitalBInterface({ onShowConsentModal }: HospitalBInte
           </div>
           <h2 className="text-2xl font-semibold text-slate-900">Hospital B - Record Retrieval</h2>
         </div>
-        <p className="text-slate-600">Search and retrieve patient records using traditional ID or Web3 DID</p>
+        <p className="text-slate-600">Search and retrieve patient records from the MediBridge interoperability system</p>
       </div>
 
-      <Tabs defaultValue="traditional" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-2">
-          <TabsTrigger value="traditional" className="flex items-center space-x-2">
-            <Search className="h-4 w-4" />
-            <span>Traditional Search</span>
-          </TabsTrigger>
-          <TabsTrigger value="web3" className="flex items-center space-x-2">
-            <Globe className="h-4 w-4" />
-            <span>Web3 DID Search</span>
-          </TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="traditional">
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            <div className="lg:col-span-1">
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center space-x-2">
-                    <Search className="h-5 w-5 text-green-600" />
-                    <span>Patient Search</span>
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <form onSubmit={handleSearch} className="space-y-4">
-                    <div>
-                      <Label htmlFor="nationalId">NHIF/National ID *</Label>
-                      <Input
-                        id="nationalId"
-                        value={searchData.nationalId}
-                        onChange={(e) => setSearchData({ ...searchData, nationalId: e.target.value })}
-                        placeholder="Enter patient ID"
-                        required
-                      />
-                    </div>
-                    
-                    <div>
-                      <Label>Date Range (Optional)</Label>
-                      <div className="grid grid-cols-2 gap-2">
-                        <Input
-                          type="date"
-                          value={searchData.dateFrom}
-                          onChange={(e) => setSearchData({ ...searchData, dateFrom: e.target.value })}
-                        />
-                        <Input
-                          type="date"
-                          value={searchData.dateTo}
-                          onChange={(e) => setSearchData({ ...searchData, dateTo: e.target.value })}
-                        />
-                      </div>
-                    </div>
-                    
-                    <Button 
-                      type="submit" 
-                      className="w-full bg-green-600 hover:bg-green-700"
-                      disabled={searchMutation.isPending}
-                    >
-                      <Search className="h-4 w-4 mr-2" />
-                      {searchMutation.isPending ? "Searching..." : "Search Records"}
-                    </Button>
-                  </form>
-                  
-                  <div className="mt-6 pt-6 border-t border-slate-200">
-                    <h4 className="text-sm font-medium text-slate-700 mb-3">Today's Activity</h4>
-                    <div className="grid grid-cols-2 gap-3">
-                      <div className="text-center p-3 bg-slate-50 rounded-lg">
-                        <div className="text-lg font-semibold text-slate-900">0</div>
-                        <div className="text-xs text-slate-600">Searches</div>
-                      </div>
-                      <div className="text-center p-3 bg-slate-50 rounded-lg">
-                        <div className="text-lg font-semibold text-slate-900">0</div>
-                        <div className="text-xs text-slate-600">Retrieved</div>
-                      </div>
-                    </div>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        {/* Search Interface */}
+        <div className="lg:col-span-1">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center space-x-2">
+                <Search className="h-5 w-5 text-green-600" />
+                <span>Patient Search</span>
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <form onSubmit={handleSearch} className="space-y-4">
+                <div>
+                  <Label htmlFor="nationalId">NHIF/National ID *</Label>
+                  <Input
+                    id="nationalId"
+                    value={searchData.nationalId}
+                    onChange={(e) => setSearchData({ ...searchData, nationalId: e.target.value })}
+                    placeholder="Enter patient ID"
+                    required
+                  />
+                </div>
+                
+                <div>
+                  <Label>Date Range (Optional)</Label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <Input
+                      type="date"
+                      value={searchData.dateFrom}
+                      onChange={(e) => setSearchData({ ...searchData, dateFrom: e.target.value })}
+                    />
+                    <Input
+                      type="date"
+                      value={searchData.dateTo}
+                      onChange={(e) => setSearchData({ ...searchData, dateTo: e.target.value })}
+                    />
                   </div>
-                </CardContent>
-              </Card>
-            </div>
-            
-            <div className="lg:col-span-2">
-              <Card className="mb-6">
+                </div>
+                
+                <Button 
+                  type="submit" 
+                  className="w-full bg-green-600 hover:bg-green-700"
+                  disabled={searchMutation.isPending}
+                >
+                  <Search className="h-4 w-4 mr-2" />
+                  {searchMutation.isPending ? "Searching..." : "Search Records"}
+                </Button>
+              </form>
+              
+              {/* Quick Stats */}
+              <div className="mt-6 pt-6 border-t border-slate-200">
+                <h4 className="text-sm font-medium text-slate-700 mb-3">Today's Activity</h4>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="text-center p-3 bg-slate-50 rounded-lg">
+                    <div className="text-lg font-semibold text-slate-900">0</div>
+                    <div className="text-xs text-slate-600">Searches</div>
+                  </div>
+                  <div className="text-center p-3 bg-slate-50 rounded-lg">
+                    <div className="text-lg font-semibold text-slate-900">0</div>
+                    <div className="text-xs text-slate-600">Retrieved</div>
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+        
+        {/* Results Dashboard */}
+        <div className="lg:col-span-2">
+          {/* Search Results Header */}
+          <Card className="mb-6">
+            <CardContent className="pt-6">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-2">
+                  <FileText className="h-5 w-5 text-green-600" />
+                  <h3 className="text-lg font-semibold text-slate-900">Patient Records</h3>
+                </div>
+                <div className="flex items-center space-x-2 text-sm text-slate-600">
+                  <Clock className="h-4 w-4" />
+                  <span>Last updated: Just now</span>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+          
+          {/* Patient Information Card */}
+          {patientData && showRecords && (
+            <Card className="mb-6">
+              <CardContent className="pt-6">
+                <div className="flex items-start justify-between mb-4">
+                  <div>
+                    <h4 className="text-lg font-semibold text-slate-900">{patientData.patientName}</h4>
+                    <p className="text-slate-600">ID: {patientData.nationalId}</p>
+                  </div>
+                  <Badge className="bg-green-100 text-green-800 hover:bg-green-100">
+                    <Users className="h-3 w-3 mr-1" />
+                    Consent Verified
+                  </Badge>
+                </div>
+                
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+                  <div>
+                    <p className="text-slate-500">Total Records</p>
+                    <p className="font-semibold text-slate-900">{patientData.recordCount}</p>
+                  </div>
+                  <div>
+                    <p className="text-slate-500">Date Range</p>
+                    <p className="font-semibold text-slate-900">
+                      {patientData.records.length > 0 ? 
+                        `${patientData.records[0].visitDate} - ${patientData.records[patientData.records.length - 1].visitDate}` : 
+                        "N/A"
+                      }
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-slate-500">Last Visit</p>
+                    <p className="font-semibold text-slate-900">
+                      {patientData.records.length > 0 ? patientData.records[patientData.records.length - 1].visitDate : "N/A"}
+                    </p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+          
+          {/* Records List */}
+          <div className="space-y-4">
+            {patientData && showRecords && patientData.records.map((record) => (
+              <Card key={record.id}>
                 <CardContent className="pt-6">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center space-x-2">
-                      <FileText className="h-5 w-5 text-green-600" />
-                      <h3 className="text-lg font-semibold text-slate-900">Patient Records</h3>
-                    </div>
-                    <div className="flex items-center space-x-2 text-sm text-slate-600">
-                      <Clock className="h-4 w-4" />
-                      <span>Last updated: Just now</span>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-              
-              {patientData && showRecords && (
-                <Card className="mb-6">
-                  <CardContent className="pt-6">
-                    <div className="flex items-start justify-between mb-4">
-                      <div>
-                        <h4 className="text-lg font-semibold text-slate-900">{patientData.patientName}</h4>
-                        <p className="text-slate-600">ID: {patientData.nationalId}</p>
-                      </div>
-                      <Badge className="bg-green-100 text-green-800 hover:bg-green-100">
-                        <Users className="h-3 w-3 mr-1" />
-                        Consent Verified
-                      </Badge>
-                    </div>
-                    
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
-                      <div>
-                        <p className="text-slate-500">Total Records</p>
-                        <p className="font-semibold text-slate-900">{patientData.recordCount}</p>
-                      </div>
-                      <div>
-                        <p className="text-slate-500">Date Range</p>
-                        <p className="font-semibold text-slate-900">
-                          {patientData.records.length > 0 ? 
-                            `${patientData.records[0].visitDate} - ${patientData.records[patientData.records.length - 1].visitDate}` : 
-                            "N/A"
-                          }
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-slate-500">Last Visit</p>
-                        <p className="font-semibold text-slate-900">
-                          {patientData.records.length > 0 ? patientData.records[patientData.records.length - 1].visitDate : "N/A"}
-                        </p>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              )}
-              
-              <div className="space-y-4">
-                {patientData && showRecords && patientData.records.map((record) => (
-                  <Card key={record.id}>
-                    <CardContent className="pt-6">
-                      <div className="flex items-start justify-between mb-4">
-                        <div className="flex items-center space-x-3">
-                          <div className="w-10 h-10 bg-blue-50 rounded-full flex items-center justify-center">
-                            {record.visitType === "emergency" ? (
-                              <AlertTriangle className="h-5 w-5 text-red-600" />
-                            ) : (
-                              <Stethoscope className="h-5 w-5 text-blue-600" />
-                            )}
-                          </div>
-                          <div>
-                            <h5 className="font-semibold text-slate-900">{record.visitType || "Medical Visit"}</h5>
-                            <p className="text-sm text-slate-600">{record.visitDate}</p>
-                            <p className="text-sm text-slate-500">
-                              Hospital A - {record.physician || "Unknown Physician"}
-                            </p>
-                          </div>
-                        </div>
-                        <div className="flex items-center space-x-2">
-                          {record.department && (
-                            <Badge variant="secondary">{record.department}</Badge>
-                          )}
-                        </div>
-                      </div>
-                      
-                      <div className="space-y-3">
-                        <div>
-                          <h6 className="text-sm font-medium text-slate-700 mb-1">Diagnosis</h6>
-                          <p className="text-sm text-slate-600">{record.diagnosis}</p>
-                        </div>
-                        
-                        {record.prescription && (
-                          <div>
-                            <h6 className="text-sm font-medium text-slate-700 mb-1">Prescription & Treatment</h6>
-                            <p className="text-sm text-slate-600">{record.prescription}</p>
-                          </div>
+                  <div className="flex items-start justify-between mb-4">
+                    <div className="flex items-center space-x-3">
+                      <div className="w-10 h-10 bg-blue-50 rounded-full flex items-center justify-center">
+                        {record.visitType === "emergency" ? (
+                          <AlertTriangle className="h-5 w-5 text-red-600" />
+                        ) : (
+                          <Stethoscope className="h-5 w-5 text-blue-600" />
                         )}
                       </div>
-                      
-                      <div className="flex items-center justify-between mt-4 pt-4 border-t border-slate-200">
-                        <div className="flex items-center space-x-4 text-xs text-slate-500">
-                          <span>Record ID: REC-{record.id}</span>
-                          <span>•</span>
-                          <span>Submitted: {new Date(record.submittedAt).toLocaleString()}</span>
-                        </div>
+                      <div>
+                        <h5 className="font-semibold text-slate-900">{record.visitType || "Medical Visit"}</h5>
+                        <p className="text-sm text-slate-600">{record.visitDate}</p>
+                        <p className="text-sm text-slate-500">
+                          Hospital A - {record.physician || "Unknown Physician"}
+                        </p>
                       </div>
-                    </CardContent>
-                  </Card>
-                ))}
-                
-                {!patientData && (
-                  <Card>
-                    <CardContent className="pt-12 pb-12 text-center">
-                      <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                        <Search className="h-6 w-6 text-slate-400" />
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      {record.department && (
+                        <Badge variant="secondary">{record.department}</Badge>
+                      )}
+                    </div>
+                  </div>
+                  
+                  <div className="space-y-3">
+                    <div>
+                      <h6 className="text-sm font-medium text-slate-700 mb-1">Diagnosis</h6>
+                      <p className="text-sm text-slate-600">{record.diagnosis}</p>
+                    </div>
+                    
+                    {record.prescription && (
+                      <div>
+                        <h6 className="text-sm font-medium text-slate-700 mb-1">Prescription & Treatment</h6>
+                        <p className="text-sm text-slate-600">{record.prescription}</p>
                       </div>
-                      <h3 className="text-lg font-medium text-slate-900 mb-2">No Records Found</h3>
-                      <p className="text-slate-600 mb-4">Enter a patient ID to search for medical records</p>
-                    </CardContent>
-                  </Card>
-                )}
-              </div>
-            </div>
+                    )}
+                  </div>
+                  
+                  <div className="flex items-center justify-between mt-4 pt-4 border-t border-slate-200">
+                    <div className="flex items-center space-x-4 text-xs text-slate-500">
+                      <span>Record ID: REC-{record.id}</span>
+                      <span>•</span>
+                      <span>Submitted: {new Date(record.submittedAt).toLocaleString()}</span>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+            
+            {/* Empty State */}
+            {!patientData && (
+              <Card>
+                <CardContent className="pt-12 pb-12 text-center">
+                  <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <Search className="h-6 w-6 text-slate-400" />
+                  </div>
+                  <h3 className="text-lg font-medium text-slate-900 mb-2">No Records Found</h3>
+                  <p className="text-slate-600 mb-4">Enter a patient ID to search for medical records</p>
+                </CardContent>
+              </Card>
+            )}
           </div>
         </TabsContent>
 
         <TabsContent value="web3">
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            {/* Web3 Search Interface */}
             <div className="lg:col-span-1">
               <Card>
                 <CardHeader>
@@ -392,6 +385,7 @@ export default function HospitalBInterface({ onShowConsentModal }: HospitalBInte
                     </Button>
                   </form>
                   
+                  {/* Web3 Features */}
                   <div className="mt-6 pt-6 border-t border-slate-200">
                     <h4 className="text-sm font-medium text-slate-700 mb-3">Web3 Features</h4>
                     <div className="space-y-2">
@@ -413,6 +407,7 @@ export default function HospitalBInterface({ onShowConsentModal }: HospitalBInte
               </Card>
             </div>
             
+            {/* Web3 Results Dashboard */}
             <div className="lg:col-span-2">
               <Card className="mb-6">
                 <CardContent className="pt-6">
@@ -509,6 +504,29 @@ export default function HospitalBInterface({ onShowConsentModal }: HospitalBInte
           </div>
         </TabsContent>
       </Tabs>
+      
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mt-8">
+        {/* Search Interface */}
+        <div className="lg:col-span-1">
+          {/* Empty space for layout consistency */}
+        </div>
+        
+        {/* Results Dashboard */}
+        <div className="lg:col-span-2">
+          {/* Traditional records display continues here */}
+          {patientData && showRecords && (
+            <div className="space-y-4">
+              {patientData.records.map((record) => (
+                <Card key={record.id}>
+                  <CardContent className="pt-6">
+                    {/* Existing record display logic */}
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   );
 }

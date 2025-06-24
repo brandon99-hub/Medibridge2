@@ -1,8 +1,8 @@
-# MediBridge - Healthcare Record Interoperability System
+# MediBridge - Web3 Healthcare Record Interoperability System
 
 ## Overview
 
-MediBridge is a full-stack healthcare record interoperability system that enables secure sharing of patient records between different hospitals. The system implements a two-hospital model where Hospital A submits patient records and Hospital B can retrieve them with proper consent management.
+MediBridge is a Web3-enabled healthcare record interoperability system that combines traditional healthcare workflows with decentralized identity, IPFS storage, and verifiable credentials. The system enables secure sharing of patient records between hospitals while giving patients sovereign control over their health data through decentralized identifiers (DIDs) and wallet-based consent management.
 
 ## System Architecture
 
@@ -41,24 +41,46 @@ MediBridge is a full-stack healthcare record interoperability system that enable
 - CSRF protection and secure session configuration
 
 ### API Endpoints
+
+**Traditional Healthcare APIs:**
 - `/api/submit_record` - Hospital A record submission
 - `/api/get_records` - Hospital B record retrieval
 - `/api/consent` - Consent management system
 - Authentication endpoints for login/logout/registration
 
+**Web3 Healthcare APIs:**
+- `/api/web3/generate-patient-identity` - Generate patient DID and wallet
+- `/api/web3/submit-record` - Store encrypted records on IPFS with DID
+- `/api/web3/request-access` - Request access to patient records via DID
+- `/api/web3/grant-consent` - Issue verifiable credential for consent
+- `/api/web3/access-records` - Access records with consent verification
+- `/api/web3/revoke-consent` - Revoke patient consent
+- `/api/web3/patient-dashboard` - Patient Web3 dashboard data
+
 ### Frontend Components
-- **Hospital A Interface**: Record submission form with validation
-- **Hospital B Interface**: Patient search and record retrieval
+- **Hospital A Interface**: Dual-mode record submission (traditional + Web3/IPFS)
+- **Hospital B Interface**: Patient search using national ID or DID
+- **Web3 Patient Dashboard**: Patient identity management and consent control
 - **Consent Modal**: Interactive consent management dialog
-- **Navigation Header**: Hospital switching and user management
+- **Navigation Header**: Hospital switching and Web3 patient access
+- **Wallet Integration**: MetaMask connection and Web3 authentication
 
 ## Data Flow
 
+**Traditional Flow:**
 1. **Record Submission**: Hospital A authenticates and submits patient records through validated forms
 2. **Record Storage**: Data is validated, stored in PostgreSQL with proper relationships
 3. **Record Retrieval**: Hospital B searches for patient records by national ID
 4. **Consent Process**: System prompts for consent before displaying sensitive medical data
 5. **Audit Trail**: All access is logged in consent records for compliance
+
+**Web3 Flow:**
+1. **Patient Identity Creation**: Patient generates DID and connects wallet (MetaMask)
+2. **Record Submission**: Hospital A submits encrypted records to IPFS with patient DID
+3. **Access Request**: Hospital B requests access using patient DID
+4. **Consent Verification**: Patient grants consent via verifiable credential
+5. **Record Access**: Hospital B accesses decrypted records from IPFS
+6. **Consent Management**: Patient can revoke access and control data sharing
 
 ## External Dependencies
 
@@ -103,8 +125,16 @@ MediBridge is a full-stack healthcare record interoperability system that enable
 
 ## Changelog
 
-Changelog:
-- June 24, 2025. Initial setup
+- June 24, 2025: **Web3 Transformation Complete**
+  - Added decentralized identity (DID) support using `did:key` format
+  - Implemented IPFS storage for patient records with encryption
+  - Created verifiable credentials system for consent management
+  - Added MetaMask wallet integration for patients
+  - Built Web3 patient dashboard for identity and consent control
+  - Enhanced Hospital A interface with IPFS record submission
+  - Enhanced Hospital B interface with DID-based record search
+  - Created comprehensive Web3 backend services and routes
+- June 24, 2025: Initial healthcare interoperability system setup
 
 ## User Preferences
 

@@ -1,4 +1,18 @@
 import { users, patientRecords, consentRecords, type User, type InsertUser, type PatientRecord, type InsertPatientRecord, type InsertConsentRecord, type ConsentRecord } from "@shared/schema";
+import { 
+  patientIdentities, 
+  verifiableCredentials, 
+  ipfsContent, 
+  consentManagement,
+  type PatientIdentity,
+  type InsertPatientIdentity,
+  type VerifiableCredential,
+  type InsertVerifiableCredential,
+  type IpfsContent,
+  type InsertIpfsContent,
+  type ConsentManagement,
+  type InsertConsentManagement
+} from "@shared/web3-schema";
 import { db } from "./db";
 import { eq, and } from "drizzle-orm";
 import session from "express-session";
@@ -15,17 +29,38 @@ export interface IStorage {
   // Patient Records
   createPatientRecord(record: InsertPatientRecord & { submittedBy: number }): Promise<PatientRecord>;
   getPatientRecordsByNationalId(nationalId: string): Promise<PatientRecord[]>;
+  getPatientRecordsByDID(patientDID: string): Promise<PatientRecord[]>;
   getPatientRecordById(id: number): Promise<PatientRecord | undefined>;
   
   // Consent Management
   createConsentRecord(consent: InsertConsentRecord): Promise<ConsentRecord>;
   getConsentRecordsByPatientId(patientId: string, accessedBy: number): Promise<ConsentRecord[]>;
   
-  sessionStore: session.SessionStore;
+  // Web3 Patient Identities
+  createPatientIdentity(identity: InsertPatientIdentity): Promise<PatientIdentity>;
+  getPatientIdentityByDID(did: string): Promise<PatientIdentity | undefined>;
+  getPatientIdentityByWallet(walletAddress: string): Promise<PatientIdentity | undefined>;
+  
+  // Verifiable Credentials
+  createVerifiableCredential(credential: InsertVerifiableCredential): Promise<VerifiableCredential>;
+  getCredentialsByPatientDID(patientDID: string): Promise<VerifiableCredential[]>;
+  revokeCredential(id: number): Promise<void>;
+  
+  // IPFS Content
+  createIpfsContent(content: InsertIpfsContent): Promise<IpfsContent>;
+  getIpfsContentByHash(hash: string): Promise<IpfsContent | undefined>;
+  getContentByPatientDID(patientDID: string): Promise<IpfsContent[]>;
+  
+  // Web3 Consent Management
+  createConsentManagement(consent: InsertConsentManagement): Promise<ConsentManagement>;
+  getConsentByPatientAndRequester(patientDID: string, requesterDID: string): Promise<ConsentManagement[]>;
+  revokeConsent(id: number): Promise<void>;
+  
+  sessionStore: session.Store;
 }
 
 export class DatabaseStorage implements IStorage {
-  sessionStore: session.SessionStore;
+  sessionStore: session.Store;
 
   constructor() {
     this.sessionStore = new PostgresSessionStore({ 
@@ -68,6 +103,14 @@ export class DatabaseStorage implements IStorage {
       .orderBy(patientRecords.submittedAt);
   }
 
+  async getPatientRecordsByDID(patientDID: string): Promise<PatientRecord[]> {
+    return await db
+      .select()
+      .from(patientRecords)
+      .where(eq(patientRecords.patientDID, patientDID))
+      .orderBy(patientRecords.submittedAt);
+  }
+
   async getPatientRecordById(id: number): Promise<PatientRecord | undefined> {
     const [record] = await db
       .select()
@@ -94,6 +137,106 @@ export class DatabaseStorage implements IStorage {
           eq(consentRecords.accessedBy, accessedBy)
         )
       );
+  }
+
+  // Web3 Patient Identity Methods
+  async createPatientIdentity(identity: InsertPatientIdentity): Promise<PatientIdentity> {
+    const [patientIdentity] = await db
+      .insert(patientIdentities)
+      .values(identity)
+      .returning();
+    return patientIdentity;
+  }
+
+  async getPatientIdentityByDID(did: string): Promise<PatientIdentity | undefined> {
+    const [identity] = await db
+      .select()
+      .from(patientIdentities)
+      .where(eq(patientIdentities.did, did));
+    return identity || undefined;
+  }
+
+  async getPatientIdentityByWallet(walletAddress: string): Promise<PatientIdentity | undefined> {
+    const [identity] = await db
+      .select()
+      .from(patientIdentities)
+      .where(eq(patientIdentities.walletAddress, walletAddress));
+    return identity || undefined;
+  }
+
+  // Verifiable Credentials Methods
+  async createVerifiableCredential(credential: InsertVerifiableCredential): Promise<VerifiableCredential> {
+    const [vc] = await db
+      .insert(verifiableCredentials)
+      .values(credential)
+      .returning();
+    return vc;
+  }
+
+  async getCredentialsByPatientDID(patientDID: string): Promise<VerifiableCredential[]> {
+    return await db
+      .select()
+      .from(verifiableCredentials)
+      .where(eq(verifiableCredentials.patientDID, patientDID));
+  }
+
+  async revokeCredential(id: number): Promise<void> {
+    await db
+      .update(verifiableCredentials)
+      .set({ revoked: true, revokedAt: new Date() })
+      .where(eq(verifiableCredentials.id, id));
+  }
+
+  // IPFS Content Methods
+  async createIpfsContent(content: InsertIpfsContent): Promise<IpfsContent> {
+    const [ipfsRecord] = await db
+      .insert(ipfsContent)
+      .values(content)
+      .returning();
+    return ipfsRecord;
+  }
+
+  async getIpfsContentByHash(hash: string): Promise<IpfsContent | undefined> {
+    const [content] = await db
+      .select()
+      .from(ipfsContent)
+      .where(eq(ipfsContent.contentHash, hash));
+    return content || undefined;
+  }
+
+  async getContentByPatientDID(patientDID: string): Promise<IpfsContent[]> {
+    return await db
+      .select()
+      .from(ipfsContent)
+      .where(eq(ipfsContent.patientDID, patientDID));
+  }
+
+  // Web3 Consent Management Methods
+  async createConsentManagement(consent: InsertConsentManagement): Promise<ConsentManagement> {
+    const [consentRecord] = await db
+      .insert(consentManagement)
+      .values(consent)
+      .returning();
+    return consentRecord;
+  }
+
+  async getConsentByPatientAndRequester(patientDID: string, requesterDID: string): Promise<ConsentManagement[]> {
+    return await db
+      .select()
+      .from(consentManagement)
+      .where(
+        and(
+          eq(consentManagement.patientDID, patientDID),
+          eq(consentManagement.requesterDID, requesterDID)
+        )
+      );
+  }
+
+  async revokeConsent(id: number): Promise<void> {
+    await db
+      .update(consentManagement)
+      .set({ revokedAt: new Date() })
+      .where(eq(consentManagement.id, id));
   }
 }
 

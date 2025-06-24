@@ -3,11 +3,15 @@ import { createServer, type Server } from "http";
 import { setupAuth } from "./auth";
 import { storage } from "./storage";
 import { insertPatientRecordSchema, insertConsentRecordSchema } from "@shared/schema";
+import { registerWeb3Routes } from "./web3-routes";
 import { z } from "zod";
 
 export function registerRoutes(app: Express): Server {
   // Setup authentication routes
   setupAuth(app);
+
+  // Setup Web3 routes
+  registerWeb3Routes(app);
 
   // Submit patient record (Hospital A)
   app.post("/api/submit_record", async (req, res, next) => {
