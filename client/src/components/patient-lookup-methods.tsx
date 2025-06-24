@@ -13,7 +13,7 @@ interface PatientLookupMethodsProps {
 }
 
 export default function PatientLookupMethods({ onSearch, isLoading }: PatientLookupMethodsProps) {
-  const [activeMethod, setActiveMethod] = useState<"phone" | "nationalId" | "qr" | "did">("phone");
+  const [activeMethod, setActiveMethod] = useState<"phone" | "nationalId" | "qr">("phone");
   const [searchQuery, setSearchQuery] = useState("");
 
   const searchMethods = [
@@ -21,12 +21,12 @@ export default function PatientLookupMethods({ onSearch, isLoading }: PatientLoo
       id: "phone",
       icon: Phone,
       title: "Phone Number",
-      subtitle: "Most Common Method",
+      subtitle: "Primary Method",
       description: "Ask patient for their registered phone number",
       placeholder: "Enter phone number (e.g., +254700123456)",
       example: "+254700123456 or 0700123456",
       priority: "high",
-      usage: "95% of searches",
+      usage: "95% of searches - most reliable",
     },
     {
       id: "nationalId",
@@ -37,7 +37,7 @@ export default function PatientLookupMethods({ onSearch, isLoading }: PatientLoo
       placeholder: "Enter national ID number",
       example: "12345678",
       priority: "medium",
-      usage: "For patients without Web3 identity",
+      usage: "For patients without mobile registration",
     },
     {
       id: "qr",
@@ -48,18 +48,7 @@ export default function PatientLookupMethods({ onSearch, isLoading }: PatientLoo
       placeholder: "Scan QR code or enter QR data",
       example: "Patient-generated QR code",
       priority: "high",
-      usage: "Fastest method when available",
-    },
-    {
-      id: "did",
-      icon: Key,
-      title: "DID (Advanced)",
-      subtitle: "Direct Web3 Access",
-      description: "For tech-savvy patients who know their DID",
-      placeholder: "Enter patient DID (did:key:...)",
-      example: "did:key:z6Mk...",
-      priority: "low",
-      usage: "Advanced users only",
+      usage: "Fastest when patient has mobile app",
     },
   ];
 
@@ -91,7 +80,7 @@ export default function PatientLookupMethods({ onSearch, isLoading }: PatientLoo
   return (
     <div className="space-y-6">
       {/* Method Selection */}
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-3 gap-3">
         {searchMethods.map((method) => {
           const Icon = method.icon;
           const isActive = activeMethod === method.id;
@@ -213,9 +202,17 @@ export default function PatientLookupMethods({ onSearch, isLoading }: PatientLoo
             <div className="flex items-start space-x-2">
               <CreditCard className="h-4 w-4 text-orange-600 mt-0.5" />
               <div>
-                <p className="font-medium">National ID (Fallback)</p>
-                <p className="text-gray-600">Traditional search for patients who haven't created Web3 identity yet.</p>
+                <p className="font-medium">National ID (Traditional)</p>
+                <p className="text-gray-600">Traditional search for patients who haven't registered via mobile yet.</p>
               </div>
+            </div>
+            
+            <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+              <p className="text-sm font-medium text-blue-800 mb-1">How it works behind the scenes:</p>
+              <p className="text-xs text-blue-700">
+                When you search by phone number, the system automatically finds the patient's Web3 identity and encrypted records. 
+                Patients never need to know about DIDs or blockchain - it's all handled automatically.
+              </p>
             </div>
           </div>
         </CardContent>

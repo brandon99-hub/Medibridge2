@@ -166,14 +166,14 @@ export class PatientLookupService {
   }
 
   /**
-   * Generate patient lookup QR code
+   * Generate patient lookup QR code containing phone number
    * Patient can show QR to hospital staff for instant lookup
    */
-  async generatePatientLookupQR(patientDID: string): Promise<string> {
+  async generatePatientLookupQR(phoneNumber: string): Promise<string> {
     try {
       const lookupData = {
         type: "MEDBRIDGE_PATIENT_LOOKUP",
-        patientDID,
+        phoneNumber: phoneNumber,
         generated: new Date().toISOString(),
         expires: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(), // 24 hours
         version: "1.0",
@@ -185,7 +185,7 @@ export class PatientLookupService {
       await auditService.logEvent({
         eventType: "PATIENT_QR_GENERATED",
         actorType: "PATIENT",
-        actorId: patientDID,
+        actorId: phoneNumber,
         targetType: "QR_CODE",
         targetId: `lookup_${Date.now()}`,
         action: "GENERATE",
@@ -200,7 +200,7 @@ export class PatientLookupService {
       await auditService.logSecurityViolation({
         violationType: "QR_GENERATION_FAILURE",
         severity: "medium",
-        details: { error: error.message, patientDID },
+        details: { error: error.message, phoneNumber },
       });
       throw error;
     }
@@ -208,7 +208,7 @@ export class PatientLookupService {
 
   /**
    * Search by QR code scan
-   * Hospital scans patient-provided QR code
+   * Hospital scans patient-provided QR code containing phone number
    */
   async searchByQRCode(
     qrData: string,
@@ -227,41 +227,14 @@ export class PatientLookupService {
         throw new Error("QR code has expired");
       }
 
-      const patientDID = lookupData.patientDID;
-      const patientIdentity = await storage.getPatientIdentityByDID(patientDID);
-
-      if (!patientIdentity) {
-        throw new Error("Patient identity not found");
+      // QR code contains phone number for lookup (not DID)
+      const phoneNumber = lookupData.phoneNumber;
+      if (!phoneNumber) {
+        throw new Error("QR code does not contain phone number");
       }
 
-      const recordsSummary = await storage.getPatientRecordsSummary(patientDID);
-
-      await auditService.logEvent({
-        eventType: "PATIENT_SEARCH_SUCCESS",
-        actorType: "HOSPITAL",
-        actorId: searchingHospitalId,
-        targetType: "PATIENT",
-        targetId: patientDID,
-        action: "SEARCH",
-        outcome: "SUCCESS",
-        metadata: {
-          searchMethod: "qr",
-          staffId: searchingStaffId,
-        },
-        severity: "info",
-      });
-
-      return {
-        found: true,
-        patientDID,
-        patientInfo: {
-          name: patientIdentity.name,
-          phoneNumber: patientIdentity.phoneNumber,
-          registrationDate: patientIdentity.createdAt,
-        },
-        recordsSummary,
-        searchMethod: "qr",
-      };
+      // Use phone number search method
+      return await this.searchByPhoneNumber(phoneNumber, searchingHospitalId, searchingStaffId);
 
     } catch (error: any) {
       await auditService.logSecurityViolation({
@@ -370,7 +343,7 @@ interface PatientSearchResult {
     visitTypes: { [type: string]: number };
     departments: string[];
   };
-  searchMethod: 'phone' | 'nationalId' | 'qr' | 'shared';
+  searchMethod: 'phone' | 'nationalId' | 'qr';
   message?: string;
 }
 

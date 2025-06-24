@@ -243,3 +243,4 @@ Preferred communication style: Simple, everyday language.
 - User expects Web3 functionality to be prominently displayed in Hospital B interface
 - User is from Kenya and needs Kenyan phone number support (+254 format)
 - User expects both Hospital A and Hospital B users to be able to switch between hospital interfaces
+- **Critical UX Principle**: Users should never need to know about DIDs or blockchain concepts - phone numbers only
