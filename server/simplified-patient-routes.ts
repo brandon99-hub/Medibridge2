@@ -20,7 +20,7 @@ export function registerSimplifiedPatientRoutes(app: Express): void {
   app.post("/api/patient/request-otp", async (req, res) => {
     try {
       const { phoneNumber } = z.object({
-        phoneNumber: z.string().regex(/^\+\d{10,15}$/, "Invalid phone number. Use international format like +254712345678"),
+        phoneNumber: z.string().regex(/^\+\d{9,15}$/, "Invalid phone number. Use international format like +254712345678"),
       }).parse(req.body);
       
       const otpCode = patientWeb3Service.generateOTP();

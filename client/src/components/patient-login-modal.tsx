@@ -79,7 +79,7 @@ export default function PatientLoginModal({ isOpen, onClose, onSuccess }: Patien
 
   const handlePhoneSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!phoneNumber.match(/^\+\d{10,15}$/)) {
+    if (!phoneNumber.match(/^\+\d{9,15}$/)) {
       toast({
         title: "Invalid Phone Number",
         description: "Please enter a valid international phone number (e.g., +254712345678 for Kenya)",
@@ -132,7 +132,7 @@ export default function PatientLoginModal({ isOpen, onClose, onSuccess }: Patien
                 type="tel"
                 value={phoneNumber}
                 onChange={(e) => setPhoneNumber(e.target.value)}
-                placeholder="+1234567890"
+                placeholder="+254712345678"
                 required
               />
               <p className="text-xs text-slate-500 mt-1">
