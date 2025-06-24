@@ -77,17 +77,31 @@ export default function PatientLoginModal({ isOpen, onClose, onSuccess }: Patien
     setOtpCode('');
   };
 
-  const handlePhoneSubmit = (e: React.FormEvent) => {
+  const handleContactSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!phoneNumber.match(/^\+\d{9,15}$/)) {
-      toast({
-        title: "Invalid Phone Number",
-        description: "Please enter a valid international phone number (e.g., +254712345678 for Kenya)",
-        variant: "destructive",
-      });
-      return;
+    
+    // Validate based on verification method
+    if (verificationMethod === "phone") {
+      if (!contact.match(/^\+\d{9,15}$/)) {
+        toast({
+          title: "Invalid Phone Number",
+          description: "Please enter a valid international phone number (e.g., +254712345678 for Kenya)",
+          variant: "destructive",
+        });
+        return;
+      }
+    } else {
+      if (!contact.match(/^[^\s@]+@[^\s@]+\.[^\s@]+$/)) {
+        toast({
+          title: "Invalid Email",
+          description: "Please enter a valid email address",
+          variant: "destructive",
+        });
+        return;
+      }
     }
-    requestOtpMutation.mutate(phoneNumber);
+    
+    requestOtpMutation.mutate({ contact, method: verificationMethod });
   };
 
   const handleOtpSubmit = (e: React.FormEvent) => {
