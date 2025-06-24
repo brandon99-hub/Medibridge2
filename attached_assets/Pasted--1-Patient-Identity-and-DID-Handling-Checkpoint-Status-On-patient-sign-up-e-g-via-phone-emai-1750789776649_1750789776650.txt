@@ -1,0 +1,98 @@
+🔐 1. Patient Identity and DID Handling
+Checkpoint	Status
+☐ On patient sign-up (e.g., via phone/email), a DID is generated (did:key or did:ethr)	
+☐ The patient’s DID is securely stored and linked to their account	
+☐ Private key is encrypted and stored (or derived from a secure source)	
+☐ Patients do not see or manage keys manually unless they explicitly ask	
+
+🧠 2. Consent Workflow Design
+Checkpoint	Status
+☐ Hospitals cannot access patient records by default	
+☐ A request-for-consent workflow exists (e.g., Hospital B → Patient)	
+☐ Patients are shown:	
+
+What data will be shared
+
+With whom (hospital name)
+
+For how long
+
+Why (e.g., treatment, second opinion)
+☐ Patient approves/denies in a clear, accessible modal
+☐ The system signs a Verifiable Credential (VC) or UCAN token with:
+
+Patient DID
+
+Hospital B DID
+
+CID (IPFS hash of the record)
+
+Time window (e.g., 24–72 hours)
+
+Scope of access
+☐ Consent actions (approve/revoke) are logged and timestamped
+
+🔏 3. Cryptographic Authorization
+Checkpoint	Status
+☐ VC or UCAN is cryptographically signed with patient’s DID	
+☐ Hospital B uses the signed credential to retrieve the record	
+☐ Backend verifies the credential/token signature before allowing access	
+☐ Expired or revoked credentials are rejected automatically	
+
+📦 4. Data Storage & Access
+Checkpoint	Status
+☐ All patient records are encrypted before uploading to IPFS	
+☐ Encryption key is:	
+
+Stored securely
+
+Only shared with authorized hospital on valid request
+☐ IPFS content hash (CID) is used in the VC as a reference
+☐ No raw health data is stored in centralized DB (only metadata + CIDs)
+☐ Records can be decrypted only if hospital has VC + encryption key
+
+🧾 5. Auditing & Logs
+Checkpoint	Status
+☐ All consent events are logged:	
+
+Who requested
+
+Who approved
+
+Timestamp
+
+Duration
+☐ Audit log is available to:
+
+Patients (what access they granted)
+
+Admin (for compliance)
+☐ Hospitals accessing data are logged with:
+
+Timestamp
+
+Record ID
+
+Access outcome (granted/denied)
+
+🌍 6. Patient-Centric UX
+Checkpoint	Status
+☐ Patient sees simple modals, not cryptographic terms	
+☐ Can revoke consent at any time from their dashboard	
+☐ Sees a list of:	
+
+Active consents
+
+Past access events
+
+Hospitals they’ve authorized
+☐ UI avoids wallet pop-ups unless explicitly enabled
+☐ Optional: Export DID / keys for advanced users
+
+🧪 7. Testing & Security Checks
+Checkpoint	Status
+☐ Tried to access a record without consent — rejected ✅	
+☐ Tried with expired VC — rejected ✅	
+☐ Tried with tampered VC — rejected ✅	
+☐ Hospital A can only view records they submitted	
+☐ Hospital B can only view records they were approved for
