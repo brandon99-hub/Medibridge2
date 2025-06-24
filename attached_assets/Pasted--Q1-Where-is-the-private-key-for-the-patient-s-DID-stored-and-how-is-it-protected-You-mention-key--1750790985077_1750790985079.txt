@@ -1,0 +1,78 @@
+❓Q1: Where is the private key for the patient’s DID stored and how is it protected?
+You mention key encryption, but not how/where. Backend DB? Secure enclave? Local device?
+
+🧩 Suggestion: Add a section:
+
+“Private keys are stored in encrypted form in a secure vault on the backend using AES-256, derived from a patient-specific salt with PBKDF2. Optional patient export via QR or recovery phrase is supported.”
+
+❓Q2: Who validates/verifies the Verifiable Credential on Hospital B's side?
+Is it MediBridge backend?
+
+A decentralized resolver (Ceramic? Custom VC verifier?)
+
+Or is Hospital B required to do crypto operations?
+
+🧩 Clarify in flow diagram or section:
+“Hospital B submits VC to the backend. The backend verifies signature validity, expiration, and revocation status before releasing the decryption key + IPFS CID.”
+
+❓Q3: Can a patient control consent at a record level, or only all-or-nothing?
+You mention granular views in the consent modal — but is the actual VC issued per-record?
+
+🧩 Suggested clarification:
+
+“Each consent token (VC) is linked to a specific record ID or category (e.g., ‘2024-12-05 Emergency Visit’), allowing granular control.”
+
+❓Q4: Does the IPFS layer handle multi-location pinning or failover?
+What happens if Web3.storage goes down?
+
+Do you have local gateway backups? Redundancy plan?
+
+🧩 Suggest adding:
+
+“Files are pinned on both Web3.storage and a secondary IPFS node (e.g., Infura or local hospital node) to ensure high availability.”
+
+❓Q5: How are expired or revoked credentials discovered and blocked during access?
+Is there a:
+
+revoked_vc_list[] table?
+
+Signature check + expiry time comparison?
+
+🧩 Include in technical section:
+
+“The VC is checked against an internal consent ledger that logs issuance, expiry, and revocation before access is granted.”
+
+🪓 Wording/Structure Suggestions (Surgical Tweaks)
+Current Phrase	Suggestion
+No Wallet Required: Patients never see or interact with wallets, keys, or blockchain concepts	✅ Great! Maybe rename this whole section: “Invisible Web3 Design”
+Audit Trail: Every action logged with detailed metadata	Add: “Logs are integrity-checked with chained hashes and optionally stored to IPFS for tamper detection.”
+Tabbed Interface (Overview, Records, Authorization)	Rename: “Step-by-Step Consent Wizard” – sounds more user-focused
+Built-in endpoints for security validation	Rename: “Red Team Simulation API Endpoints” — sounds more powerful and intentional
+Simple Login: Just phone/email + 6-digit code	Add: “Backed by rate-limited OTP and secure fallback validation to prevent brute force”
+
+🔥 Suggested Additions (Optional but Power Moves)
+Flow Diagram
+Add one SVG-style chart showing:
+
+scss
+Copy
+Edit
+Patient (OTP) → DID → Record Created (AES → IPFS) 
+→ Hospital B Requests → Patient Approves → VC → Record Decrypted
+Fallback Consent Authority (Emergency Cases)
+How is consent handled if the patient is unconscious or unreachable?
+E.g.:
+
+“In emergency override cases, consent may be granted by next-of-kin registered in system or authorized doctor with dual-auth protocol.”
+
+Admin Dashboard
+Briefly mention if system admins or hospital managers can:
+
+Monitor VC issuance rates
+
+Detect suspicious access attempts
+
+View system-wide consent maps
+
+Mobile Compatibility
+Explicitly mention that the portal + modals are mobile-friendly (important in Kenya where most users are mobile-first).
