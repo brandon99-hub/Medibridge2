@@ -153,3 +153,4 @@ Preferred communication style: Simple, everyday language.
 - User expects visible Web3 features integrated into main hospital interfaces, not hidden
 - User wants patient login indicators and real patient consent verification system
 - User expects Web3 functionality to be prominently displayed in Hospital B interface
+- User is from Kenya and needs Kenyan phone number support (+254 format)

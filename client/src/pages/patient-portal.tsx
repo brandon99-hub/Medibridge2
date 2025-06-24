@@ -76,7 +76,7 @@ export default function PatientPortal() {
                 <Phone className="h-6 w-6 text-blue-600 mt-1" />
                 <div>
                   <h3 className="font-medium text-slate-900">Phone Authentication</h3>
-                  <p className="text-sm text-slate-600">Login securely with your phone number and OTP verification</p>
+                  <p className="text-sm text-slate-600">Login securely with your Kenyan phone number and OTP verification</p>
                 </div>
               </div>
               
