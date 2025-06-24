@@ -4,11 +4,15 @@ import { setupAuth } from "./auth";
 import { storage } from "./storage";
 import { insertPatientRecordSchema, insertConsentRecordSchema } from "@shared/schema";
 import { registerWeb3Routes } from "./web3-routes";
+import { registerSimplifiedPatientRoutes } from "./simplified-patient-routes";
 import { z } from "zod";
 
 export function registerRoutes(app: Express): Server {
   // Setup authentication routes
   setupAuth(app);
+
+  // Simplified patient routes with Web3 backend, Web2 UX
+  registerSimplifiedPatientRoutes(app);
 
   // Setup Web3 routes
   registerWeb3Routes(app);

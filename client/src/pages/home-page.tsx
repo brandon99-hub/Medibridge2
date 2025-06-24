@@ -4,6 +4,9 @@ import NavigationHeader from "@/components/navigation-header";
 import HospitalAInterface from "@/components/hospital-a-interface";
 import HospitalBInterface from "@/components/hospital-b-interface";
 import ConsentModal from "@/components/consent-modal";
+import Web3ConsentDemo from "@/components/web3-consent-demo";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Globe, Building } from "lucide-react";
 
 export default function HomePage() {
   const { user } = useAuth();

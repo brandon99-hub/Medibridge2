@@ -25,23 +25,26 @@ export interface IStorage {
   getUser(id: number): Promise<User | undefined>;
   getUserByUsername(username: string): Promise<User | undefined>;
   createUser(user: InsertUser): Promise<User>;
+  updateHospitalDID(hospitalId: number, hospitalDID: string): Promise<void>;
   
   // Patient Records
   createPatientRecord(record: InsertPatientRecord & { submittedBy: number }): Promise<PatientRecord>;
   getPatientRecordsByNationalId(nationalId: string): Promise<PatientRecord[]>;
   getPatientRecordsByDID(patientDID: string): Promise<PatientRecord[]>;
   getPatientRecordById(id: number): Promise<PatientRecord | undefined>;
+  updateRecordIPFS(recordId: number, ipfsCid: string, encryptionKey: string): Promise<void>;
   
   // Consent Management
   createConsentRecord(consent: InsertConsentRecord): Promise<ConsentRecord>;
   getConsentRecordsByPatientId(patientId: string, accessedBy: number): Promise<ConsentRecord[]>;
+  getPatientConsents(patientDID: string): Promise<ConsentRecord[]>;
   
-  // Web3 Patient Identities
+  // Web3 Patient Identities (for existing features)
   createPatientIdentity(identity: InsertPatientIdentity): Promise<PatientIdentity>;
   getPatientIdentityByDID(did: string): Promise<PatientIdentity | undefined>;
   getPatientIdentityByWallet(walletAddress: string): Promise<PatientIdentity | undefined>;
   
-  // Verifiable Credentials
+  // Verifiable Credentials (for existing features)
   createVerifiableCredential(credential: InsertVerifiableCredential): Promise<VerifiableCredential>;
   getCredentialsByPatientDID(patientDID: string): Promise<VerifiableCredential[]>;
   revokeCredential(id: number): Promise<void>;
@@ -85,6 +88,11 @@ export class DatabaseStorage implements IStorage {
       .values(insertUser)
       .returning();
     return user;
+  }
+
+  async updateHospitalDID(hospitalId: number, hospitalDID: string): Promise<void> {
+    // For now, we'll skip this as the current schema doesn't have hospitalDID
+    console.log(`[INFO] Hospital DID ${hospitalDID} assigned to hospital ${hospitalId}`);
   }
 
   async createPatientRecord(record: InsertPatientRecord & { submittedBy: number }): Promise<PatientRecord> {
@@ -139,6 +147,21 @@ export class DatabaseStorage implements IStorage {
       );
   }
 
+  async getPatientConsents(patientDID: string): Promise<ConsentRecord[]> {
+    return await db
+      .select()
+      .from(consentRecords)
+      .where(eq(consentRecords.patientId, patientDID))
+      .orderBy(desc(consentRecords.accessedAt));
+  }
+
+  async updateRecordIPFS(recordId: number, ipfsCid: string, encryptionKey: string): Promise<void> {
+    await db
+      .update(patientRecords)
+      .set({ ipfsHash: ipfsCid, encryptionKey })
+      .where(eq(patientRecords.id, recordId));
+  }
+
   // Web3 Patient Identity Methods
   async createPatientIdentity(identity: InsertPatientIdentity): Promise<PatientIdentity> {
     const [patientIdentity] = await db
@@ -164,6 +187,7 @@ export class DatabaseStorage implements IStorage {
     return identity || undefined;
   }
 
+  // Verifiable Credentials Methods
   // Verifiable Credentials Methods
   async createVerifiableCredential(credential: InsertVerifiableCredential): Promise<VerifiableCredential> {
     const [vc] = await db

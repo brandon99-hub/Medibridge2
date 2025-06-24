@@ -2,7 +2,7 @@
 
 ## Overview
 
-MediBridge is a Web3-enabled healthcare record interoperability system that combines traditional healthcare workflows with decentralized identity, IPFS storage, and verifiable credentials. The system enables secure sharing of patient records between hospitals while giving patients sovereign control over their health data through decentralized identifiers (DIDs) and wallet-based consent management.
+MediBridge is a healthcare record interoperability system with **Web3 principles and Web2 user experience**. Patients authenticate via simple phone/OTP login while the backend automatically generates DIDs, manages encrypted IPFS storage, and issues verifiable credentials. The system provides cryptographic consent management without requiring patients to understand wallets, keys, or blockchain concepts.
 
 ## System Architecture
 
@@ -49,13 +49,13 @@ MediBridge is a Web3-enabled healthcare record interoperability system that comb
 - Authentication endpoints for login/logout/registration
 
 **Web3 Healthcare APIs:**
-- `/api/web3/generate-patient-identity` - Generate patient DID and wallet
-- `/api/web3/submit-record` - Store encrypted records on IPFS with DID
-- `/api/web3/request-access` - Request access to patient records via DID
-- `/api/web3/grant-consent` - Issue verifiable credential for consent
-- `/api/web3/access-records` - Access records with consent verification
-- `/api/web3/revoke-consent` - Revoke patient consent
-- `/api/web3/patient-dashboard` - Patient Web3 dashboard data
+- `/api/patient/request-otp` - Send OTP to patient phone for authentication
+- `/api/patient/verify-otp` - Verify OTP and create/login patient (auto-generates DID)
+- `/api/issue-consent/` - Issue verifiable credential when patient grants consent
+- `/api/get-record/` - Access encrypted medical records using verifiable credential
+- `/api/patient/me` - Get current patient session information
+- `/api/patient/logout` - Patient logout and session cleanup
+- Legacy Web3 routes for MetaMask wallet integration (optional advanced use)
 
 ### Frontend Components
 - **Hospital A Interface**: Dual-mode record submission (traditional + Web3/IPFS)
@@ -125,6 +125,15 @@ MediBridge is a Web3-enabled healthcare record interoperability system that comb
 
 ## Changelog
 
+- June 24, 2025: **Web3 Backend with Web2 Frontend Complete**
+  - Implemented phone/OTP patient authentication with automatic DID generation
+  - Created encrypted medical record storage on simulated IPFS
+  - Built verifiable credentials system for cryptographic consent management
+  - Added `/api/issue-consent/` and `/api/get-record/` endpoints for VC-based access
+  - Patients use simple phone login - all Web3 complexity hidden in backend
+  - Enhanced consent modal with secure phone authentication option
+  - Created Web3 consent demo showing full cryptographic flow
+  - Maintained existing MetaMask wallet integration for advanced users
 - June 24, 2025: **Web3 Transformation Complete**
   - Added decentralized identity (DID) support using `did:key` format
   - Implemented IPFS storage for patient records with encryption
