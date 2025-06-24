@@ -139,3 +139,5 @@ MediBridge is a Web3-enabled healthcare record interoperability system that comb
 ## User Preferences
 
 Preferred communication style: Simple, everyday language.
+- User wants navigation back buttons for standalone pages like Web3 dashboard
+- User needs better MetaMask connection error handling and guidance

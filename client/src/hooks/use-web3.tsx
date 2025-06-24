@@ -72,22 +72,43 @@ export function Web3Provider({ children }: { children: ReactNode }) {
   const connectWallet = async () => {
     try {
       setIsLoading(true);
+      setError(null);
+      
+      // Check if MetaMask is installed
       const provider = await detectEthereumProvider();
       
       if (!provider) {
-        throw new Error("MetaMask not detected. Please install MetaMask to continue.");
+        throw new Error("MetaMask is not installed. Please install MetaMask browser extension and refresh the page.");
       }
 
-      const accounts = await (window as any).ethereum.request({
-        method: 'eth_requestAccounts',
-      });
+      // Check if ethereum object is available
+      if (!(window as any).ethereum) {
+        throw new Error("MetaMask ethereum object not found. Please refresh the page and try again.");
+      }
 
-      if (accounts.length > 0) {
-        setWalletAddress(accounts[0]);
-        toast({
-          title: "Wallet Connected",
-          description: `Connected to ${accounts[0].substring(0, 6)}...${accounts[0].substring(38)}`,
+      try {
+        const accounts = await (window as any).ethereum.request({
+          method: 'eth_requestAccounts',
         });
+
+        if (accounts.length > 0) {
+          setWalletAddress(accounts[0]);
+          setError(null);
+          toast({
+            title: "Wallet Connected",
+            description: `Connected to ${accounts[0].substring(0, 6)}...${accounts[0].substring(38)}`,
+          });
+        } else {
+          throw new Error("No accounts found. Please unlock MetaMask and try again.");
+        }
+      } catch (connectError: any) {
+        if (connectError.code === 4001) {
+          throw new Error("Connection rejected. Please approve the connection in MetaMask to continue.");
+        } else if (connectError.code === -32002) {
+          throw new Error("MetaMask is already processing a request. Please check MetaMask and try again.");
+        } else {
+          throw new Error(`Connection failed: ${connectError.message}`);
+        }
       }
     } catch (error: any) {
       setError(error.message);

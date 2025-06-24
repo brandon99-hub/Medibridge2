@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Link } from "wouter";
 import { 
   Wallet, 
   Key, 
@@ -17,7 +18,8 @@ import {
   XCircle, 
   Copy,
   ExternalLink,
-  AlertTriangle 
+  AlertTriangle,
+  ArrowLeft 
 } from "lucide-react";
 
 export default function Web3PatientDashboard() {
@@ -30,7 +32,8 @@ export default function Web3PatientDashboard() {
     generatePatientIdentity,
     grantConsent,
     revokeConsent,
-    isLoading 
+    isLoading,
+    error
   } = useWeb3();
   
   const [consentRequest, setConsentRequest] = useState({
@@ -76,10 +79,19 @@ export default function Web3PatientDashboard() {
   return (
     <div className="min-h-screen bg-slate-50 p-6">
       <div className="max-w-6xl mx-auto space-y-8">
-        {/* Header */}
-        <div className="text-center">
-          <h1 className="text-3xl font-bold text-slate-900 mb-2">Web3 Patient Dashboard</h1>
-          <p className="text-slate-600">Manage your decentralized health identity and consent</p>
+        {/* Header with Back Button */}
+        <div className="flex items-center justify-between">
+          <Link href="/">
+            <Button variant="outline" size="sm" className="flex items-center space-x-2">
+              <ArrowLeft className="h-4 w-4" />
+              <span>Back to Hospital Dashboard</span>
+            </Button>
+          </Link>
+          <div className="text-center flex-1">
+            <h1 className="text-3xl font-bold text-slate-900 mb-2">Web3 Patient Dashboard</h1>
+            <p className="text-slate-600">Manage your decentralized health identity and consent</p>
+          </div>
+          <div className="w-48"></div> {/* Spacer for layout balance */}
         </div>
 
         {/* Wallet Connection */}
@@ -93,11 +105,37 @@ export default function Web3PatientDashboard() {
           <CardContent>
             {!isWalletConnected ? (
               <div className="text-center py-8">
-                <p className="text-slate-600 mb-4">Connect your wallet to access Web3 features</p>
-                <Button onClick={connectWallet} disabled={isLoading} className="bg-blue-600 hover:bg-blue-700">
-                  <Wallet className="h-4 w-4 mr-2" />
-                  Connect MetaMask
-                </Button>
+                <div className="w-16 h-16 bg-orange-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <Wallet className="h-6 w-6 text-orange-600" />
+                </div>
+                <h3 className="text-lg font-medium text-slate-900 mb-2">MetaMask Wallet Required</h3>
+                <p className="text-slate-600 mb-6">
+                  To use Web3 features, you need to install and connect MetaMask wallet
+                </p>
+                
+                {error && (
+                  <Alert className="mb-4 max-w-md mx-auto">
+                    <AlertTriangle className="h-4 w-4" />
+                    <AlertDescription>{error}</AlertDescription>
+                  </Alert>
+                )}
+                
+                <div className="space-y-3">
+                  <Button onClick={connectWallet} disabled={isLoading} className="bg-blue-600 hover:bg-blue-700">
+                    <Wallet className="h-4 w-4 mr-2" />
+                    {isLoading ? "Connecting..." : "Connect MetaMask"}
+                  </Button>
+                  
+                  <div className="text-center">
+                    <Button
+                      variant="link"
+                      onClick={() => window.open("https://metamask.io/download/", "_blank")}
+                      className="text-sm text-slate-500 hover:text-slate-700"
+                    >
+                      Don't have MetaMask? Install it here
+                    </Button>
+                  </div>
+                </div>
               </div>
             ) : (
               <div className="space-y-4">
@@ -353,6 +391,18 @@ export default function Web3PatientDashboard() {
                 <p className="text-sm text-slate-600">
                   Cryptographically secure consent management
                 </p>
+              </div>
+            </div>
+            
+            <div className="mt-6 pt-6 border-t border-slate-200">
+              <div className="bg-blue-50 rounded-lg p-4">
+                <h6 className="font-medium text-blue-900 mb-2">Getting Started</h6>
+                <ol className="text-sm text-blue-800 space-y-1">
+                  <li>1. Install and connect MetaMask wallet</li>
+                  <li>2. Generate your decentralized identity (DID)</li>
+                  <li>3. Control access to your medical records</li>
+                  <li>4. Grant or revoke consent using verifiable credentials</li>
+                </ol>
               </div>
             </div>
           </CardContent>
