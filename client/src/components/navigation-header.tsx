@@ -26,27 +26,25 @@ export default function NavigationHeader({ currentHospital, onHospitalSwitch, us
           </div>
           
           <div className="flex items-center space-x-4">
-            {/* Hospital Toggle - only show if user can access both */}
-            {user.hospitalType === "A" && (
-              <div className="flex bg-slate-100 rounded-lg p-1">
-                <Button
-                  variant={currentHospital === "A" ? "default" : "ghost"}
-                  size="sm"
-                  onClick={() => onHospitalSwitch("A")}
-                  className={currentHospital === "A" ? "bg-blue-600 hover:bg-blue-700" : ""}
-                >
-                  Hospital A
-                </Button>
-                <Button
-                  variant={currentHospital === "B" ? "default" : "ghost"}
-                  size="sm"
-                  onClick={() => onHospitalSwitch("B")}
-                  className={currentHospital === "B" ? "bg-green-600 hover:bg-green-700" : ""}
-                >
-                  Hospital B
-                </Button>
-              </div>
-            )}
+            {/* Hospital Toggle - both hospitals can switch */}
+            <div className="flex bg-slate-100 rounded-lg p-1">
+              <Button
+                variant={currentHospital === "A" ? "default" : "ghost"}
+                size="sm"
+                onClick={() => onHospitalSwitch("A")}
+                className={currentHospital === "A" ? "bg-blue-600 hover:bg-blue-700" : ""}
+              >
+                Hospital A
+              </Button>
+              <Button
+                variant={currentHospital === "B" ? "default" : "ghost"}
+                size="sm"
+                onClick={() => onHospitalSwitch("B")}
+                className={currentHospital === "B" ? "bg-green-600 hover:bg-green-700" : ""}
+              >
+                Hospital B
+              </Button>
+            </div>
 
             {/* Patient Portal Link */}
             <Link href="/patient-portal">
