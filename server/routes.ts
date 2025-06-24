@@ -6,6 +6,7 @@ import { insertPatientRecordSchema, insertConsentRecordSchema } from "@shared/sc
 import { registerWeb3Routes } from "./web3-routes";
 import { registerSimplifiedPatientRoutes } from "./simplified-patient-routes";
 import { registerSecurityTestingRoutes } from "./security-testing-routes";
+import { patientLookupService } from "./patient-lookup-service";
 import { z } from "zod";
 
 export function registerRoutes(app: Express): Server {
