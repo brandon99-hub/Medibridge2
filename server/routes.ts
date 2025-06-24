@@ -5,6 +5,7 @@ import { storage } from "./storage";
 import { insertPatientRecordSchema, insertConsentRecordSchema } from "@shared/schema";
 import { registerWeb3Routes } from "./web3-routes";
 import { registerSimplifiedPatientRoutes } from "./simplified-patient-routes";
+import { registerSecurityTestingRoutes } from "./security-testing-routes";
 import { z } from "zod";
 
 export function registerRoutes(app: Express): Server {
@@ -123,6 +124,9 @@ export function registerRoutes(app: Express): Server {
       next(error);
     }
   });
+
+  // Register security testing routes
+  registerSecurityTestingRoutes(app);
 
   const httpServer = createServer(app);
   return httpServer;

@@ -2,6 +2,7 @@ import type { Express } from "express";
 import { z } from "zod";
 import { storage } from "./storage";
 import { patientWeb3Service } from "./patient-web3-service";
+import { auditService } from "./audit-service";
 
 /**
  * Simplified Patient Routes - Web3 backend with Web2 frontend
@@ -11,33 +12,68 @@ export function registerSimplifiedPatientRoutes(app: Express): void {
 
   // In-memory storage for development (replace with database)
   const patientStore = new Map<string, any>();
-  const otpStore = new Map<string, { code: string; expires: number }>();
+  const otpStore = new Map<string, { code: string; expires: number; method: string }>();
 
   /**
-   * Send OTP to patient phone
+   * Send OTP to patient phone or email (dual verification support)
    * POST /api/patient/request-otp
    */
   app.post("/api/patient/request-otp", async (req, res) => {
     try {
-      const { phoneNumber } = z.object({
-        phoneNumber: z.string().regex(/^\+\d{9,15}$/, "Invalid phone number. Use international format like +254712345678"),
+      const { contact, method } = z.object({
+        contact: z.string(),
+        method: z.enum(["phone", "email"]).default("phone"),
       }).parse(req.body);
+
+      // Validate contact based on method
+      if (method === "phone") {
+        if (!contact.match(/^\+\d{9,15}$/)) {
+          return res.status(400).json({ error: "Invalid phone number. Use international format like +254712345678" });
+        }
+      } else {
+        if (!contact.match(/^[^\s@]+@[^\s@]+\.[^\s@]+$/)) {
+          return res.status(400).json({ error: "Invalid email address" });
+        }
+      }
       
       const otpCode = patientWeb3Service.generateOTP();
       const expiresAt = Date.now() + 10 * 60 * 1000; // 10 minutes
       
-      otpStore.set(phoneNumber, { code: otpCode, expires: expiresAt });
+      otpStore.set(contact, { code: otpCode, expires: expiresAt, method });
       
-      // In production, send SMS via Twilio
-      console.log(`[OTP] ${phoneNumber}: ${otpCode}`);
+      // In production, send SMS via Twilio or email via SendGrid
+      if (method === "phone") {
+        console.log(`[SMS OTP] ${contact}: ${otpCode}`);
+      } else {
+        console.log(`[EMAIL OTP] ${contact}: ${otpCode}`);
+      }
+      
+      // Enhanced audit logging for OTP requests
+      await auditService.logAuthEvent(
+        "OTP_REQUEST",
+        contact,
+        method,
+        "SUCCESS",
+        req,
+        { expiresIn: 600 }
+      );
       
       res.json({
         success: true,
-        message: "OTP sent to your phone",
+        message: `OTP sent to your ${method}`,
         expiresIn: 600,
+        method,
       });
       
     } catch (error: any) {
+      await auditService.logAuthEvent(
+        "OTP_REQUEST",
+        req.body.contact || "unknown",
+        req.body.method || "unknown",
+        "FAILURE",
+        req,
+        { error: error.message }
+      );
       res.status(400).json({ error: error.message });
     }
   });
@@ -176,16 +212,32 @@ export function registerSimplifiedPatientRoutes(app: Express): void {
         salt: patient.salt,
       });
       
-      // Store consent record
-      await storage.createConsentRecord({
-        patientId: patient.phoneNumber,
+      // Store consent record with enhanced audit logging
+      const consentRecord = await storage.createConsentRecord({
+        patientId: patient.contact,
         patientDID: patient.patientDID,
         recordId,
-        consentGrantedBy: patient.phoneNumber,
+        consentGrantedBy: patient.contact,
         accessedBy: hospitalId,
         verifiableCredential: credentialJWT,
         expiresAt: new Date(Date.now() + validForHours * 60 * 60 * 1000),
       });
+      
+      // Enhanced consent audit logging
+      await auditService.logConsentEvent({
+        patientDID: patient.patientDID,
+        hospitalDID,
+        recordId,
+        consentAction: "GRANTED",
+        verificationMethod: patient.verificationMethod,
+        grantedBy: patient.contact,
+        expiresAt: new Date(Date.now() + validForHours * 60 * 60 * 1000),
+        metadata: {
+          consentRecordId: consentRecord.id,
+          validForHours,
+          credentialIssued: true,
+        },
+      }, req);
       
       res.json({
         success: true,
@@ -259,11 +311,11 @@ export function registerSimplifiedPatientRoutes(app: Express): void {
    * GET /api/patient/me
    */
   app.get("/api/patient/me", (req, res) => {
-    if (!req.session.phoneNumber) {
+    if (!req.session.contact) {
       return res.status(401).json({ error: "Not authenticated" });
     }
     
-    const patient = patientStore.get(req.session.phoneNumber);
+    const patient = patientStore.get(req.session.contact);
     if (!patient) {
       return res.status(401).json({ error: "Invalid session" });
     }
@@ -271,7 +323,8 @@ export function registerSimplifiedPatientRoutes(app: Express): void {
     res.json({
       patient: {
         id: patient.id,
-        phoneNumber: patient.phoneNumber,
+        contact: patient.contact,
+        verificationMethod: patient.verificationMethod,
         patientDID: patient.patientDID,
         createdAt: patient.createdAt,
         lastLoginAt: patient.lastLoginAt,
