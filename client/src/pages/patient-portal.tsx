@@ -91,7 +91,7 @@ export default function PatientPortal() {
               <div className="flex items-start space-x-3">
                 <Key className="h-6 w-6 text-purple-600 mt-1" />
                 <div>
-                  <h3 className="font-medium text-slate-900">Consent Control</h3>
+                  <h3 className="font-medium text-slate-900">Consent Control & Key Recovery</h3>
                   <p className="text-sm text-slate-600">Grant and revoke access via verifiable credentials</p>
                 </div>
               </div>
