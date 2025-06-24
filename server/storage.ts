@@ -152,7 +152,7 @@ export class DatabaseStorage implements IStorage {
       .select()
       .from(consentRecords)
       .where(eq(consentRecords.patientId, patientDID))
-      .orderBy(desc(consentRecords.accessedAt));
+      .orderBy(consentRecords.accessedAt);
   }
 
   async updateRecordIPFS(recordId: number, ipfsCid: string, encryptionKey: string): Promise<void> {
