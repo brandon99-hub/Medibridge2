@@ -10,13 +10,14 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { ShieldX, Info, Clock, FileText, User, MapPin, Activity } from "lucide-react";
+import { ShieldX, Info, Clock, FileText, User, MapPin, Activity, Shield, AlertTriangle } from "lucide-react";
 
 interface ConsentModalProps {
   data: {
     patientName: string;
     nationalId: string;
     recordCount: number;
+    hasConsent?: boolean;
     records: Array<{
       id: number;
       visitDate: string;
@@ -141,30 +142,47 @@ export default function ConsentModal({ data, onClose, onConsent }: ConsentModalP
                   <p className="font-medium">{data.recordCount} medical records</p>
                 </div>
                 <div>
-                  <p className="text-sm text-slate-600">Date Range</p>
+                  <p className="text-sm text-slate-600">Consent Status</p>
                   <p className="font-medium">
-                    {data.records.length > 0 ? (
-                      `${formatDate(data.records[data.records.length - 1]?.visitDate)} - ${formatDate(data.records[0]?.visitDate)}`
-                    ) : 'No records available'}
+                    {data.hasConsent ? (
+                      <Badge className="bg-green-100 text-green-800">Consent Granted</Badge>
+                    ) : (
+                      <Badge className="bg-amber-100 text-amber-800">Consent Required</Badge>
+                    )}
                   </p>
                 </div>
               </div>
             </div>
-            
-            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-              <div className="flex items-start space-x-2">
-                <Info className="h-4 w-4 text-yellow-600 mt-0.5" />
-                <div className="text-sm text-yellow-800">
-                  <p className="font-medium">Privacy & Security Notice</p>
-                  <ul className="mt-2 list-disc list-inside space-y-1">
-                    <li>All records are encrypted and protected under HIPAA compliance</li>
-                    <li>Access requires valid patient consent</li>
-                    <li>All data access is logged and audited</li>
-                    <li>Records are accessed through secure cryptographic protocols</li>
-                  </ul>
+
+            {data.hasConsent && data.records.length > 0 && (
+              <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                <div className="flex items-start space-x-2">
+                  <Shield className="h-4 w-4 text-green-600 mt-0.5" />
+                  <div className="text-sm text-green-800">
+                    <p className="font-medium">Consent Already Granted</p>
+                    <p className="mt-1">
+                      Patient consent has been obtained for accessing these medical records. 
+                      You can now view the records below.
+                    </p>
+                  </div>
                 </div>
               </div>
-            </div>
+            )}
+
+            {!data.hasConsent && (
+              <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+                <div className="flex items-start space-x-2">
+                  <AlertTriangle className="h-4 w-4 text-amber-600 mt-0.5" />
+                  <div className="text-sm text-amber-800">
+                    <p className="font-medium">Consent Required</p>
+                    <p className="mt-1">
+                      To access these medical records, you must confirm that proper patient consent 
+                      has been obtained in accordance with healthcare privacy regulations.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
           </TabsContent>
           
           <TabsContent value="records" className="space-y-4">
@@ -213,66 +231,96 @@ export default function ConsentModal({ data, onClose, onConsent }: ConsentModalP
           </TabsContent>
           
           <TabsContent value="consent" className="space-y-4">
-            <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-              <div className="flex items-start space-x-2">
-                <Activity className="h-4 w-4 text-red-600 mt-0.5" />
-                <div className="text-sm text-red-800">
-                  <p className="font-medium">Consent Authorization Required</p>
-                  <p className="mt-1">
-                    By proceeding, you acknowledge that you have obtained proper patient consent 
-                    to access these medical records and that this access is for legitimate healthcare purposes.
-                  </p>
+            {data.hasConsent ? (
+              <div className="space-y-4">
+                <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                  <div className="flex items-start space-x-2">
+                    <Shield className="h-4 w-4 text-green-600 mt-0.5" />
+                    <div className="text-sm text-green-800">
+                      <p className="font-medium">Consent Already Granted</p>
+                      <p className="mt-1">
+                        Patient consent has been obtained and verified. You can proceed to view the medical records.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+                
+                <div className="flex space-x-3">
+                  <Button variant="outline" onClick={onClose} className="flex-1">
+                    Close
+                  </Button>
+                  <Button 
+                    onClick={() => onConsent("Previously granted")}
+                    className="flex-1 bg-green-600 hover:bg-green-700"
+                  >
+                    View Records
+                  </Button>
                 </div>
               </div>
-            </div>
-            
-            <div>
-              <Label htmlFor="consentGrantedBy">Consent Granted By</Label>
-              <Input
-                id="consentGrantedBy"
-                value={consentGrantedBy}
-                onChange={(e) => setConsentGrantedBy(e.target.value)}
-                placeholder="Enter name of person granting consent"
-                required
-              />
-            </div>
-            
-            <div className="space-y-3">
-              <div className="flex items-start space-x-3">
-                <Checkbox
-                  id="reviewed"
-                  checked={viewedRecords}
-                  onCheckedChange={(checked) => setViewedRecords(checked as boolean)}
-                />
-                <Label htmlFor="reviewed" className="text-sm text-slate-700">
-                  I have reviewed the medical records listed above
-                </Label>
+            ) : (
+              <div className="space-y-4">
+                <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+                  <div className="flex items-start space-x-2">
+                    <Activity className="h-4 w-4 text-red-600 mt-0.5" />
+                    <div className="text-sm text-red-800">
+                      <p className="font-medium">Consent Authorization Required</p>
+                      <p className="mt-1">
+                        By proceeding, you acknowledge that you have obtained proper patient consent 
+                        to access these medical records and that this access is for legitimate healthcare purposes.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+                
+                <div>
+                  <Label htmlFor="consentGrantedBy">Consent Granted By</Label>
+                  <Input
+                    id="consentGrantedBy"
+                    value={consentGrantedBy}
+                    onChange={(e) => setConsentGrantedBy(e.target.value)}
+                    placeholder="Enter name of person granting consent"
+                    required
+                  />
+                </div>
+                
+                <div className="space-y-3">
+                  <div className="flex items-start space-x-3">
+                    <Checkbox
+                      id="reviewed"
+                      checked={viewedRecords}
+                      onCheckedChange={(checked) => setViewedRecords(checked as boolean)}
+                    />
+                    <Label htmlFor="reviewed" className="text-sm text-slate-700">
+                      I have reviewed the medical records listed above
+                    </Label>
+                  </div>
+                  
+                  <div className="flex items-start space-x-3">
+                    <Checkbox
+                      id="agree"
+                      checked={agreed}
+                      onCheckedChange={(checked) => setAgreed(checked as boolean)}
+                    />
+                    <Label htmlFor="agree" className="text-sm text-slate-700">
+                      I confirm that proper patient consent has been obtained for accessing these medical records
+                    </Label>
+                  </div>
+                </div>
+                
+                <div className="flex space-x-3">
+                  <Button variant="outline" onClick={onClose} className="flex-1">
+                    Cancel
+                  </Button>
+                  <Button 
+                    onClick={handleGrantConsent}
+                    className="flex-1 bg-blue-600 hover:bg-blue-700"
+                    disabled={!agreed || !viewedRecords || !consentGrantedBy.trim() || consentMutation.isPending}
+                  >
+                    {consentMutation.isPending ? "Processing..." : "Authorize Access"}
+                  </Button>
+                </div>
               </div>
-              
-              <div className="flex items-start space-x-3">
-                <Checkbox
-                  id="agree"
-                  checked={agreed}
-                  onCheckedChange={(checked) => setAgreed(checked as boolean)}
-                />
-                <Label htmlFor="agree" className="text-sm text-slate-700">
-                  I confirm that proper patient consent has been obtained for accessing these medical records
-                </Label>
-              </div>
-            </div>
-            
-            <div className="flex space-x-3">
-              <Button variant="outline" onClick={onClose} className="flex-1">
-                Cancel
-              </Button>
-              <Button 
-                onClick={handleGrantConsent}
-                className="flex-1 bg-blue-600 hover:bg-blue-700"
-                disabled={!agreed || !viewedRecords || !consentGrantedBy.trim() || consentMutation.isPending}
-              >
-                {consentMutation.isPending ? "Processing..." : "Authorize Access"}
-              </Button>
-            </div>
+            )}
           </TabsContent>
         </Tabs>
       </DialogContent>

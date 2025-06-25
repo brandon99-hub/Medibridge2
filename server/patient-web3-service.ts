@@ -1,4 +1,4 @@
-import { randomBytes, createCipheriv, createDecipheriv, scrypt } from "crypto";
+import { randomBytes, createCipheriv, createDecipheriv, scrypt, createHash } from "crypto";
 import { promisify } from "util";
 import { nanoid } from "nanoid";
 
@@ -89,7 +89,7 @@ export class PatientWeb3Service {
    */
   async storeOnIPFS(encryptedData: string, metadata: any): Promise<string> {
     // Generate mock CID for development
-    const hash = require('crypto').createHash('sha256');
+    const hash = createHash('sha256');
     hash.update(encryptedData + JSON.stringify(metadata));
     const cid = 'bafyrei' + hash.digest('hex').substring(0, 50);
     
@@ -224,14 +224,14 @@ export class PatientWeb3Service {
 
   private derivePublicKey(privateKey: string): string {
     // Simplified public key derivation
-    const hash = require('crypto').createHash('sha256');
+    const hash = createHash('sha256');
     hash.update(privateKey + 'public');
     return hash.digest('hex');
   }
 
   private signCredential(data: string, privateKey: string): string {
     // Simplified signing
-    const hash = require('crypto').createHash('sha256');
+    const hash = createHash('sha256');
     hash.update(data + privateKey);
     return hash.digest('base64');
   }

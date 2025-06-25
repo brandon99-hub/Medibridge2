@@ -1,16 +1,21 @@
 import { ethers } from "ethers";
 import { Resolver } from "did-resolver";
 import { createHash } from "crypto";
-import { create } from "kubo-rpc-client";
 import CryptoJS from "crypto-js";
 import { v4 as uuidv4 } from "uuid";
+import PinataClient from '@pinata/sdk';
+import fetch from 'node-fetch';
 
-// IPFS Configuration
-const ipfs = create({
-  host: "ipfs.infura.io",
-  port: 5001,
-  protocol: "https",
-});
+// Pinata Configuration
+const pinataApiKey = process.env.PINATA_API_KEY;
+const pinataSecretApiKey = process.env.PINATA_SECRET_API_KEY;
+const pinataJWT = process.env.PINATA_JWT;
+
+const pinata = pinataJWT
+  ? new PinataClient({ pinataJWTKey: pinataJWT })
+  : new PinataClient(pinataApiKey!, pinataSecretApiKey!);
+
+const PINATA_GATEWAY = 'https://gateway.pinata.cloud/ipfs/';
 
 // DID Service for managing decentralized identities
 export class DIDService {
@@ -132,16 +137,15 @@ export class IPFSService {
   async storeContent(content: any, encryptionKey?: string): Promise<string> {
     try {
       let dataToStore = JSON.stringify(content);
-      
       // Encrypt content if key provided
       if (encryptionKey) {
         dataToStore = CryptoJS.AES.encrypt(dataToStore, encryptionKey).toString();
       }
-
-      const result = await ipfs.add(dataToStore);
-      return result.cid.toString();
+      // Pin JSON to IPFS via Pinata
+      const result = await pinata.pinJSONToIPFS({ data: dataToStore });
+      return result.IpfsHash;
     } catch (error) {
-      console.error("Failed to store content on IPFS:", error);
+      console.error("Failed to store content on IPFS (Pinata):", error);
       throw new Error("IPFS storage failed");
     }
   }
@@ -149,33 +153,26 @@ export class IPFSService {
   // Retrieve content from IPFS
   async retrieveContent(hash: string, encryptionKey?: string): Promise<any> {
     try {
-      const chunks = [];
-      for await (const chunk of ipfs.cat(hash)) {
-        chunks.push(chunk);
-      }
-      
-      let content = Buffer.concat(chunks).toString();
-      
+      // Fetch from Pinata public gateway
+      const response = await fetch(`${PINATA_GATEWAY}${hash}`);
+      if (!response.ok) throw new Error(`Failed to fetch from IPFS gateway: ${response.statusText}`);
+      let content = await response.text();
       // Decrypt content if key provided
       if (encryptionKey) {
         const bytes = CryptoJS.AES.decrypt(content, encryptionKey);
         content = bytes.toString(CryptoJS.enc.Utf8);
       }
-
       return JSON.parse(content);
     } catch (error) {
-      console.error("Failed to retrieve content from IPFS:", error);
+      console.error("Failed to retrieve content from IPFS (Pinata):", error);
       throw new Error("IPFS retrieval failed");
     }
   }
 
-  // Pin content to ensure availability
+  // Pin content to ensure availability (no-op for Pinata, already pinned)
   async pinContent(hash: string): Promise<void> {
-    try {
-      await ipfs.pin.add(hash);
-    } catch (error) {
-      console.error("Failed to pin content:", error);
-    }
+    // Pinata pins automatically on upload
+    return;
   }
 }
 

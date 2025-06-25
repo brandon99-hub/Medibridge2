@@ -68,29 +68,41 @@ export function registerWeb3Routes(app: Express): void {
         department: z.string().optional(),
       }).parse(req.body);
 
-      // Find or create patient identity by phone number
-      let patientIdentity = await storage.getPatientIdentityByPhone(recordData.phoneNumber);
-      if (!patientIdentity) {
-        // Auto-generate DID for patient using phone number
-        const publicKey = `pub_${recordData.phoneNumber}_${Date.now()}`;
-        const did = didService.generateDID(publicKey);
-        const didDocument = didService.createDIDDocument(did, publicKey);
+      // Find patient profile by phone number
+      let patientProfile = await storage.getPatientProfileByPhone(recordData.phoneNumber);
+      if (!patientProfile) {
+        // Check by nationalId
+        patientProfile = await storage.getPatientProfileByNationalId(recordData.nationalId);
+        if (!patientProfile) {
+          // Auto-generate DID for patient using phone number
+          const publicKey = `pub_${recordData.phoneNumber}_${Date.now()}`;
+          const did = didService.generateDID(publicKey);
+          const didDocument = didService.createDIDDocument(did, publicKey);
 
-        patientIdentity = await storage.createPatientIdentity({
-          did,
-          phoneNumber: recordData.phoneNumber,
-          walletAddress: null, // Will be set if patient connects wallet later
-          publicKey,
-          didDocument,
-        });
+          // Create patient identity and profile
+          await storage.createPatientIdentity({
+            did,
+            phoneNumber: recordData.phoneNumber,
+            walletAddress: null,
+            publicKey,
+            didDocument,
+          });
+          patientProfile = await storage.createPatientProfile({
+            patientDID: did,
+            nationalId: recordData.nationalId,
+            phoneNumber: recordData.phoneNumber,
+            email: recordData.phoneNumber.includes('@') ? recordData.phoneNumber : null,
+            fullName: recordData.patientName,
+            isProfileComplete: false,
+          });
+        }
       }
 
-      // Generate encryption key for patient-controlled access
-      const encryptionKey = CryptoJS.lib.WordArray.random(256/8).toString();
-      
+      const patientDID = patientProfile.patientDID;
+
       // Prepare medical record for IPFS storage
       const medicalRecord = {
-        patientDID: recordData.patientDID,
+        patientDID,
         patientName: recordData.patientName,
         visitDate: recordData.visitDate,
         visitType: recordData.visitType,
@@ -103,30 +115,38 @@ export function registerWeb3Routes(app: Express): void {
       };
 
       // Store encrypted record on IPFS
+      const encryptionKey = CryptoJS.lib.WordArray.random(256/8).toString();
       const ipfsHash = await ipfsService.storeContent(medicalRecord, encryptionKey);
-      
-      // Pin content for availability
       await ipfsService.pinContent(ipfsHash);
 
       // Store IPFS content reference
       const ipfsContentRecord = await storage.createIpfsContent({
         contentHash: ipfsHash,
-        patientDID: recordData.patientDID,
+        patientDID,
         contentType: "medical_record",
         encryptionMethod: "AES-256-GCM",
         size: JSON.stringify(medicalRecord).length,
         accessControlList: {
-          owner: recordData.patientDID,
+          owner: patientDID,
           authorizedHospitals: [user.hospitalName]
         }
       });
 
       // Store traditional record with IPFS reference
       const patientRecord = await storage.createPatientRecord({
-        ...recordData,
+        patientName: recordData.patientName,
+        nationalId: recordData.nationalId,
+        visitDate: recordData.visitDate,
+        visitType: recordData.visitType,
+        diagnosis: recordData.diagnosis,
+        prescription: recordData.prescription,
+        physician: recordData.physician,
+        department: recordData.department,
+        patientDID,
         submittedBy: user.id,
         ipfsHash,
-        encryptionKey: encryptionKey, // In production, this should be encrypted with patient's public key
+        encryptionKey: encryptionKey,
+        recordType: "web3",
       });
 
       res.status(201).json({
@@ -134,7 +154,7 @@ export function registerWeb3Routes(app: Express): void {
         message: "Medical record stored on IPFS with patient phone lookup",
         recordId: patientRecord.id,
         ipfsHash,
-        patientDID: patientIdentity.patientDID,
+        patientDID,
         phoneNumber: recordData.phoneNumber
       });
     } catch (error) {

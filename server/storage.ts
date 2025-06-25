@@ -1,4 +1,4 @@
-import { users, patientRecords, consentRecords, type User, type InsertUser, type PatientRecord, type InsertPatientRecord, type InsertConsentRecord, type ConsentRecord } from "@shared/schema";
+import { users, patientRecords, consentRecords, type User, type InsertUser, type PatientRecord, type InsertPatientRecord, type InsertConsentRecord, type ConsentRecord, patientProfiles } from "@shared/schema";
 import { 
   patientIdentities, 
   verifiableCredentials, 
@@ -14,10 +14,11 @@ import {
   type InsertConsentManagement
 } from "@shared/web3-schema";
 import { db } from "./db";
-import { eq, and } from "drizzle-orm";
+import { eq, and, or } from "drizzle-orm";
 import session from "express-session";
 import connectPg from "connect-pg-simple";
 import { pool } from "./db";
+import type { InsertPatientProfile } from "@shared/schema";
 
 const PostgresSessionStore = connectPg(session);
 
@@ -37,12 +38,20 @@ export interface IStorage {
   // Consent Management
   createConsentRecord(consent: InsertConsentRecord): Promise<ConsentRecord>;
   getConsentRecordsByPatientId(patientId: string, accessedBy: number): Promise<ConsentRecord[]>;
+  getAllConsentRecordsByPatientId(patientId: string): Promise<ConsentRecord[]>;
+  updateConsentRecord(id: number, updates: Partial<ConsentRecord>): Promise<void>;
   getPatientConsents(patientDID: string): Promise<ConsentRecord[]>;
+  
+  // Unified Consent Management
+  createConsentRequest(request: any): Promise<any>;
+  updateConsentRequestStatus(patientId: string, hospitalId: number, status: string): Promise<void>;
+  revokeConsentRecords(patientId: string, hospitalId: number): Promise<void>;
   
   // Web3 Patient Identities (for existing features)
   createPatientIdentity(identity: InsertPatientIdentity): Promise<PatientIdentity>;
   getPatientIdentityByDID(did: string): Promise<PatientIdentity | undefined>;
   getPatientIdentityByWallet(walletAddress: string): Promise<PatientIdentity | undefined>;
+  getPatientIdentityByPhone(phoneNumber: string): Promise<PatientIdentity | undefined>;
   
   // Verifiable Credentials (for existing features)
   createVerifiableCredential(credential: InsertVerifiableCredential): Promise<VerifiableCredential>;
@@ -58,6 +67,22 @@ export interface IStorage {
   createConsentManagement(consent: InsertConsentManagement): Promise<ConsentManagement>;
   getConsentByPatientAndRequester(patientDID: string, requesterDID: string): Promise<ConsentManagement[]>;
   revokeConsent(id: number): Promise<void>;
+  
+  // Patient Profiles
+  createPatientProfile(profile: InsertPatientProfile): Promise<any>;
+  getPatientProfileByDID(did: string): Promise<any>;
+  getPatientProfileByPhone(phoneNumber: string): Promise<any>;
+  getPatientProfileByNationalId(nationalId: string): Promise<any>;
+  updatePatientProfile(did: string, updates: Partial<InsertPatientProfile>): Promise<any>;
+  
+  // Temporary storage
+  createTemporaryDIDShare(share: any): Promise<void>;
+  
+  // Traditional records summary
+  getTraditionalRecordsSummary(nationalId: string): Promise<any>;
+  
+  // Web3 records summary
+  getPatientRecordsSummary(patientDID: string): Promise<any>;
   
   sessionStore: session.Store;
 }
@@ -147,6 +172,13 @@ export class DatabaseStorage implements IStorage {
       );
   }
 
+  async getAllConsentRecordsByPatientId(patientId: string): Promise<ConsentRecord[]> {
+    return await db
+      .select()
+      .from(consentRecords)
+      .where(eq(consentRecords.patientId, patientId));
+  }
+
   async getPatientConsents(patientDID: string): Promise<ConsentRecord[]> {
     return await db
       .select()
@@ -187,7 +219,14 @@ export class DatabaseStorage implements IStorage {
     return identity || undefined;
   }
 
-  // Verifiable Credentials Methods
+  async getPatientIdentityByPhone(phoneNumber: string): Promise<PatientIdentity | undefined> {
+    const [identity] = await db
+      .select()
+      .from(patientIdentities)
+      .where(eq(patientIdentities.phoneNumber, phoneNumber));
+    return identity || undefined;
+  }
+
   // Verifiable Credentials Methods
   async createVerifiableCredential(credential: InsertVerifiableCredential): Promise<VerifiableCredential> {
     const [vc] = await db
@@ -261,6 +300,157 @@ export class DatabaseStorage implements IStorage {
       .update(consentManagement)
       .set({ revokedAt: new Date() })
       .where(eq(consentManagement.id, id));
+  }
+
+  // Patient Profiles
+  async createPatientProfile(profile: InsertPatientProfile): Promise<any> {
+    const [newProfile] = await db.insert(patientProfiles).values(profile).returning();
+    return newProfile;
+  }
+
+  async getPatientProfileByDID(did: string): Promise<any> {
+    const [profile] = await db.select().from(patientProfiles).where(eq(patientProfiles.patientDID, did));
+    return profile;
+  }
+
+  async getPatientProfileByPhone(phoneNumber: string): Promise<any> {
+    const [profile] = await db.select().from(patientProfiles).where(eq(patientProfiles.phoneNumber, phoneNumber));
+    return profile;
+  }
+
+  async getPatientProfileByNationalId(nationalId: string): Promise<any> {
+    const [profile] = await db.select().from(patientProfiles).where(eq(patientProfiles.nationalId, nationalId));
+    return profile;
+  }
+
+  async updatePatientProfile(did: string, updates: Partial<InsertPatientProfile>): Promise<any> {
+    const [updatedProfile] = await db
+      .update(patientProfiles)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(patientProfiles.patientDID, did))
+      .returning();
+    return updatedProfile;
+  }
+
+  // Temporary storage
+  async createTemporaryDIDShare(share: any): Promise<void> {
+    // In production, use Redis or database
+    console.log("Temporary DID share created:", share);
+  }
+
+  // Traditional records summary
+  async getTraditionalRecordsSummary(nationalId: string): Promise<any> {
+    const records = await this.getPatientRecordsByNationalId(nationalId);
+    
+    if (records.length === 0) {
+      return {
+        totalRecords: 0,
+        dateRange: { earliest: null, latest: null },
+        visitTypes: {},
+        departments: [],
+      };
+    }
+
+    const visitTypes: { [key: string]: number } = {};
+    const departments: string[] = [];
+    const dates = records.map(r => new Date(r.visitDate)).sort((a, b) => a.getTime() - b.getTime());
+
+    records.forEach(record => {
+      if (record.visitType) {
+        visitTypes[record.visitType] = (visitTypes[record.visitType] || 0) + 1;
+      }
+      if (record.department && !departments.includes(record.department)) {
+        departments.push(record.department);
+      }
+    });
+
+    return {
+      totalRecords: records.length,
+      dateRange: {
+        earliest: dates[0]?.toISOString(),
+        latest: dates[dates.length - 1]?.toISOString(),
+      },
+      visitTypes,
+      departments,
+    };
+  }
+
+  // Web3 records summary
+  async getPatientRecordsSummary(patientDID: string): Promise<any> {
+    const records = await this.getPatientRecordsByDID(patientDID);
+    
+    if (records.length === 0) {
+      return {
+        totalRecords: 0,
+        dateRange: { earliest: null, latest: null },
+        visitTypes: {},
+        departments: [],
+      };
+    }
+
+    const visitTypes: { [key: string]: number } = {};
+    const departments: string[] = [];
+    const dates = records.map(r => new Date(r.visitDate)).sort((a, b) => a.getTime() - b.getTime());
+
+    records.forEach(record => {
+      if (record.visitType) {
+        visitTypes[record.visitType] = (visitTypes[record.visitType] || 0) + 1;
+      }
+      if (record.department && !departments.includes(record.department)) {
+        departments.push(record.department);
+      }
+    });
+
+    return {
+      totalRecords: records.length,
+      dateRange: {
+        earliest: dates[0]?.toISOString(),
+        latest: dates[dates.length - 1]?.toISOString(),
+      },
+      visitTypes,
+      departments,
+    };
+  }
+
+  // Unified Consent Management
+  async createConsentRequest(request: any): Promise<any> {
+    // Store consent request in the consentRecords table with a special status
+    const consentRequest = await db
+      .insert(consentRecords)
+      .values({
+        patientId: request.patientId,
+        accessedBy: request.requestedBy,
+        recordId: 0, // Use 0 to indicate this is a request, not a specific record
+        consentGrantedBy: "pending", // Will be updated when consent is granted
+      })
+      .returning();
+    
+    console.log(`[INFO] Consent request created for patient ${request.patientId} by hospital ${request.requestedBy}`);
+    return consentRequest[0];
+  }
+
+  async updateConsentRequestStatus(patientId: string, hospitalId: number, status: string): Promise<void> {
+    // Update consent request status
+    console.log(`[INFO] Consent request status updated for patient ${patientId} by hospital ${hospitalId} to ${status}`);
+  }
+
+  async revokeConsentRecords(patientId: string, hospitalId: number): Promise<void> {
+    // Delete consent records for this patient and hospital
+    await db
+      .delete(consentRecords)
+      .where(
+        and(
+          eq(consentRecords.patientId, patientId),
+          eq(consentRecords.accessedBy, hospitalId)
+        )
+      );
+  }
+
+  async updateConsentRecord(id: number, updates: Partial<ConsentRecord>): Promise<void> {
+    await db
+      .update(consentRecords)
+      .set(updates)
+      .where(eq(consentRecords.id, id));
   }
 }
 

@@ -7,9 +7,28 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Phone, Shield, FileText, Clock, Key, Globe, User, ArrowLeft } from "lucide-react";
+import { Phone, Shield, FileText, Clock, Key, Globe, User, ArrowLeft, Stethoscope, AlertTriangle, Calendar, Building } from "lucide-react";
 import PatientLoginModal from "@/components/patient-login-modal";
 import { Link } from "wouter";
+
+interface PatientRecord {
+  id: number;
+  visitDate: string;
+  visitType: string;
+  diagnosis: string;
+  prescription: string;
+  physician: string;
+  department: string;
+  submittedAt: string;
+  recordType: string;
+  ipfsHash?: string;
+  consentGiven: boolean;
+  consentRecords: Array<{
+    accessedBy: number;
+    consentGrantedBy: string;
+    accessedAt: string;
+  }>;
+}
 
 export default function PatientPortal() {
   const { toast } = useToast();
@@ -21,6 +40,28 @@ export default function PatientPortal() {
     queryKey: ["/api/patient/me"],
     queryFn: async () => {
       const response = await apiRequest("GET", "/api/patient/me");
+      return response.json();
+    },
+    enabled: false,
+    retry: false,
+  });
+
+  // Fetch patient records
+  const { data: patientRecords, refetch: refetchRecords } = useQuery({
+    queryKey: ["/api/patient/records"],
+    queryFn: async () => {
+      const response = await apiRequest("GET", "/api/patient/records");
+      return response.json();
+    },
+    enabled: false,
+    retry: false,
+  });
+
+  // Fetch patient consents
+  const { data: patientConsents, refetch: refetchConsents } = useQuery({
+    queryKey: ["/api/patient/consents"],
+    queryFn: async () => {
+      const response = await apiRequest("GET", "/api/patient/consents");
       return response.json();
     },
     enabled: false,
@@ -44,6 +85,10 @@ export default function PatientPortal() {
   const handlePatientLogin = (patientData: any) => {
     setPatient(patientData);
     setShowLogin(false);
+    // Fetch records and consents after login
+    refetch();
+    refetchRecords();
+    refetchConsents();
     toast({
       title: "Welcome!",
       description: patientData.isNewUser 
@@ -216,9 +261,14 @@ export default function PatientPortal() {
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-2">
-                    <p className="text-2xl font-bold text-slate-900">-</p>
+                    <p className="text-2xl font-bold text-slate-900">
+                      {patientRecords?.totalRecords || 0}
+                    </p>
                     <p className="text-xs text-slate-600">
-                      Encrypted records available
+                      {patientRecords?.totalRecords > 0 ? 
+                        "Records available" : 
+                        "No records yet"
+                      }
                     </p>
                   </div>
                 </CardContent>
@@ -233,9 +283,14 @@ export default function PatientPortal() {
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-2">
-                    <p className="text-2xl font-bold text-slate-900">0</p>
+                    <p className="text-2xl font-bold text-slate-900">
+                      {patientConsents?.totalConsents || 0}
+                    </p>
                     <p className="text-xs text-slate-600">
-                      Currently granted permissions
+                      {patientConsents?.totalConsents > 0 ? 
+                        "Currently granted permissions" : 
+                        "No active consents"
+                      }
                     </p>
                   </div>
                 </CardContent>
@@ -277,16 +332,115 @@ export default function PatientPortal() {
           <TabsContent value="records">
             <Card>
               <CardHeader>
-                <CardTitle>My Medical Records</CardTitle>
+                <CardTitle className="flex items-center space-x-2">
+                  <FileText className="h-5 w-5 text-blue-600" />
+                  <span>My Medical Records</span>
+                  {patientRecords?.totalRecords > 0 && (
+                    <Badge variant="secondary">{patientRecords.totalRecords} records</Badge>
+                  )}
+                </CardTitle>
               </CardHeader>
               <CardContent>
-                <Alert>
-                  <FileText className="h-4 w-4" />
-                  <AlertDescription>
-                    Your encrypted medical records will appear here. Records are stored on IPFS 
-                    and can only be decrypted with your consent.
-                  </AlertDescription>
-                </Alert>
+                {patientRecords?.records && patientRecords.records.length > 0 ? (
+                  <div className="space-y-4">
+                    {patientRecords.records.map((record: PatientRecord) => (
+                      <Card key={record.id} className="border-l-4 border-l-blue-500">
+                        <CardContent className="pt-6">
+                          <div className="flex items-start justify-between mb-4">
+                            <div className="flex items-center space-x-3">
+                              <div className="w-10 h-10 bg-blue-50 rounded-full flex items-center justify-center">
+                                {record.visitType === "emergency" ? (
+                                  <AlertTriangle className="h-5 w-5 text-red-600" />
+                                ) : (
+                                  <Stethoscope className="h-5 w-5 text-blue-600" />
+                                )}
+                              </div>
+                              <div>
+                                <h5 className="font-semibold text-slate-900">
+                                  {record.visitType || "Medical Visit"}
+                                </h5>
+                                <p className="text-sm text-slate-600">{record.visitDate}</p>
+                                <p className="text-sm text-slate-500">
+                                  {record.physician || "Unknown Physician"}
+                                </p>
+                              </div>
+                            </div>
+                            <div className="flex items-center space-x-2">
+                              <Badge variant={record.recordType === "web3" ? "default" : "secondary"}>
+                                {record.recordType === "web3" ? "Web3" : "Traditional"}
+                              </Badge>
+                              {record.consentGiven && (
+                                <Badge className="bg-green-100 text-green-800">
+                                  <Shield className="h-3 w-3 mr-1" />
+                                  Consent Given
+                                </Badge>
+                              )}
+                            </div>
+                          </div>
+                          
+                          <div className="space-y-3">
+                            <div>
+                              <h6 className="text-sm font-medium text-slate-700 mb-1">Diagnosis</h6>
+                              <p className="text-sm text-slate-600">{record.diagnosis}</p>
+                            </div>
+                            
+                            {record.prescription && (
+                              <div>
+                                <h6 className="text-sm font-medium text-slate-700 mb-1">Prescription & Treatment</h6>
+                                <p className="text-sm text-slate-600">{record.prescription}</p>
+                              </div>
+                            )}
+
+                            {record.department && (
+                              <div>
+                                <h6 className="text-sm font-medium text-slate-700 mb-1">Department</h6>
+                                <p className="text-sm text-slate-600">{record.department}</p>
+                              </div>
+                            )}
+                          </div>
+                          
+                          <div className="flex items-center justify-between mt-4 pt-4 border-t border-slate-200">
+                            <div className="flex items-center space-x-4 text-xs text-slate-500">
+                              <span>Record ID: REC-{record.id}</span>
+                              <span>•</span>
+                              <span>Submitted: {new Date(record.submittedAt).toLocaleString()}</span>
+                            </div>
+                            {record.ipfsHash && (
+                              <Badge variant="outline" className="text-xs">
+                                <Globe className="h-3 w-3 mr-1" />
+                                IPFS: {record.ipfsHash.substring(0, 10)}...
+                              </Badge>
+                            )}
+                          </div>
+
+                          {record.consentRecords && record.consentRecords.length > 0 && (
+                            <div className="mt-4 pt-4 border-t border-slate-200">
+                              <h6 className="text-sm font-medium text-slate-700 mb-2">Access History</h6>
+                              <div className="space-y-2">
+                                {record.consentRecords.map((consent, index) => (
+                                  <div key={index} className="flex items-center justify-between text-xs text-slate-600">
+                                    <span>Accessed by Hospital B</span>
+                                    <span>{new Date(consent.accessedAt).toLocaleDateString()}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
+                ) : (
+                  <Alert>
+                    <FileText className="h-4 w-4" />
+                    <AlertDescription>
+                      {patientRecords ? 
+                        "No medical records found. Records will appear here once they are submitted by healthcare providers." :
+                        "Your encrypted medical records will appear here. Records are stored securely and can only be accessed with your consent."
+                      }
+                    </AlertDescription>
+                  </Alert>
+                )}
               </CardContent>
             </Card>
           </TabsContent>
@@ -294,16 +448,51 @@ export default function PatientPortal() {
           <TabsContent value="consent">
             <Card>
               <CardHeader>
-                <CardTitle>Consent Management</CardTitle>
+                <CardTitle className="flex items-center space-x-2">
+                  <Key className="h-5 w-5 text-purple-600" />
+                  <span>Consent Management</span>
+                  {patientConsents?.totalConsents > 0 && (
+                    <Badge variant="secondary">{patientConsents.totalConsents} consents</Badge>
+                  )}
+                </CardTitle>
               </CardHeader>
               <CardContent>
-                <Alert>
-                  <Key className="h-4 w-4" />
-                  <AlertDescription>
-                    When hospitals request access to your records, you can grant consent here. 
-                    All consent is managed via verifiable credentials for maximum security.
-                  </AlertDescription>
-                </Alert>
+                {patientConsents?.traditionalConsents && patientConsents.traditionalConsents.length > 0 ? (
+                  <div className="space-y-4">
+                    <h4 className="font-medium text-slate-900">Traditional Records Access</h4>
+                    {patientConsents.traditionalConsents.map((consent: any, index: number) => (
+                      <Card key={index} className="border-l-4 border-l-green-500">
+                        <CardContent className="pt-4">
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <p className="font-medium text-slate-900">Hospital B Access</p>
+                              <p className="text-sm text-slate-600">
+                                Granted by: {consent.consentGrantedBy}
+                              </p>
+                              <p className="text-xs text-slate-500">
+                                {new Date(consent.accessedAt).toLocaleString()}
+                              </p>
+                            </div>
+                            <Badge className="bg-green-100 text-green-800">
+                              <Shield className="h-3 w-3 mr-1" />
+                              Active
+                            </Badge>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
+                ) : (
+                  <Alert>
+                    <Key className="h-4 w-4" />
+                    <AlertDescription>
+                      {patientConsents ? 
+                        "No consent records found. When hospitals request access to your records, you can manage permissions here." :
+                        "When hospitals request access to your records, you can grant consent here. All consent is managed via verifiable credentials for maximum security."
+                      }
+                    </AlertDescription>
+                  </Alert>
+                )}
               </CardContent>
             </Card>
           </TabsContent>

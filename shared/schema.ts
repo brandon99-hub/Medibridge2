@@ -13,11 +13,24 @@ export const users = pgTable("users", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+// New patient profiles table to link DID with National ID
+export const patientProfiles = pgTable("patient_profiles", {
+  id: serial("id").primaryKey(),
+  patientDID: text("patient_did").notNull().unique(), // Decentralized Identifier
+  nationalId: text("national_id").notNull().unique(), // National ID for traditional records
+  phoneNumber: text("phone_number").notNull().unique(), // Phone number for login
+  email: text("email"), // Optional email
+  fullName: text("full_name").notNull(), // Patient's full name
+  isProfileComplete: boolean("is_profile_complete").default(false), // Whether National ID has been provided
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
 export const patientRecords = pgTable("patient_records", {
   id: serial("id").primaryKey(),
-  patientDID: text("patient_did").notNull(), // Decentralized Identifier
+  patientDID: text("patient_did"), // Made optional for traditional records
+  nationalId: text("national_id").notNull(), // Always required for traditional records
   patientName: text("patient_name").notNull(),
-  nationalId: text("national_id").notNull(),
   visitDate: text("visit_date").notNull(),
   visitType: text("visit_type"),
   diagnosis: text("diagnosis").notNull(),
@@ -29,6 +42,7 @@ export const patientRecords = pgTable("patient_records", {
   consentGiven: boolean("consent_given").default(false),
   ipfsHash: text("ipfs_hash"), // IPFS content hash
   encryptionKey: text("encryption_key"), // For patient-controlled encryption
+  recordType: text("record_type").default("traditional"), // "traditional" or "web3"
 });
 
 export const consentRecords = pgTable("consent_records", {
@@ -45,10 +59,18 @@ export const usersRelations = relations(users, ({ many }) => ({
   consentRecords: many(consentRecords),
 }));
 
+export const patientProfilesRelations = relations(patientProfiles, ({ many }) => ({
+  records: many(patientRecords),
+}));
+
 export const patientRecordsRelations = relations(patientRecords, ({ one, many }) => ({
   submittedBy: one(users, {
     fields: [patientRecords.submittedBy],
     references: [users.id],
+  }),
+  patientProfile: one(patientProfiles, {
+    fields: [patientRecords.patientDID],
+    references: [patientProfiles.patientDID],
   }),
   consentRecords: many(consentRecords),
 }));
@@ -71,12 +93,19 @@ export const insertUserSchema = createInsertSchema(users).pick({
   hospitalType: true,
 });
 
+export const insertPatientProfileSchema = createInsertSchema(patientProfiles).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
 export const insertPatientRecordSchema = createInsertSchema(patientRecords).omit({
   id: true,
   submittedBy: true,
   submittedAt: true,
   ipfsHash: true,
   encryptionKey: true,
+  recordType: true,
 });
 
 export const insertConsentRecordSchema = createInsertSchema(consentRecords).omit({
@@ -86,6 +115,8 @@ export const insertConsentRecordSchema = createInsertSchema(consentRecords).omit
 
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
+export type InsertPatientProfile = z.infer<typeof insertPatientProfileSchema>;
+export type PatientProfile = typeof patientProfiles.$inferSelect;
 export type InsertPatientRecord = z.infer<typeof insertPatientRecordSchema>;
 export type PatientRecord = typeof patientRecords.$inferSelect;
 export type InsertConsentRecord = z.infer<typeof insertConsentRecordSchema>;

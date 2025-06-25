@@ -6,7 +6,7 @@ import { useWeb3 } from "@/hooks/use-web3";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Search, FileText, Clock, Users, Stethoscope, AlertTriangle, Globe, Key, Shield } from "lucide-react";
@@ -33,6 +33,7 @@ interface PatientData {
   nationalId: string;
   recordCount: number;
   records: PatientRecord[];
+  hasConsent: boolean;
 }
 
 interface HospitalBInterfaceProps {
@@ -66,11 +67,60 @@ export default function HospitalBInterface({ onShowConsentModal }: HospitalBInte
     },
     onSuccess: (data: PatientData) => {
       setPatientData(data);
-      onShowConsentModal(data);
+      if (!data.hasConsent) {
+        onShowConsentModal(data);
+      } else {
+        setShowRecords(true);
+      }
     },
     onError: (error: Error) => {
       toast({
         title: "Search Failed",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  const requestConsentMutation = useMutation({
+    mutationFn: async (data: { nationalId: string; reason?: string }) => {
+      const response = await apiRequest("POST", "/api/request-consent", data);
+      return await response.json();
+    },
+    onSuccess: (data) => {
+      toast({
+        title: "Consent Requested",
+        description: "Patient consent request has been submitted",
+      });
+      if (patientData) {
+        onShowConsentModal(patientData);
+      }
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Request Failed",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  const revokeConsentMutation = useMutation({
+    mutationFn: async (data: { nationalId: string }) => {
+      const response = await apiRequest("POST", "/api/revoke-consent", data);
+      return await response.json();
+    },
+    onSuccess: () => {
+      toast({
+        title: "Consent Revoked",
+        description: "Access to patient records has been revoked",
+      });
+      setShowRecords(false);
+      setPatientData(null);
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Revocation Failed",
         description: error.message,
         variant: "destructive",
       });
@@ -162,6 +212,35 @@ export default function HospitalBInterface({ onShowConsentModal }: HospitalBInte
     onError: (error: Error) => {
       toast({
         title: "Search Failed",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Fetch full Web3 records after consent
+  const fetchWeb3RecordsMutation = useMutation({
+    mutationFn: async (patientDID: string) => {
+      const response = await apiRequest("POST", "/api/web3/get-records", {
+        patientDID: patientDID
+      });
+      return await response.json();
+    },
+    onSuccess: (data) => {
+      setWeb3PatientData((prev: any) => ({
+        ...prev,
+        fullRecords: data.records,
+        hasFullRecords: true
+      }));
+      setShowWeb3Records(true);
+      toast({
+        title: "Web3 Records Retrieved",
+        description: `Successfully retrieved ${data.recordCount} medical records`,
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Failed to Retrieve Records",
         description: error.message,
         variant: "destructive",
       });
@@ -315,10 +394,20 @@ export default function HospitalBInterface({ onShowConsentModal }: HospitalBInte
                         <h4 className="text-lg font-semibold text-slate-900">{patientData.patientName}</h4>
                         <p className="text-slate-600">ID: {patientData.nationalId}</p>
                       </div>
-                      <Badge className="bg-green-100 text-green-800 hover:bg-green-100">
-                        <Users className="h-3 w-3 mr-1" />
-                        Consent Verified
-                      </Badge>
+                      <div className="flex items-center space-x-2">
+                        <Badge className="bg-green-100 text-green-800 hover:bg-green-100">
+                          <Users className="h-3 w-3 mr-1" />
+                          Consent Verified
+                        </Badge>
+                        <Button 
+                          variant="outline" 
+                          size="sm"
+                          onClick={() => revokeConsentMutation.mutate({ nationalId: patientData.nationalId })}
+                          disabled={revokeConsentMutation.isPending}
+                        >
+                          {revokeConsentMutation.isPending ? "Revoking..." : "Revoke Access"}
+                        </Button>
+                      </div>
                     </div>
                     
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
@@ -346,6 +435,59 @@ export default function HospitalBInterface({ onShowConsentModal }: HospitalBInte
                 </Card>
               )}
               
+              {patientData && !showRecords && (
+                <Card className="mb-6">
+                  <CardContent className="pt-6">
+                    <div className="flex items-start justify-between mb-4">
+                      <div>
+                        <h4 className="text-lg font-semibold text-slate-900">Patient Found</h4>
+                        <p className="text-slate-600">ID: {patientData.nationalId}</p>
+                        <p className="text-slate-600">{patientData.recordCount} medical records available</p>
+                      </div>
+                      <Badge className="bg-amber-100 text-amber-800 hover:bg-amber-100">
+                        <Shield className="h-3 w-3 mr-1" />
+                        Consent Required
+                      </Badge>
+                    </div>
+                    
+                    <div className="bg-amber-50 rounded-lg p-4 mb-4">
+                      <div className="flex items-start space-x-3">
+                        <AlertTriangle className="h-5 w-5 text-amber-600 mt-0.5" />
+                        <div>
+                          <h5 className="font-medium text-amber-900">Patient Consent Required</h5>
+                          <p className="text-sm text-amber-700 mt-1">
+                            To access this patient's medical records, you must obtain proper consent. 
+                            This ensures patient privacy and compliance with healthcare regulations.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex space-x-3">
+                      <Button 
+                        onClick={() => requestConsentMutation.mutate({ 
+                          nationalId: patientData.nationalId,
+                          reason: "Medical care coordination and treatment planning"
+                        })}
+                        className="bg-blue-600 hover:bg-blue-700"
+                        disabled={requestConsentMutation.isPending}
+                      >
+                        {requestConsentMutation.isPending ? "Requesting..." : "Request Consent"}
+                      </Button>
+                      <Button 
+                        variant="outline"
+                        onClick={() => {
+                          setPatientData(null);
+                          setShowRecords(false);
+                        }}
+                      >
+                        Cancel
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
               <div className="space-y-4">
                 {patientData && showRecords && patientData.records.map((record) => (
                   <Card key={record.id}>
@@ -533,19 +675,20 @@ export default function HospitalBInterface({ onShowConsentModal }: HospitalBInte
                     <div className="flex space-x-3">
                       <Button 
                         onClick={() => {
-                          // Set patient data for consent modal
                           setAuthenticatedPatient(web3PatientData.patientInfo);
                           setPatientData({
                             patientName: web3PatientData.patientInfo?.name || 'Patient',
                             nationalId: web3PatientData.patientInfo?.nationalId || '',
                             recordCount: web3PatientData.recordsSummary?.totalRecords || 0,
-                            records: []
+                            records: [],
+                            hasConsent: true
                           });
                           onShowConsentModal({
                             patientName: web3PatientData.patientInfo?.name || 'Patient',
                             nationalId: web3PatientData.patientInfo?.nationalId || '',
                             recordCount: web3PatientData.recordsSummary?.totalRecords || 0,
-                            records: []
+                            records: [],
+                            hasConsent: true
                           });
                         }}
                         className="bg-purple-600 hover:bg-purple-700"
@@ -553,6 +696,18 @@ export default function HospitalBInterface({ onShowConsentModal }: HospitalBInte
                         <Shield className="h-4 w-4 mr-2" />
                         Request Patient Consent
                       </Button>
+                      
+                      {web3PatientData.patientDID && (
+                        <Button 
+                          onClick={() => fetchWeb3RecordsMutation.mutate(web3PatientData.patientDID)}
+                          disabled={fetchWeb3RecordsMutation.isPending}
+                          variant="outline"
+                          className="border-purple-200 text-purple-700 hover:bg-purple-50"
+                        >
+                          <Globe className="h-4 w-4 mr-2" />
+                          {fetchWeb3RecordsMutation.isPending ? "Fetching..." : "Fetch Full Records"}
+                        </Button>
+                      )}
                     </div>
                   </CardContent>
                 </Card>
@@ -586,6 +741,68 @@ export default function HospitalBInterface({ onShowConsentModal }: HospitalBInte
           </div>
         </TabsContent>
       </Tabs>
+      
+      {/* Display Web3 Records */}
+      {showWeb3Records && web3PatientData?.fullRecords && (
+        <div className="mt-8">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center space-x-2">
+                <Globe className="h-5 w-5 text-purple-600" />
+                <span>Web3 Medical Records</span>
+              </CardTitle>
+              <CardDescription>
+                Decentralized medical records retrieved from IPFS
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                {web3PatientData.fullRecords.map((record: any) => (
+                  <div key={record.id} className="border rounded-lg p-4 bg-slate-50">
+                    <div className="flex items-start justify-between mb-3">
+                      <div>
+                        <h4 className="font-semibold text-slate-900">
+                          {record.visitType || 'Medical Visit'}
+                        </h4>
+                        <p className="text-sm text-slate-600">
+                          {new Date(record.visitDate).toLocaleDateString()} • {record.department || 'General'}
+                        </p>
+                      </div>
+                      <Badge className="bg-purple-100 text-purple-800">
+                        <Globe className="h-3 w-3 mr-1" />
+                        Web3
+                      </Badge>
+                    </div>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                      <div>
+                        <p className="text-slate-500">Diagnosis</p>
+                        <p className="font-medium text-slate-900">{record.diagnosis}</p>
+                      </div>
+                      {record.prescription && (
+                        <div>
+                          <p className="text-slate-500">Prescription</p>
+                          <p className="font-medium text-slate-900">{record.prescription}</p>
+                        </div>
+                      )}
+                      {record.physician && (
+                        <div>
+                          <p className="text-slate-500">Physician</p>
+                          <p className="font-medium text-slate-900">{record.physician}</p>
+                        </div>
+                      )}
+                      <div>
+                        <p className="text-slate-500">IPFS Hash</p>
+                        <p className="font-mono text-xs text-slate-600 break-all">{record.ipfsHash}</p>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
     </div>
   );
 }

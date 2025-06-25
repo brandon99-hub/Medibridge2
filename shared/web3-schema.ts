@@ -10,6 +10,7 @@ export const patientIdentities = pgTable("patient_identities", {
   walletAddress: text("wallet_address"),
   publicKey: text("public_key").notNull(),
   didDocument: jsonb("did_document"), // Full DID Document
+  phoneNumber: text("phone_number"), // <-- Added for phone lookups
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
