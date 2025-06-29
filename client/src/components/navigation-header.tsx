@@ -2,8 +2,7 @@ import { User } from "@shared/schema";
 import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
 import { Link } from "wouter";
-import { Stethoscope, UserRound, Shield, LogOut, Globe, User as UserIcon, Settings } from "lucide-react"; // Added Settings icon
-
+import { Stethoscope, UserRound, Shield, LogOut, Globe, User as UserIcon, Settings, AlertTriangle as AlertTriangleIcon } from "lucide-react"; // Added Settings and AlertTriangleIcon
 interface NavigationHeaderProps {
   currentHospital: "A" | "B";
   onHospitalSwitch: (hospital: "A" | "B") => void;
@@ -59,11 +58,20 @@ export default function NavigationHeader({ currentHospital, onHospitalSwitch, us
               <Link href="/admin">
                 <Button variant="outline" size="sm" className="text-red-600 border-red-200 hover:bg-red-50">
                   <Settings className="h-4 w-4 mr-2" />
-                  Admin Dashboard
+                  Admin
                 </Button>
               </Link>
             )}
 
+            {/* Emergency Access Link - Visible to all authenticated staff */}
+            {user && (
+                 <Link href="/emergency-access">
+                    <Button variant="destructive" size="sm" className="bg-red-600 hover:bg-red-700 text-white">
+                        <AlertTriangleIcon className="h-4 w-4 mr-2" />
+                        Emergency Access
+                    </Button>
+                </Link>
+           
             <div className="flex items-center space-x-4">
               <div className="text-right">
                 <p className="text-sm font-medium text-slate-900">{user.hospitalName || user.username}</p>
