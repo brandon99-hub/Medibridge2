@@ -246,26 +246,39 @@ export function registerSecurityTestingRoutes(app: Express): void {
    */
   app.get("/api/security/audit-summary", async (req, res) => {
     try {
-      // In a real implementation, this would query the audit database
-      // For now, return mock summary data
+      const totalEvents = await storage.countAuditEvents();
+      const unresolvedViolations = await storage.countSecurityViolations({ resolved: false });
+      const totalConsentEvents = await storage.countConsentAuditRecords();
+
+      // Specific event type counts from auditEvents
+      // Note: Event types like 'LOGIN_SUCCESS', 'LOGIN_FAILURE', 'RECORD_ACCESSED', 'UNAUTHORIZED_ACCESS_ATTEMPT'
+      // need to be consistently used by auditService.logEvent and auditService.logSecurityViolation.
+      const successfulLogins = await storage.countAuditEvents({ eventType: "LOGIN_SUCCESS", outcome: "SUCCESS" }); // Assuming eventType and outcome
+      const failedLogins = await storage.countAuditEvents({ eventType: "LOGIN_FAILURE", outcome: "FAILURE" }); // Assuming eventType and outcome
+      const recordAccesses = await storage.countAuditEvents({ eventType: "RECORD_ACCESSED", outcome: "SUCCESS" }); // Assuming
+
+      // Unauthorized attempts could be a specific violationType or an eventType in auditEvents
+      // Let's assume it's a violationType for now.
+      const unauthorizedAttempts = await storage.countSecurityViolations({ violationType: "UNAUTHORIZED_ACCESS_TEST" }) +
+                                   await storage.countSecurityViolations({ violationType: "INVALID_CREDENTIAL_TEST" }) +
+                                   await storage.countSecurityViolations({ violationType: "UNAUTHORIZED_ACCESS_ATTEMPT" }); // A more generic one
+
       const summary = {
-        totalEvents: 0, // TODO: Count from audit_events table
-        securityViolations: 0, // TODO: Count from security_violations table
-        consentEvents: 0, // TODO: Count from consent_audit_trail table
-        recentActivity: [
-          // TODO: Get recent events from database
-        ],
+        totalEvents,
+        securityViolations: unresolvedViolations, // Display unresolved violations
+        consentEvents: totalConsentEvents,
+        // recentActivity: [], // TODO: Implement fetching recent activity (requires more complex queries)
         securityMetrics: {
-          successfulLogins: 0,
-          failedLogins: 0,
-          unauthorizedAttempts: 0,
-          recordAccesses: 0,
+          successfulLogins,
+          failedLogins,
+          unauthorizedAttempts,
+          recordAccesses,
         },
+        // Recommendations can remain static for now or be dynamically generated later
         recommendations: [
-          "Implement rate limiting for API endpoints",
-          "Add multi-factor authentication for sensitive operations",
-          "Set up automated alerts for security violations",
-          "Regular security audit reviews every 30 days",
+          "Review unresolved security violations regularly.",
+          "Ensure audit logs are backed up and archived.",
+          "Consider implementing automated alerts for critical violations.",
         ],
       };
 
