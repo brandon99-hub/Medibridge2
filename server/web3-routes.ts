@@ -1,8 +1,9 @@
-import type { Express } from "express";
+import type { Express, Request } from "express"; // Added Request
 import { storage } from "./storage";
 import { didService, vcService, ipfsService, consentService, WalletService } from "./web3-services";
 import { z } from "zod";
 import CryptoJS from "crypto-js";
+import { requirePatientAuth } from "./patient-auth-middleware"; // Import the middleware
 
 export function registerWeb3Routes(app: Express): void {
   
@@ -216,52 +217,54 @@ export function registerWeb3Routes(app: Express): void {
   });
 
   // Grant Consent via Verifiable Credential
-  app.post("/api/web3/grant-consent", async (req, res, next) => {
+  // This route is now protected by patient session authentication.
+  app.post("/api/web3/grant-consent", requirePatientAuth, async (req: Request, res, next) => {
     try {
-      const { patientDID, requesterDID, contentHashes, consentType, patientSignature } = z.object({
+      // patientSignature is removed as auth is via session
+      const { patientDID, requesterDID, contentHashes, consentType } = z.object({
         patientDID: z.string(),
         requesterDID: z.string(),
         contentHashes: z.array(z.string()),
         consentType: z.string(),
-        patientSignature: z.string(),
+        // patientSignature: z.string(), // Removed
       }).parse(req.body);
 
-      // Verify patient identity
+      // Verify that the patientDID in the request matches the authenticated session patientDID
+      if (req.session.patientDID !== patientDID) {
+        return res.status(403).json({ message: "Forbidden: patientDID in request does not match authenticated session." });
+      }
+
+      // Verify patient identity exists (though session implies it, good to double check)
       const patientIdentity = await storage.getPatientIdentityByDID(patientDID);
       if (!patientIdentity) {
-        return res.status(404).json({ message: "Patient DID not found" });
+        return res.status(404).json({ message: "Patient identity not found for authenticated DID." });
       }
 
-      // Verify patient signature (simplified - in production use proper cryptographic verification)
-      const message = WalletService.createSignMessage(patientDID, Date.now());
-      const isValidSignature = patientIdentity.walletAddress ? 
-        WalletService.verifySignature(message, patientSignature, patientIdentity.walletAddress) : 
-        true; // Fallback for demo
-
-      if (!isValidSignature) {
-        return res.status(401).json({ message: "Invalid patient signature" });
-      }
+      // The old patientSignature check is removed. Authorization comes from `requirePatientAuth`
+      // and the above check ensuring the operation is for the logged-in patient.
 
       // Issue consent credential for each content hash
-      const consentCredentials = [];
+      const issuedJwtVCs = [];
       for (const contentHash of contentHashes) {
-        // Create consent credential
-        const consentCredential = await consentService.issueConsentCredential(
-          patientDID,
-          requesterDID,
+        // `consentService.issueConsentCredential` now retrieves the private key from SecureKeyVault
+        const jwtVc = await consentService.issueConsentCredential(
+          patientDID,     // Patient (issuer)
+          requesterDID,   // Hospital (subject of consent)
           contentHash,
-          consentType,
-          "patient_private_key" // In production, use patient's actual private key
+          consentType
+          // Private key is handled internally by consentService via SecureKeyVault
         );
 
-        // Store credential
+        // Store credential JWT
+        // We need to parse the JWT to get exp and iat if we want to store them separately.
+        // For now, storage.createVerifiableCredential can take them as optional.
+        // The `verifiableCredentials` table now has `jwtVc` instead of `proof` and `credentialSubject`.
         const storedCredential = await storage.createVerifiableCredential({
           patientDID,
-          issuerDID: patientDID,
+          issuerDID: patientDID, // Patient is the issuer of their consent
           credentialType: "HealthcareConsent",
-          credentialSubject: consentCredential.credentialSubject,
-          proof: consentCredential.proof,
-          expirationDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days
+          jwtVc: jwtVc,
+          // expirationDate can be parsed from JWT if needed for the DB column
         });
 
         // Create consent management record
