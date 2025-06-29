@@ -18,47 +18,40 @@ import {
   Eye,
   Lock
 } from "lucide-react";
+import { Skeleton } from "@/components/ui/skeleton"; // Import Skeleton
 
 export default function AdminDashboard() {
   const [selectedTimeframe, setSelectedTimeframe] = useState("24h");
 
   // Fetch security audit summary
-  const { data: auditSummary, isLoading } = useQuery({
+  const { data: auditSummary, isLoading: isLoadingAuditSummary } = useQuery<any>({
     queryKey: ['/api/security/audit-summary'],
+    queryFn: async () => apiRequest("GET", "/api/security/audit-summary").then(res => res.json()),
     refetchInterval: 30000, // Refresh every 30 seconds
   });
 
-  // Mock data for demo (replace with actual API calls)
-  const securityMetrics = {
-    totalEvents: 1247,
-    securityViolations: 3,
-    consentEvents: 89,
-    recordAccesses: 156,
-    successfulLogins: 234,
-    failedLogins: 12,
-    unauthorizedAttempts: 3,
+  // Fetch recent security violations
+  const { data: securityViolationsData, isLoading: isLoadingViolations } = useQuery<any>({
+    queryKey: ['/api/admin/security-violations', { resolved: false, limit: 5 }],
+    queryFn: async () => apiRequest("GET", "/api/admin/security-violations?resolved=false&limit=5").then(res => res.json()),
+    refetchInterval: 60000, // Refresh every 60 seconds
+  });
+
+  const recentViolations = securityViolationsData?.violations || [];
+
+  // Use auditSummary for securityMetrics if available
+  const securityMetrics = auditSummary?.summary?.securityMetrics || {
+    successfulLogins: 0,
+    failedLogins: 0,
+    unauthorizedAttempts: 0,
+    recordAccesses: 0,
+  };
+  const overviewMetrics = auditSummary?.summary || {
+    totalEvents: 0,
+    securityViolations: 0, // This is unresolved violations count
+    consentEvents: 0,
   };
 
-  const recentViolations = [
-    {
-      id: 1,
-      type: "UNAUTHORIZED_ACCESS_ATTEMPT",
-      severity: "medium",
-      timestamp: "2025-01-24 18:30:15",
-      description: "Failed attempt to access patient records without valid credential",
-      actorId: "192.168.1.105",
-      resolved: false,
-    },
-    {
-      id: 2,
-      type: "RATE_LIMIT_EXCEEDED",
-      severity: "low",
-      timestamp: "2025-01-24 17:45:22",
-      description: "Excessive OTP requests from single IP address",
-      actorId: "10.0.1.234",
-      resolved: true,
-    },
-  ];
 
   const vcIssuanceStats = {
     today: 23,
@@ -92,18 +85,22 @@ export default function AdminDashboard() {
               <Activity className="h-4 w-4 text-blue-600" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{securityMetrics.totalEvents.toLocaleString()}</div>
-              <p className="text-xs text-slate-600">Last 24 hours</p>
+              <div className="text-2xl font-bold">
+                {isLoadingAuditSummary ? <Skeleton className="h-8 w-1/2" /> : overviewMetrics.totalEvents?.toLocaleString() || 0}
+              </div>
+              <p className="text-xs text-slate-600">Total audit events</p>
             </CardContent>
           </Card>
 
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Security Violations</CardTitle>
+              <CardTitle className="text-sm font-medium">Unresolved Violations</CardTitle>
               <AlertTriangle className="h-4 w-4 text-red-600" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-red-600">{securityMetrics.securityViolations}</div>
+              <div className="text-2xl font-bold text-red-600">
+                 {isLoadingAuditSummary ? <Skeleton className="h-8 w-1/4" /> : overviewMetrics.securityViolations || 0}
+              </div>
               <p className="text-xs text-slate-600">Requires attention</p>
             </CardContent>
           </Card>
@@ -114,8 +111,10 @@ export default function AdminDashboard() {
               <Shield className="h-4 w-4 text-green-600" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-green-600">{securityMetrics.consentEvents}</div>
-              <p className="text-xs text-slate-600">Granted today</p>
+              <div className="text-2xl font-bold text-green-600">
+                {isLoadingAuditSummary ? <Skeleton className="h-8 w-1/4" /> : overviewMetrics.consentEvents || 0}
+              </div>
+              <p className="text-xs text-slate-600">Consent actions logged</p>
             </CardContent>
           </Card>
 
@@ -125,7 +124,9 @@ export default function AdminDashboard() {
               <FileText className="h-4 w-4 text-purple-600" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-purple-600">{securityMetrics.recordAccesses}</div>
+              <div className="text-2xl font-bold text-purple-600">
+                {isLoadingAuditSummary ? <Skeleton className="h-8 w-1/4" /> : securityMetrics.recordAccesses || 0}
+              </div>
               <p className="text-xs text-slate-600">Authorized accesses</p>
             </CardContent>
           </Card>
@@ -153,38 +154,74 @@ export default function AdminDashboard() {
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <div className="space-y-4">
-                  {recentViolations.map((violation) => (
-                    <div key={violation.id} className="border rounded-lg p-4">
-                      <div className="flex items-center justify-between mb-2">
-                        <div className="flex items-center space-x-2">
-                          <Badge 
-                            variant={violation.severity === 'high' ? 'destructive' : 
-                                   violation.severity === 'medium' ? 'default' : 'secondary'}
+                {isLoadingViolations && (
+                  <div className="space-y-4">
+                    {[...Array(3)].map((_, i) => (
+                      <div key={i} className="border rounded-lg p-4 space-y-3">
+                        <div className="flex items-center justify-between mb-2">
+                          <Skeleton className="h-6 w-24" />
+                          <Skeleton className="h-4 w-32" />
+                        </div>
+                        <Skeleton className="h-4 w-full" />
+                        <Skeleton className="h-4 w-3/4" />
+                        <div className="flex items-center justify-between">
+                          <Skeleton className="h-4 w-28" />
+                          <Skeleton className="h-8 w-24" />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {!isLoadingViolations && recentViolations.length === 0 && (
+                  <Alert>
+                    <CheckCircle className="h-4 w-4" />
+                    <AlertDescription>
+                      No unresolved security violations found. System is looking good!
+                    </AlertDescription>
+                  </Alert>
+                )}
+                {!isLoadingViolations && recentViolations.length > 0 && (
+                  <div className="space-y-4">
+                    {recentViolations.map((violation: any) => ( // Use any for now, define type later
+                      <div key={violation.id} className="border rounded-lg p-4">
+                        <div className="flex items-center justify-between mb-2">
+                          <div className="flex items-center space-x-2">
+                            <Badge
+                              variant={violation.severity === 'high' || violation.severity === 'critical' ? 'destructive' :
+                                     violation.severity === 'medium' ? 'default' : 'secondary'}
+                            >
+                              {violation.severity?.toUpperCase()}
+                            </Badge>
+                            <span className="font-medium">{violation.violationType}</span>
+                          </div>
+                          <div className="flex items-center space-x-2">
+                            <Clock className="h-4 w-4 text-slate-400" />
+                            <span className="text-sm text-slate-600">
+                              {new Date(violation.createdAt).toLocaleString()}
+                            </span>
+                          </div>
+                        </div>
+                        <p className="text-sm text-slate-700 mb-2">
+                          {violation.details?.error || violation.details?.message || JSON.stringify(violation.details)}
+                        </p>
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs text-slate-500">
+                            Actor ID: {violation.actorId || 'N/A'}
+                            {violation.ipAddress && ` • IP: ${violation.ipAddress}`}
+                          </span>
+                          <Button
+                            size="sm"
+                            variant={violation.resolved ? "outline" : "default"}
+                            disabled={violation.resolved}
+                            // TODO: Add onClick handler to mark as resolved or investigate
                           >
-                            {violation.severity.toUpperCase()}
-                          </Badge>
-                          <span className="font-medium">{violation.type}</span>
-                        </div>
-                        <div className="flex items-center space-x-2">
-                          <Clock className="h-4 w-4 text-slate-400" />
-                          <span className="text-sm text-slate-600">{violation.timestamp}</span>
+                            {violation.resolved ? "Resolved" : "Investigate"}
+                          </Button>
                         </div>
                       </div>
-                      <p className="text-sm text-slate-700 mb-2">{violation.description}</p>
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs text-slate-500">Actor: {violation.actorId}</span>
-                        <Button 
-                          size="sm" 
-                          variant={violation.resolved ? "outline" : "default"}
-                          disabled={violation.resolved}
-                        >
-                          {violation.resolved ? "Resolved" : "Investigate"}
-                        </Button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
+                    ))}
+                  </div>
+                )}
               </CardContent>
             </Card>
           </TabsContent>

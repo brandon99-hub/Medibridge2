@@ -110,6 +110,10 @@ export interface IStorage {
   // Emergency Consent Methods
   createEmergencyConsentRecord(record: InsertEmergencyConsentRecord): Promise<EmergencyConsentRecordSchema>;
 
+  // Admin/Audit Data Retrieval
+  getSecurityViolations(options: { limit?: number; offset?: number; resolved?: boolean; }): Promise<SecurityViolation[]>;
+
+
   sessionStore: session.Store;
 }
 
@@ -590,6 +594,26 @@ export class DatabaseStorage implements IStorage {
       throw new Error("Failed to create emergency consent record or retrieve the created record.");
     }
     return newRecord;
+  }
+
+  async getSecurityViolations(options: {
+    limit?: number;
+    offset?: number;
+    resolved?: boolean;
+  }): Promise<SecurityViolation[]> {
+    let query = db.select().from(securityViolations).orderBy(sql`${securityViolations.createdAt} DESC`);
+
+    if (options.limit !== undefined) {
+      query = query.limit(options.limit);
+    }
+    if (options.offset !== undefined) {
+      query = query.offset(options.offset);
+    }
+    if (options.resolved !== undefined) {
+      query = query.where(eq(securityViolations.resolved, options.resolved));
+    }
+
+    return await query;
   }
 }
 

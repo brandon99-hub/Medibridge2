@@ -10,6 +10,7 @@ export const users = pgTable("users", {
   hospitalName: text("hospital_name").notNull(),
   hospitalType: text("hospital_type").notNull(), // "A" or "B"
   walletAddress: text("wallet_address"),
+  isAdmin: boolean("is_admin").default(false).notNull(),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
