@@ -225,8 +225,26 @@ export class EmergencyConsentService {
     };
 
     // In production, store in database
-    // await storage.createEmergencyConsentRecord(consentRecord);
+    const recordToStore = {
+      id: consentRecord.id,
+      patientId: consentRecord.patientId,
+      hospitalId: consentRecord.hospitalId,
+      emergencyType: consentRecord.emergencyType,
+      medicalJustification: consentRecord.medicalJustification,
+      grantedAt: new Date(consentRecord.grantedAt),
+      expiresAt: new Date(consentRecord.expiresAt),
+      primaryPhysicianDetails: consentRecord.primaryPhysician, // Stored as JSONB
+      secondaryAuthorizerDetails: consentRecord.secondaryAuthorizer, // Stored as JSONB
+      nextOfKinConsentDetails: consentRecord.nextOfKinConsent, // Stored as JSONB
+      limitations: consentRecord.limitations, // Stored as JSONB
+      // temporaryCredentialDetails will be updated after issuing the credential
+      auditTrail: consentRecord.auditTrail,
+    };
 
+    const storedDbRecord = await storage.createEmergencyConsentRecord(recordToStore);
+
+    // Return the service-level record structure, which might differ slightly from DB schema
+    // or could be mapped from storedDbRecord if needed. For now, using original consentRecord.
     return consentRecord;
   }
 
@@ -235,32 +253,31 @@ export class EmergencyConsentService {
    */
   private async issueTemporaryCredential(
     request: EmergencyConsentRequest,
-    emergencyConsent: EmergencyConsentRecord
+    emergencyConsentRecord: EmergencyConsentRecord // The record from createEmergencyConsentRecord method
   ): Promise<string> {
-    const credential = {
-      id: `temp_${emergencyConsent.id}`,
+    // This is the object that will be base64 encoded for the temporary credential string
+    const credentialPayload = {
+      id: `temp_${emergencyConsentRecord.id}`,
       type: 'EmergencyAccessCredential',
-      issuer: 'MediBridge_Emergency_System',
-      subject: request.hospitalId,
-      issuanceDate: new Date().toISOString(),
-      expirationDate: emergencyConsent.expiresAt,
-      credentialSubject: {
-        emergencyConsent: emergencyConsent.id,
-        patientId: request.patientId,
-        accessLevel: this.determineAccessLevel(request.emergencyType),
-        limitations: emergencyConsent.limitations,
-        autoRevoke: true,
-      },
-      proof: {
-        type: 'EmergencyAuthorization',
-        created: new Date().toISOString(),
-        primaryAuthorizer: request.primaryPhysician.id,
-        secondaryAuthorizer: request.secondaryAuthorizer.id,
-      },
+      issuer: 'MediBridge_Emergency_System', // System issues this
+      subject: request.hospitalId, // Hospital receiving access
+      issuedAt: new Date().toISOString(),
+      expiresAt: emergencyConsentRecord.expiresAt,
+      grantedToPersonnel: [request.primaryPhysician.id, request.secondaryAuthorizer.id],
+      patientId: request.patientId,
+      accessLevel: this.determineAccessLevel(request.emergencyType),
+      limitations: emergencyConsentRecord.limitations,
+      emergencyConsentRecordId: emergencyConsentRecord.id, // Link back to the persisted record
     };
 
-    // In production, create proper JWT or similar credential
-    return Buffer.from(JSON.stringify(credential)).toString('base64');
+    const credentialString = Buffer.from(JSON.stringify(credentialPayload)).toString('base64');
+
+    // Optionally, update the persisted emergencyConsentRecord with these credential details
+    // This would require an update method in storage.ts and modification to emergencyConsentRecords schema
+    // For now, this detail is part of the returned EmergencyConsentResult.
+    // e.g., await storage.updateEmergencyConsentRecord(emergencyConsentRecord.id, { temporaryCredentialDetails: credentialString });
+
+    return credentialString;
   }
 
   /**

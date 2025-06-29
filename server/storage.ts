@@ -13,8 +13,18 @@ import {
   type ConsentManagement,
   type InsertConsentManagement
 } from "@shared/web3-schema";
+import {
+  auditEvents,
+  consentAuditTrail,
+  securityViolations
+} from "@shared/audit-schema"; // Import audit tables
+import {
+  emergencyConsentRecords,
+  type InsertEmergencyConsentRecord,
+  type EmergencyConsentRecordSchema
+} from "@shared/schema"; // Import emergency consent schema
 import { db } from "./db";
-import { eq, and, or } from "drizzle-orm";
+import { eq, and, or, sql } from "drizzle-orm"; // Import sql
 import session from "express-session";
 import connectPg from "connect-pg-simple";
 import { pool } from "./db";
@@ -92,6 +102,14 @@ export interface IStorage {
   // Web3 records summary
   getPatientRecordsSummary(patientDID: string): Promise<any>;
   
+  // Audit Summary Methods
+  countAuditEvents(filters?: { eventType?: string; outcome?: string; }): Promise<number>;
+  countSecurityViolations(filters?: { violationType?: string; resolved?: boolean; }): Promise<number>;
+  countConsentAuditRecords(filters?: { consentAction?: string; }): Promise<number>;
+
+  // Emergency Consent Methods
+  createEmergencyConsentRecord(record: InsertEmergencyConsentRecord): Promise<EmergencyConsentRecordSchema>;
+
   sessionStore: session.Store;
 }
 
@@ -479,6 +497,99 @@ export class DatabaseStorage implements IStorage {
       .update(consentRecords)
       .set(updates)
       .where(eq(consentRecords.id, id));
+  }
+
+  // Audit Summary Implementations
+  async countAuditEvents(filters?: { eventType?: string; outcome?: string; }): Promise<number> {
+    // This dynamic query building is a bit complex for a direct example with Drizzle's current API.
+    // A simpler approach for now is to fetch all and filter, or create specific methods for common cases.
+    // For a true dynamic filter, one might need to build the SQL where clause more manually or use a query builder.
+    // Let's implement a basic total count for now, and specific counts as needed.
+    // TODO: Implement dynamic filtering if complex queries are common.
+
+    let query = db.select({ count: sql<number>`count(*)` }).from(auditEvents);
+
+    // Example of how filters could be added if Drizzle syntax allows easy conditional where clauses
+    // For now, this part is illustrative and would need specific Drizzle 'where' conditions
+    const conditions = [];
+    if (filters?.eventType) {
+      conditions.push(eq(auditEvents.eventType, filters.eventType));
+    }
+    if (filters?.outcome) {
+      conditions.push(eq(auditEvents.outcome, filters.outcome));
+    }
+    // if (conditions.length > 0) {
+    //   query = query.where(and(...conditions)); // Drizzle's 'and' might need specific handling
+    // }
+
+    // For simplicity now, let's assume filters mean specific counts are needed by type by the caller
+    // This method will just return total count if no filters, or could be enhanced.
+    if (filters && Object.keys(filters).length > 0) {
+        let specificQuery = db.select({ count: sql<number>`count(*)` }).from(auditEvents);
+        if (filters.eventType && filters.outcome) {
+            specificQuery = specificQuery.where(and(eq(auditEvents.eventType, filters.eventType), eq(auditEvents.outcome, filters.outcome)));
+        } else if (filters.eventType) {
+            specificQuery = specificQuery.where(eq(auditEvents.eventType, filters.eventType));
+        } else if (filters.outcome) {
+            specificQuery = specificQuery.where(eq(auditEvents.outcome, filters.outcome));
+        }
+        const result = await specificQuery;
+        return Number(result[0].count);
+    }
+
+    const result = await query;
+    return Number(result[0].count);
+  }
+
+  async countSecurityViolations(filters?: { violationType?: string; resolved?: boolean; }): Promise<number> {
+    let query = db.select({ count: sql<number>`count(*)` }).from(securityViolations);
+    const conditions = [];
+    if (filters?.violationType) {
+      conditions.push(eq(securityViolations.violationType, filters.violationType));
+    }
+    if (filters?.resolved !== undefined) {
+      conditions.push(eq(securityViolations.resolved, filters.resolved));
+    }
+
+    if (conditions.length > 0) {
+      // Drizzle's 'and' expects at least two conditions if used like and(cond1, cond2, ...).
+      // For a single condition, just use .where(condition). For multiple, chain .where or use and().
+      let chainedQuery = query;
+      if (conditions.length === 1) {
+        chainedQuery = chainedQuery.where(conditions[0]);
+      } else if (conditions.length > 1) {
+        // @ts-ignore // Drizzle's 'and' type might need specific casting for dynamic arrays
+        chainedQuery = chainedQuery.where(and(...conditions));
+      }
+      const result = await chainedQuery;
+      return Number(result[0].count);
+    }
+
+    const result = await query;
+    return Number(result[0].count);
+  }
+
+  async countConsentAuditRecords(filters?: { consentAction?: string; }): Promise<number> {
+    let query = db.select({ count: sql<number>`count(*)` }).from(consentAuditTrail);
+     if (filters?.consentAction) {
+      query = query.where(eq(consentAuditTrail.consentAction, filters.consentAction));
+    }
+    const result = await query;
+    return Number(result[0].count);
+  }
+
+  // Emergency Consent Implementation
+  async createEmergencyConsentRecord(record: InsertEmergencyConsentRecord): Promise<EmergencyConsentRecordSchema> {
+    const [newRecord] = await db
+      .insert(emergencyConsentRecords)
+      .values(record)
+      .returning();
+    if (!newRecord) {
+      // This case should ideally not happen if .returning() is used and there's no error.
+      // However, to satisfy type checking if `returning()` could yield undefined on certain DBs/configs:
+      throw new Error("Failed to create emergency consent record or retrieve the created record.");
+    }
+    return newRecord;
   }
 }
 
