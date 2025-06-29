@@ -221,31 +221,39 @@ export function registerWeb3Routes(app: Express): void {
   });
 
   // Grant Consent via Verifiable Credential
-  // This route is now protected by patient session authentication.
-  app.post("/api/web3/grant-consent", requirePatientAuth, async (req: Request, res, next) => {
+  // This route is now intended for wallet-based signature authorization
+  app.post("/api/web3/grant-consent", async (req: Request, res, next) => {
     try {
-      // patientSignature is removed as auth is via session
-      const { patientDID, requesterDID, contentHashes, consentType } = z.object({
+      const { patientDID, requesterDID, contentHashes, consentType, patientSignature } = z.object({
         patientDID: z.string(),
         requesterDID: z.string(),
         contentHashes: z.array(z.string()),
         consentType: z.string(),
-        // patientSignature: z.string(), // Removed
+        patientSignature: z.string(), // Signature from patient's wallet
       }).parse(req.body);
 
-      // Verify that the patientDID in the request matches the authenticated session patientDID
-      if (req.session.patientDID !== patientDID) {
-        return res.status(403).json({ message: "Forbidden: patientDID in request does not match authenticated session." });
-      }
-
-      // Verify patient identity exists (though session implies it, good to double check)
+      // Verify patient identity
       const patientIdentity = await storage.getPatientIdentityByDID(patientDID);
-      if (!patientIdentity) {
-        return res.status(404).json({ message: "Patient identity not found for authenticated DID." });
+      if (!patientIdentity || !patientIdentity.walletAddress) {
+        return res.status(404).json({ message: "Patient DID not found or no wallet address associated." });
       }
 
-      // The old patientSignature check is removed. Authorization comes from `requirePatientAuth`
-      // and the above check ensuring the operation is for the logged-in patient.
+      // Construct the message that was signed on the frontend
+      // IMPORTANT: This must exactly match the message signed on the frontend.
+      // OMITTING TIMESTAMP for now for simplicity, but this is a security weakness.
+      const messageToVerify = `I, ${patientDID}, authorize granting ${consentType} consent to ${requesterDID} for the following content hashes: ${contentHashes.join(', ')}.`;
+      // const messageToVerify = `I, ${patientDID}, authorize granting ${consentType} consent to ${requesterDID} for the following content hashes: ${contentHashes.join(', ')}. Timestamp: ${SOME_TIMESTAMP_IF_PASSED_FROM_CLIENT}`;
+
+
+      const isValidSignature = WalletService.verifySignature(
+        messageToVerify,
+        patientSignature,
+        patientIdentity.walletAddress
+      );
+
+      if (!isValidSignature) {
+        return res.status(401).json({ message: "Invalid patient signature." });
+      }
 
       // Issue consent credential for each content hash
       const issuedJwtVCs = [];
@@ -373,8 +381,24 @@ export function registerWeb3Routes(app: Express): void {
 
       // Verify patient identity and signature
       const patientIdentity = await storage.getPatientIdentityByDID(patientDID);
-      if (!patientIdentity) {
-        return res.status(404).json({ message: "Patient DID not found" });
+      if (!patientIdentity || !patientIdentity.walletAddress) {
+        return res.status(404).json({ message: "Patient DID not found or no wallet address associated." });
+      }
+
+      // Construct the message that was signed on the frontend
+      // IMPORTANT: This must exactly match the message signed on the frontend.
+      // OMITTING TIMESTAMP for now for simplicity.
+      const messageToVerify = `I, ${patientDID}, authorize revoking any consent previously granted to ${requesterDID}.`;
+      // const messageToVerify = `I, ${patientDID}, authorize revoking any consent previously granted to ${requesterDID}. Timestamp: ${SOME_TIMESTAMP_IF_PASSED_FROM_CLIENT}`;
+
+      const isValidSignature = WalletService.verifySignature(
+        messageToVerify,
+        patientSignature,
+        patientIdentity.walletAddress
+      );
+
+      if (!isValidSignature) {
+        return res.status(401).json({ message: "Invalid patient signature for revocation." });
       }
 
       // Get and revoke all consents
