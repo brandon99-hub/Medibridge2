@@ -5,6 +5,10 @@ import CryptoJS from "crypto-js";
 import { v4 as uuidv4 } from "uuid";
 import PinataClient from '@pinata/sdk';
 import fetch from 'node-fetch';
+import { createJWT, verifyJWT, ES256KSigner, Verifier } from 'did-jwt';
+import { getResolver as getKeyResolver } from 'key-did-resolver';
+import { secureKeyVault } from "./secure-key-vault"; // Import SecureKeyVault
+
 
 // Pinata Configuration
 const pinataApiKey = process.env.PINATA_API_KEY;
@@ -72,62 +76,87 @@ export class VCService {
   // Issue a verifiable credential
   async issueCredential(
     issuerDID: string,
-    subjectDID: string,
-    credentialType: string,
-    credentialSubject: any,
-    privateKey: string
-  ) {
-    const credential = {
-      "@context": [
-        "https://www.w3.org/2018/credentials/v1",
-        "https://www.w3.org/2018/credentials/examples/v1"
+    subjectDID: string, // The DID of the subject of the credential
+    credentialType: string, // A specific type for the credential, e.g., "MediBridgePatientRecord"
+    credentialSubject: any, // The actual claims/data of the credential
+    privateKeyHex: string, // Issuer's private key in hex format
+    expiresInHours?: number // Optional expiration in hours
+  ): Promise<string> { // Returns the JWT string
+    const signer = ES256KSigner(privateKeyHex);
+
+    const vcPayload = {
+      '@context': [
+        'https://www.w3.org/2018/credentials/v1',
+        // Add any other relevant contexts, e.g., for specific credential types
       ],
-      "id": `urn:uuid:${uuidv4()}`,
-      "type": ["VerifiableCredential", credentialType],
-      "issuer": issuerDID,
-      "issuanceDate": new Date().toISOString(),
-      "credentialSubject": {
-        "id": subjectDID,
-        ...credentialSubject
-      }
+      id: `urn:uuid:${uuidv4()}`,
+      type: ['VerifiableCredential', credentialType],
+      issuer: issuerDID,
+      // issuanceDate will be set by createJWT
+      credentialSubject: {
+        id: subjectDID,
+        ...credentialSubject,
+      },
     };
 
-    // Create proof (simplified - in production use proper cryptographic signing)
-    const proof = {
-      "type": "Ed25519Signature2018",
-      "created": new Date().toISOString(),
-      "verificationMethod": `${issuerDID}#key-1`,
-      "proofPurpose": "assertionMethod",
-      "jws": this.createJWS(credential, privateKey)
+    const jwtOptions: any = {
+      alg: 'ES256K',
+      issuer: issuerDID,
     };
 
-    return {
-      ...credential,
-      proof
-    };
-  }
-
-  // Verify a verifiable credential
-  async verifyCredential(credential: any): Promise<boolean> {
-    try {
-      // Simplified verification - in production use proper cryptographic verification
-      return credential.proof && credential.proof.jws && credential.issuer;
-    } catch (error) {
-      console.error("Failed to verify credential:", error);
-      return false;
+    if (expiresInHours) {
+      jwtOptions.expiresIn = `${expiresInHours}h`;
     }
+
+    // The JWT payload will contain the VC under the 'vc' claim.
+    // 'sub' (subject) of the JWT will be the subject's DID.
+    // 'iss' (issuer) of the JWT will be the issuer's DID.
+    const jwt = await createJWT(
+      { vc: vcPayload, sub: subjectDID },
+      { signer, did: issuerDID },
+      { ...jwtOptions, header: { alg: 'ES256K', typ: 'JWT' } }
+    );
+
+    return jwt;
   }
 
-  // Create JWT Web Signature (simplified)
-  private createJWS(credential: any, privateKey: string): string {
-    const header = { "alg": "EdDSA", "typ": "JWT" };
-    const payload = credential;
-    
-    // Simplified signing - in production use proper EdDSA signing
-    const data = JSON.stringify(header) + "." + JSON.stringify(payload);
-    const signature = createHash('sha256').update(data + privateKey).digest('hex');
-    
-    return `${Buffer.from(JSON.stringify(header)).toString('base64')}.${Buffer.from(JSON.stringify(payload)).toString('base64')}.${signature}`;
+  // Verify a verifiable credential (JWT format)
+  async verifyCredential(
+    jwt: string,
+    expectedIssuer?: string, // Optional: verify against a specific issuer DID
+    expectedSubject?: string // Optional: verify against a specific subject DID
+  ): Promise<{ isValid: boolean; verifiedJwt?: Verifier.VerifiedJwt; error?: string }> {
+    try {
+      const keyResolver = getKeyResolver();
+      const resolver = new Resolver({ ...keyResolver });
+
+      const verifiedJwt = await verifyJWT(jwt, { resolver });
+
+      if (!verifiedJwt.payload || !verifiedJwt.payload.vc) {
+        return { isValid: false, error: 'Invalid VC structure in JWT payload' };
+      }
+
+      // Optional: Check if the issuer in the JWT matches the issuer of the VC
+      if (verifiedJwt.payload.iss !== verifiedJwt.payload.vc.issuer) {
+        return { isValid: false, error: 'JWT issuer does not match VC issuer' };
+      }
+
+      // Optional: Check specific issuer if provided
+      if (expectedIssuer && verifiedJwt.payload.iss !== expectedIssuer) {
+        return { isValid: false, error: `JWT issuer ${verifiedJwt.payload.iss} does not match expected issuer ${expectedIssuer}` };
+      }
+
+      // Optional: Check specific subject if provided
+      if (expectedSubject && verifiedJwt.payload.sub !== expectedSubject) {
+        return { isValid: false, error: `JWT subject ${verifiedJwt.payload.sub} does not match expected subject ${expectedSubject}` };
+      }
+
+      // Add any other domain-specific checks on verifiedJwt.payload.vc if needed
+
+      return { isValid: true, verifiedJwt };
+    } catch (error: any) {
+      return { isValid: false, error: `JWT verification failed: ${error.message}` };
+    }
   }
 }
 
@@ -218,36 +247,88 @@ export class ConsentService {
 
   // Issue consent credential
   async issueConsentCredential(
-    patientDID: string,
-    requesterDID: string,
-    contentHash: string,
-    consentType: string,
-    patientPrivateKey: string
+    patientDID: string, // Issuer of the consent (patient)
+    requesterDID: string, // Who is being granted consent (hospital)
+    contentHash: string,  // Specific record/content hash
+    consentType: string   // Type of consent (e.g., "read")
+    // patientPrivateKey is no longer passed directly; it will be retrieved from SecureKeyVault
   ) {
+    // Retrieve patient's private key using SecureKeyVault
+    const patientPrivateKeyHex = await secureKeyVault.retrievePatientKey(patientDID);
+    if (!patientPrivateKeyHex) {
+      throw new Error(`Could not retrieve private key for patient DID: ${patientDID}`);
+    }
+
     const credentialSubject = {
-      requester: requesterDID,
+      // id: requesterDID, // The subject of VC is requesterDID, id in credentialSubject is for that subject
+      requester: requesterDID, // Keeping this for clarity if needed by consumers
       contentHash,
       consentType,
       grantedAt: new Date().toISOString(),
-      expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString() // 30 days
+      // expiration will be handled by JWT 'exp' claim through vcService.issueCredential
     };
 
+    // vcService.issueCredential now takes subjectDID as the second param
+    // For a consent VC, the patient (issuerDID) issues a credential where the
+    // hospital (requesterDID which becomes subjectDID of VC) is the subject.
     return await this.vcService.issueCredential(
-      patientDID,
-      patientDID,
-      "HealthcareConsent",
-      credentialSubject,
-      patientPrivateKey
+      patientDID,         // issuer: patient's DID
+      requesterDID,       // subject: hospital's DID (who is granted access)
+      "HealthcareConsent",// credentialType
+      credentialSubject,  // claims
+      patientPrivateKeyHex, // patient's private key from vault
+      30 * 24             // expiresInHours (e.g., 30 days)
     );
   }
 
-  // Verify consent credential
-  async verifyConsentCredential(credential: any): Promise<boolean> {
-    return await this.vcService.verifyCredential(credential);
+  // Verify consent credential (JWT string)
+  async verifyConsentCredential(
+    jwtVc: string,
+    expectedPatientDID?: string, // Optional: verify if this patient issued it (issuer of JWT/VC)
+    expectedRequesterDID?: string // Optional: verify if this hospital was the subject of JWT/VC
+  ): Promise<{ isValid: boolean; verifiedJwt?: Verifier.VerifiedJwt; error?: string }> {
+    // vcService.verifyCredential now returns an object { isValid, verifiedJwt, error }
+    const verificationResult = await this.vcService.verifyCredential(jwtVc, expectedPatientDID, expectedRequesterDID);
+
+    if (!verificationResult.isValid || !verificationResult.verifiedJwt) {
+      return verificationResult;
+    }
+
+    // Additional domain-specific checks for consent VCs
+    const vcPayload = verificationResult.verifiedJwt.payload.vc;
+    if (!vcPayload.type?.includes("HealthcareConsent")) {
+      return { isValid: false, error: "VC is not of type HealthcareConsent" };
+    }
+    if (!vcPayload.credentialSubject?.requester || !vcPayload.credentialSubject?.contentHash) {
+      return { isValid: false, error: "HealthcareConsent VC is missing required subject fields (requester, contentHash)" };
+    }
+     // Check if the VC subject matches the expected requester DID, if provided
+    if (expectedRequesterDID && vcPayload.credentialSubject?.id !== expectedRequesterDID) {
+        return { isValid: false, error: `VC subject ${vcPayload.credentialSubject?.id} does not match expected requester ${expectedRequesterDID}` };
+    }
+
+
+    return verificationResult;
   }
 
-  // Check if consent is still valid
+  // Check if consent is still valid (assumes JWT VC with 'exp' claim)
   isConsentValid(credential: any): boolean {
+    // This method might need to be re-evaluated if 'credential' is now a JWT string
+    // or a decoded JWT object.
+    // If it's a decoded JWT (from verifiedJwt.payload.vc), then it might have an expirationDate field.
+    // If it's a JWT string, it needs to be verified first.
+    // For now, let's assume this check is done after verifyConsentCredential.
+    // did-jwt's verifyJWT already checks 'exp' and 'nbf' claims.
+    if (credential && credential.verifiedJwt && credential.verifiedJwt.payload) {
+        // If 'exp' is present, verifyJWT would have already checked it.
+        // If 'expirationDate' is explicitly in the VC payload, check that.
+        const vcExpDate = credential.verifiedJwt.payload.vc?.expirationDate;
+        if (vcExpDate) {
+            return new Date() < new Date(vcExpDate);
+        }
+        return true; // If no explicit expirationDate in VC and JWT exp passed, consider valid.
+    }
+    // Legacy check if an old format object is passed, though this should be phased out.
     const now = new Date();
     const expiresAt = new Date(credential.credentialSubject.expiresAt);
     return now < expiresAt;

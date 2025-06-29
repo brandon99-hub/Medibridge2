@@ -7,13 +7,28 @@ import { auditService } from "./audit-service";
  */
 export class SecureKeyVault {
   private static instance: SecureKeyVault;
-  private readonly masterKey: string;
+  private readonly masterKey: Buffer; // Store as Buffer
   private readonly keyStore = new Map<string, EncryptedKeyData>();
+  private readonly DEK_ENCRYPTION_SALT = "medbridge-dek-salt"; // Salt for KEK derivation for DEKs
+  private dekKek: Buffer | null = null; // Cache for the DEK's Key Encryption Key
 
   private constructor() {
     // In production, this would be loaded from a secure environment variable
     // or hardware security module (HSM)
-    this.masterKey = process.env.MASTER_KEY || crypto.randomBytes(32).toString('hex');
+    const masterKeyString = process.env.MASTER_KEY || crypto.randomBytes(32).toString('hex');
+    this.masterKey = Buffer.from(masterKeyString, 'hex');
+    this.deriveDekKek();
+  }
+
+  private async deriveDekKek() {
+    // Derive the KEK for DEKs once and cache it
+    this.dekKek = crypto.pbkdf2Sync(
+      this.masterKey,
+      this.DEK_ENCRYPTION_SALT,
+      100000, // Iterations
+      32,     // Key length in bytes (AES-256)
+      'sha256'
+    );
   }
 
   static getInstance(): SecureKeyVault {
@@ -193,6 +208,70 @@ export class SecureKeyVault {
         details: { error: error.message, patientDID },
       });
       throw error;
+    }
+  }
+
+  /**
+   * Encrypts a Data Encryption Key (DEK) using a derived Key Encryption Key (KEK).
+   * @param dataKey Plaintext Data Encryption Key (hex string).
+   * @returns A string combining IV:Ciphertext:AuthTag (all hex encoded).
+   */
+  async encryptDataKey(dataKey: string): Promise<string> {
+    if (!this.dekKek) {
+      // Should have been initialized in constructor
+      await this.deriveDekKek();
+    }
+    try {
+      const iv = crypto.randomBytes(12); // Recommended for AES-GCM
+      // Using a fixed AAD for all DEKs encrypted with this KEK, or could be context-specific
+      const aad = Buffer.from("dek-encryption-context");
+      const cipher = crypto.createCipheriv('aes-256-gcm', this.dekKek!, iv);
+      cipher.setAAD(aad);
+
+      let encrypted = cipher.update(dataKey, 'hex', 'hex'); // Assuming DEK is hex
+      encrypted += cipher.final('hex');
+      const authTag = cipher.getAuthTag();
+
+      return `${iv.toString('hex')}:${encrypted}:${authTag.toString('hex')}`;
+    } catch (error: any) {
+      // TODO: Log this critical failure with auditService
+      console.error("Failed to encrypt DEK:", error);
+      throw new Error(`Failed to encrypt Data Key: ${error.message}`);
+    }
+  }
+
+  /**
+   * Decrypts an encrypted Data Encryption Key (DEK).
+   * @param encryptedDekString The "IV:Ciphertext:AuthTag" string.
+   * @returns The plaintext Data Encryption Key (hex string).
+   */
+  async decryptDataKey(encryptedDekString: string): Promise<string> {
+    if (!this.dekKek) {
+      await this.deriveDekKek();
+    }
+    try {
+      const parts = encryptedDekString.split(':');
+      if (parts.length !== 3) {
+        throw new Error('Invalid encrypted DEK format. Expected IV:Ciphertext:AuthTag.');
+      }
+      const [ivHex, encryptedHex, authTagHex] = parts;
+
+      const iv = Buffer.from(ivHex, 'hex');
+      const authTag = Buffer.from(authTagHex, 'hex');
+      const aad = Buffer.from("dek-encryption-context"); // Must match AAD used during encryption
+
+      const decipher = crypto.createDecipheriv('aes-256-gcm', this.dekKek!, iv);
+      decipher.setAuthTag(authTag);
+      decipher.setAAD(aad);
+
+      let decrypted = decipher.update(encryptedHex, 'hex', 'hex'); // Outputting hex
+      decrypted += decipher.final('hex');
+
+      return decrypted;
+    } catch (error: any) {
+      // TODO: Log this critical failure with auditService
+      console.error("Failed to decrypt DEK:", error);
+      throw new Error(`Failed to decrypt Data Key: ${error.message}`);
     }
   }
 }

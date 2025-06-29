@@ -7,8 +7,40 @@ import { registerWeb3Routes } from "./web3-routes";
 import { registerSimplifiedPatientRoutes } from "./simplified-patient-routes";
 import { registerSecurityTestingRoutes } from "./security-testing-routes";
 import { patientLookupService } from "./patient-lookup-service";
+import { emergencyConsentService } from "./emergency-consent-service"; // Import EmergencyConsentService
 import { z } from "zod";
 import { auditService } from "./audit-service";
+
+// Zod schema for AuthorizedPersonnel
+const authorizedPersonnelSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  role: z.enum(['PHYSICIAN', 'SURGEON', 'EMERGENCY_DOCTOR', 'CHIEF_RESIDENT']),
+  licenseNumber: z.string(),
+  department: z.string(),
+});
+
+// Zod schema for NextOfKinInfo
+const nextOfKinInfoSchema = z.object({
+  name: z.string(),
+  relationship: z.string(),
+  phoneNumber: z.string(),
+  email: z.string().email().optional(),
+});
+
+// Zod schema for EmergencyConsentRequest
+const emergencyConsentRequestSchema = z.object({
+  patientId: z.string(),
+  hospitalId: z.string(),
+  emergencyType: z.enum(['LIFE_THREATENING', 'UNCONSCIOUS_PATIENT', 'CRITICAL_CARE', 'SURGERY_REQUIRED', 'MENTAL_HEALTH_CRISIS']),
+  medicalJustification: z.string().min(50, { message: "Medical justification must be at least 50 characters long" }),
+  primaryPhysician: authorizedPersonnelSchema,
+  secondaryAuthorizer: authorizedPersonnelSchema,
+  nextOfKin: nextOfKinInfoSchema.optional(),
+  patientContactAttempted: z.boolean(),
+  requestedDurationMs: z.number().positive(),
+});
+
 
 export function registerRoutes(app: Express): Server {
   // Setup authentication routes
@@ -376,6 +408,47 @@ export function registerRoutes(app: Express): Server {
 
   // Register security testing routes
   registerSecurityTestingRoutes(app);
+
+  // Emergency Consent Route
+  app.post("/api/emergency/grant-consent", async (req, res, next) => {
+    try {
+      if (!req.isAuthenticated()) {
+        // TODO: Add role check for specific medical staff authorized for emergency overrides
+        return res.status(401).json({ message: "Authentication required for emergency consent." });
+      }
+
+      const validationResult = emergencyConsentRequestSchema.safeParse(req.body);
+      if (!validationResult.success) {
+        return res.status(400).json({ message: "Invalid request body for emergency consent.", errors: validationResult.error.format() });
+      }
+
+      // Add requestingUserId to the data passed to the service
+      const requestDataWithUser = {
+        ...validationResult.data,
+        requestingUserId: req.user!.username, // or req.user!.id if integer ID is preferred and available
+      };
+
+      // Add the authenticated user (requesting staff member) details if needed by the service,
+      // or ensure primaryPhysician/secondaryAuthorizer are from authenticated staff.
+      // For now, the requestData contains these details directly.
+      // It's crucial that the system verifies that primaryPhysician or secondaryAuthorizer
+      // is related to the authenticated req.user if that's the desired security model.
+      // The service's verifyDualAuthorization has placeholders for such checks.
+
+      const result = await emergencyConsentService.grantEmergencyConsent(requestDataWithUser);
+
+      if (result.success) {
+        res.status(200).json(result);
+      } else {
+        // Log the error reason if not already handled by auditService in the service
+        console.error("Emergency consent granting failed:", result.error);
+        res.status(400).json({ message: result.error || "Failed to grant emergency consent.", auditTrail: result.auditTrail });
+      }
+    } catch (error) {
+      // Catch any unexpected errors from the service or validation
+      next(error);
+    }
+  });
 
   const httpServer = createServer(app);
   return httpServer;

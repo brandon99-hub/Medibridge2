@@ -1,8 +1,10 @@
-import type { Express } from "express";
+import type { Express, Request } from "express"; // Added Request
 import { storage } from "./storage";
 import { didService, vcService, ipfsService, consentService, WalletService } from "./web3-services";
+import { secureKeyVault } from "./secure-key-vault"; // Import SecureKeyVault
 import { z } from "zod";
 import CryptoJS from "crypto-js";
+import { requirePatientAuth } from "./patient-auth-middleware"; // Import the middleware
 
 export function registerWeb3Routes(app: Express): void {
   
@@ -115,9 +117,12 @@ export function registerWeb3Routes(app: Express): void {
       };
 
       // Store encrypted record on IPFS
-      const encryptionKey = CryptoJS.lib.WordArray.random(256/8).toString();
-      const ipfsHash = await ipfsService.storeContent(medicalRecord, encryptionKey);
+      const plaintextEncryptionKey = CryptoJS.lib.WordArray.random(256/8).toString('hex'); // Generate as hex
+      const ipfsHash = await ipfsService.storeContent(medicalRecord, plaintextEncryptionKey);
       await ipfsService.pinContent(ipfsHash);
+
+      // Encrypt the plaintextEncryptionKey using SecureKeyVault
+      const encryptedDekString = await secureKeyVault.encryptDataKey(plaintextEncryptionKey);
 
       // Store IPFS content reference
       const ipfsContentRecord = await storage.createIpfsContent({
@@ -145,7 +150,7 @@ export function registerWeb3Routes(app: Express): void {
         patientDID,
         submittedBy: user.id,
         ipfsHash,
-        encryptionKey: encryptionKey,
+        encryptionKey: encryptedDekString, // Store the encrypted DEK
         recordType: "web3",
       });
 
@@ -216,52 +221,62 @@ export function registerWeb3Routes(app: Express): void {
   });
 
   // Grant Consent via Verifiable Credential
-  app.post("/api/web3/grant-consent", async (req, res, next) => {
+  // This route is now intended for wallet-based signature authorization
+  app.post("/api/web3/grant-consent", async (req: Request, res, next) => {
     try {
       const { patientDID, requesterDID, contentHashes, consentType, patientSignature } = z.object({
         patientDID: z.string(),
         requesterDID: z.string(),
         contentHashes: z.array(z.string()),
         consentType: z.string(),
-        patientSignature: z.string(),
+        patientSignature: z.string(), // Signature from patient's wallet
       }).parse(req.body);
 
       // Verify patient identity
       const patientIdentity = await storage.getPatientIdentityByDID(patientDID);
-      if (!patientIdentity) {
-        return res.status(404).json({ message: "Patient DID not found" });
+      if (!patientIdentity || !patientIdentity.walletAddress) {
+        return res.status(404).json({ message: "Patient DID not found or no wallet address associated." });
       }
 
-      // Verify patient signature (simplified - in production use proper cryptographic verification)
-      const message = WalletService.createSignMessage(patientDID, Date.now());
-      const isValidSignature = patientIdentity.walletAddress ? 
-        WalletService.verifySignature(message, patientSignature, patientIdentity.walletAddress) : 
-        true; // Fallback for demo
+      // Construct the message that was signed on the frontend
+      // IMPORTANT: This must exactly match the message signed on the frontend.
+      // OMITTING TIMESTAMP for now for simplicity, but this is a security weakness.
+      const messageToVerify = `I, ${patientDID}, authorize granting ${consentType} consent to ${requesterDID} for the following content hashes: ${contentHashes.join(', ')}.`;
+      // const messageToVerify = `I, ${patientDID}, authorize granting ${consentType} consent to ${requesterDID} for the following content hashes: ${contentHashes.join(', ')}. Timestamp: ${SOME_TIMESTAMP_IF_PASSED_FROM_CLIENT}`;
+
+
+      const isValidSignature = WalletService.verifySignature(
+        messageToVerify,
+        patientSignature,
+        patientIdentity.walletAddress
+      );
 
       if (!isValidSignature) {
-        return res.status(401).json({ message: "Invalid patient signature" });
+        return res.status(401).json({ message: "Invalid patient signature." });
       }
 
       // Issue consent credential for each content hash
-      const consentCredentials = [];
+      const issuedJwtVCs = [];
       for (const contentHash of contentHashes) {
-        // Create consent credential
-        const consentCredential = await consentService.issueConsentCredential(
-          patientDID,
-          requesterDID,
+        // `consentService.issueConsentCredential` now retrieves the private key from SecureKeyVault
+        const jwtVc = await consentService.issueConsentCredential(
+          patientDID,     // Patient (issuer)
+          requesterDID,   // Hospital (subject of consent)
           contentHash,
-          consentType,
-          "patient_private_key" // In production, use patient's actual private key
+          consentType
+          // Private key is handled internally by consentService via SecureKeyVault
         );
 
-        // Store credential
+        // Store credential JWT
+        // We need to parse the JWT to get exp and iat if we want to store them separately.
+        // For now, storage.createVerifiableCredential can take them as optional.
+        // The `verifiableCredentials` table now has `jwtVc` instead of `proof` and `credentialSubject`.
         const storedCredential = await storage.createVerifiableCredential({
           patientDID,
-          issuerDID: patientDID,
+          issuerDID: patientDID, // Patient is the issuer of their consent
           credentialType: "HealthcareConsent",
-          credentialSubject: consentCredential.credentialSubject,
-          proof: consentCredential.proof,
-          expirationDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days
+          jwtVc: jwtVc,
+          // expirationDate can be parsed from JWT if needed for the DB column
         });
 
         // Create consent management record
@@ -321,10 +336,13 @@ export function registerWeb3Routes(app: Express): void {
       for (const record of patientRecords) {
         if (record.ipfsHash && record.encryptionKey) {
           try {
-            // Retrieve and decrypt content from IPFS
+            // Decrypt the DEK from the record using SecureKeyVault
+            const plaintextEncryptionKey = await secureKeyVault.decryptDataKey(record.encryptionKey);
+
+            // Retrieve and decrypt content from IPFS using the plaintext DEK
             const decryptedContent = await ipfsService.retrieveContent(
               record.ipfsHash, 
-              record.encryptionKey
+              plaintextEncryptionKey
             );
             
             accessibleRecords.push({
@@ -363,8 +381,24 @@ export function registerWeb3Routes(app: Express): void {
 
       // Verify patient identity and signature
       const patientIdentity = await storage.getPatientIdentityByDID(patientDID);
-      if (!patientIdentity) {
-        return res.status(404).json({ message: "Patient DID not found" });
+      if (!patientIdentity || !patientIdentity.walletAddress) {
+        return res.status(404).json({ message: "Patient DID not found or no wallet address associated." });
+      }
+
+      // Construct the message that was signed on the frontend
+      // IMPORTANT: This must exactly match the message signed on the frontend.
+      // OMITTING TIMESTAMP for now for simplicity.
+      const messageToVerify = `I, ${patientDID}, authorize revoking any consent previously granted to ${requesterDID}.`;
+      // const messageToVerify = `I, ${patientDID}, authorize revoking any consent previously granted to ${requesterDID}. Timestamp: ${SOME_TIMESTAMP_IF_PASSED_FROM_CLIENT}`;
+
+      const isValidSignature = WalletService.verifySignature(
+        messageToVerify,
+        patientSignature,
+        patientIdentity.walletAddress
+      );
+
+      if (!isValidSignature) {
+        return res.status(401).json({ message: "Invalid patient signature for revocation." });
       }
 
       // Get and revoke all consents

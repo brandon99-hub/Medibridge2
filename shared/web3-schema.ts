@@ -21,10 +21,10 @@ export const verifiableCredentials = pgTable("verifiable_credentials", {
   patientDID: text("patient_did").notNull().references(() => patientIdentities.did),
   issuerDID: text("issuer_did").notNull(), // Hospital DID
   credentialType: text("credential_type").notNull(), // "HealthcareConsent", "MedicalRecord", etc.
-  credentialSubject: jsonb("credential_subject").notNull(),
-  issuanceDate: timestamp("issuance_date").defaultNow(),
-  expirationDate: timestamp("expiration_date"),
-  proof: jsonb("proof").notNull(), // Digital signature proof
+  credentialSubject: jsonb("credential_subject"), // Can be extracted from JWT or stored if needed for querying
+  issuanceDate: timestamp("issuance_date"), // Can be extracted from JWT
+  expirationDate: timestamp("expiration_date"), // Can be extracted from JWT
+  jwtVc: text("jwt_vc").notNull(), // Stores the full JWT string
   revoked: boolean("revoked").default(false),
   revokedAt: timestamp("revoked_at"),
 });
