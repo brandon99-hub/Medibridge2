@@ -3,6 +3,21 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiRequest, getQueryFn } from "../lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import detectEthereumProvider from "@metamask/detect-provider";
+import { ethers } from "ethers"; // Moved ethers import here
+
+// Helper to get signer - Moved to top level of module
+const getSigner = async () => {
+  const eth = (window as any).ethereum;
+  if (!eth) {
+    throw new Error("MetaMask is not available. Please install MetaMask and try again.");
+  }
+  const provider = new ethers.BrowserProvider(eth);
+  const signer = await provider.getSigner();
+  if (!signer.address) { // Check if signer has an address, meaning it's unlocked and connected
+    throw new Error("MetaMask is locked or not connected. Please unlock and connect your wallet.");
+  }
+  return signer;
+};
 
 interface PatientIdentity {
   id: number;
@@ -193,7 +208,13 @@ export function Web3Provider({ children }: { children: ReactNode }) {
   });
 
   const grantConsentMutation = useMutation({
-    mutationFn: async (consentData: any) => {
+    mutationFn: async (consentData: {
+      patientDID: string;
+      requesterDID: string;
+      contentHashes: string[];
+      consentType: string;
+      patientSignature: string; // Signature will be added before calling this
+    }) => {
       const response = await apiRequest("POST", "/api/web3/grant-consent", consentData);
       return await response.json();
     },
@@ -213,11 +234,11 @@ export function Web3Provider({ children }: { children: ReactNode }) {
   });
 
   const revokeConsentMutation = useMutation({
-    mutationFn: async ({ patientDID, requesterDID }: { patientDID: string; requesterDID: string }) => {
+    mutationFn: async ({ patientDID, requesterDID, patientSignature }: { patientDID: string; requesterDID: string; patientSignature: string }) => {
       const response = await apiRequest("POST", "/api/web3/revoke-consent", {
         patientDID,
         requesterDID,
-        patientSignature: "demo_signature", // In production, sign with wallet
+        patientSignature: patientSignature,
       });
       return await response.json();
     },
@@ -248,12 +269,65 @@ export function Web3Provider({ children }: { children: ReactNode }) {
     return await requestAccessMutation.mutateAsync(patientDID);
   };
 
-  const grantConsent = async (consentData: any) => {
-    await grantConsentMutation.mutateAsync(consentData);
+  const grantConsent = async (consentData: {
+    patientDID: string;
+    requesterDID: string;
+    contentHashes: string[];
+    consentType: string;
+  }) => {
+    if (!walletAddress || !patientIdentity || patientIdentity.did !== consentData.patientDID) {
+      throw new Error("Wallet not connected or patientDID mismatch for signing consent.");
+    }
+    try {
+      setIsLoading(true);
+      const signer = await getSigner();
+      // Ensure the signer's address matches the connected walletAddress to prevent account mismatch
+      if ((await signer.getAddress()).toLowerCase() !== walletAddress.toLowerCase()) {
+        throw new Error("MetaMask account mismatch. Please ensure the correct account is selected.");
+      }
+
+      const messageToSign = `I, ${consentData.patientDID}, authorize granting ${consentData.consentType} consent to ${consentData.requesterDID} for the following content hashes: ${consentData.contentHashes.join(', ')}. Timestamp: ${Date.now()}`;
+
+      const signature = await signer.signMessage(messageToSign);
+
+      await grantConsentMutation.mutateAsync({
+        ...consentData,
+        patientSignature: signature,
+      });
+    } catch (e: any) {
+      toast({ title: "Consent Signing Failed", description: e.message, variant: "destructive" });
+      throw e; // Re-throw to be caught by component if needed
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const revokeConsent = async (patientDID: string, requesterDID: string) => {
-    await revokeConsentMutation.mutateAsync({ patientDID, requesterDID });
+    if (!walletAddress || !patientIdentity || patientIdentity.did !== patientDID) {
+      throw new Error("Wallet not connected or patientDID mismatch for signing revocation.");
+    }
+    try {
+      setIsLoading(true);
+      const signer = await getSigner();
+      if ((await signer.getAddress()).toLowerCase() !== walletAddress.toLowerCase()) {
+        throw new Error("MetaMask account mismatch. Please ensure the correct account is selected.");
+      }
+
+      const messageToSign = `I, ${patientDID}, authorize revoking any consent previously granted to ${requesterDID}. Timestamp: ${Date.now()}`;
+
+      const signature = await signer.signMessage(messageToSign);
+
+      await revokeConsentMutation.mutateAsync({
+        patientDID,
+        requesterDID,
+        patientSignature: signature,
+      });
+    } catch (e: any) {
+      toast({ title: "Consent Revocation Failed", description: e.message, variant: "destructive" });
+      throw e; // Re-throw to be caught by component if needed
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const contextValue: Web3ContextType = {

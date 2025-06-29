@@ -10,6 +10,7 @@ export const users = pgTable("users", {
   hospitalName: text("hospital_name").notNull(),
   hospitalType: text("hospital_type").notNull(), // "A" or "B"
   walletAddress: text("wallet_address"),
+  isAdmin: boolean("is_admin").default(false).notNull(),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -121,3 +122,26 @@ export type InsertPatientRecord = z.infer<typeof insertPatientRecordSchema>;
 export type PatientRecord = typeof patientRecords.$inferSelect;
 export type InsertConsentRecord = z.infer<typeof insertConsentRecordSchema>;
 export type ConsentRecord = typeof consentRecords.$inferSelect;
+
+// Emergency Consent Records
+export const emergencyConsentRecords = pgTable("emergency_consent_records", {
+  id: text("id").primaryKey(), // Using the service-generated ID: `emergency_${Date.now()}_${random}`
+  patientId: text("patient_id").notNull(), // Can be National ID or Patient DID
+  hospitalId: text("hospital_id").notNull(), // Identifier for the hospital where emergency occurred
+  emergencyType: text("emergency_type").notNull(),
+  medicalJustification: text("medical_justification").notNull(),
+  grantedAt: timestamp("granted_at").notNull().defaultNow(),
+  expiresAt: timestamp("expires_at").notNull(),
+  primaryPhysicianDetails: jsonb("primary_physician_details").notNull(), // Stores AuthorizedPersonnel object
+  secondaryAuthorizerDetails: jsonb("secondary_authorizer_details").notNull(), // Stores AuthorizedPersonnel object
+  nextOfKinConsentDetails: jsonb("next_of_kin_consent_details"), // Stores NextOfKinConsentResult object
+  limitations: jsonb("limitations"), // Array of strings
+  temporaryCredentialDetails: text("temporary_credential_details"), // Stores the base64 encoded credential string
+  auditTrail: text("audit_trail"),
+  revokedAt: timestamp("revoked_at"), // When/if explicitly revoked before expiry
+});
+
+export const insertEmergencyConsentRecordSchema = createInsertSchema(emergencyConsentRecords);
+
+export type InsertEmergencyConsentRecord = z.infer<typeof insertEmergencyConsentRecordSchema>;
+export type EmergencyConsentRecordSchema = typeof emergencyConsentRecords.$inferSelect;
