@@ -54,7 +54,15 @@ export interface IStorage {
   getPatientIdentityByPhone(phoneNumber: string): Promise<PatientIdentity | undefined>;
   
   // Verifiable Credentials (for existing features)
-  createVerifiableCredential(credential: InsertVerifiableCredential): Promise<VerifiableCredential>;
+  createVerifiableCredential(credentialData: {
+    patientDID: string;
+    issuerDID: string;
+    credentialType: string;
+    jwtVc: string;
+    credentialSubject?: any; // Optional, if we decide to store it separately
+    issuanceDate?: Date;     // Optional, from JWT
+    expirationDate?: Date;   // Optional, from JWT
+  }): Promise<VerifiableCredential>;
   getCredentialsByPatientDID(patientDID: string): Promise<VerifiableCredential[]>;
   revokeCredential(id: number): Promise<void>;
   
@@ -228,10 +236,30 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Verifiable Credentials Methods
-  async createVerifiableCredential(credential: InsertVerifiableCredential): Promise<VerifiableCredential> {
+  async createVerifiableCredential(credentialData: {
+    patientDID: string;
+    issuerDID: string;
+    credentialType: string;
+    jwtVc: string;
+    credentialSubject?: object;
+    issuanceDate?: Date;
+    expirationDate?: Date;
+  }): Promise<VerifiableCredential> {
+    const valuesToInsert: InsertVerifiableCredential = {
+      patientDID: credentialData.patientDID,
+      issuerDID: credentialData.issuerDID,
+      credentialType: credentialData.credentialType,
+      jwtVc: credentialData.jwtVc,
+      // Optionally store extracted fields if they exist in the schema and are provided
+      ...(credentialData.credentialSubject && { credentialSubject: credentialData.credentialSubject }),
+      ...(credentialData.issuanceDate && { issuanceDate: credentialData.issuanceDate }),
+      ...(credentialData.expirationDate && { expirationDate: credentialData.expirationDate }),
+      revoked: false, // Default value
+    };
+
     const [vc] = await db
       .insert(verifiableCredentials)
-      .values(credential)
+      .values(valuesToInsert)
       .returning();
     return vc;
   }
