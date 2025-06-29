@@ -154,16 +154,12 @@ export class PatientWeb3Service {
     patientDID: string;
     hospitalDID: string;
     recordCID: string;
-    encryptionKey: string;
+    encryptionKey: string; // Key for the specific record, if encrypted separately and needs to be in VC
     expiresInHours: number;
-    patientPhone: string;
-    encryptedKeys: string;
-    salt: string; // This salt is for the phone-based encryption, may become obsolete for key retrieval
+    // patientPhone, encryptedKeys, and salt are removed as PK is fetched from SecureKeyVault via patientDID
   }): Promise<string> {
     // Retrieve patient's private key securely from the vault
     const privateKey = await secureKeyVault.retrievePatientKey(params.patientDID);
-    // Note: params.encryptedKeys, params.patientPhone, params.salt are no longer needed here for private key retrieval.
-    // Their presence in the function signature should be reviewed once full transition to SecureKeyVault is confirmed.
 
     // Create a signer object from the private key
     // The private key from ethers.Wallet is a hex string, ensure ES256KSigner can take it directly
@@ -273,6 +269,8 @@ export class PatientWeb3Service {
     
     return decrypted;
   }
+
+  // decryptData method was here, now removed as it's no longer used.
 
   // Development IPFS storage
   private ipfsStorage = new Map<string, any>();
