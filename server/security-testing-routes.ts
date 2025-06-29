@@ -3,6 +3,7 @@ import { z } from "zod";
 import { auditService } from "./audit-service";
 import { storage } from "./storage";
 import { patientWeb3Service } from "./patient-web3-service";
+import { requireAdminAuth } from "./admin-auth-middleware"; // Import admin auth middleware
 
 /**
  * Security Testing Routes - Test unauthorized access scenarios
@@ -244,7 +245,8 @@ export function registerSecurityTestingRoutes(app: Express): void {
    * Get security audit summary
    * GET /api/security/audit-summary
    */
-  app.get("/api/security/audit-summary", async (req, res) => {
+  // Protected this route with requireAdminAuth
+  app.get("/api/security/audit-summary", requireAdminAuth, async (req, res) => {
     try {
       const totalEvents = await storage.countAuditEvents();
       const unresolvedViolations = await storage.countSecurityViolations({ resolved: false });
@@ -308,6 +310,39 @@ export function registerSecurityTestingRoutes(app: Express): void {
       }, req);
       
       res.status(500).json({ error: "Failed to generate security summary" });
+    }
+  });
+
+  /**
+   * Get recent security violations (Admin only)
+   * GET /api/admin/security-violations
+   */
+  app.get("/api/admin/security-violations", requireAdminAuth, async (req, res, next) => {
+    try {
+      const { limit = '10', offset = '0', resolved } = req.query;
+
+      const limitNum = parseInt(limit as string, 10);
+      const offsetNum = parseInt(offset as string, 10);
+
+      const options: { limit?: number; offset?: number; resolved?: boolean } = {};
+      if (!isNaN(limitNum) && limitNum > 0) options.limit = limitNum;
+      if (!isNaN(offsetNum) && offsetNum >= 0) options.offset = offsetNum;
+      if (resolved !== undefined) options.resolved = String(resolved).toLowerCase() === 'true';
+
+      const violations = await storage.getSecurityViolations(options);
+
+      // Could also fetch total count for pagination if needed:
+      // const totalUnresolvedViolations = await storage.countSecurityViolations({ resolved: false });
+
+      res.json({
+        violations,
+        // total: totalUnresolvedViolations, // Example for pagination
+        limit: options.limit,
+        offset: options.offset,
+      });
+
+    } catch (error) {
+      next(error);
     }
   });
 }
