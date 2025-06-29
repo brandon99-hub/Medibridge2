@@ -1,6 +1,7 @@
 import type { Express, Request } from "express"; // Added Request
 import { storage } from "./storage";
 import { didService, vcService, ipfsService, consentService, WalletService } from "./web3-services";
+import { secureKeyVault } from "./secure-key-vault"; // Import SecureKeyVault
 import { z } from "zod";
 import CryptoJS from "crypto-js";
 import { requirePatientAuth } from "./patient-auth-middleware"; // Import the middleware
@@ -116,9 +117,12 @@ export function registerWeb3Routes(app: Express): void {
       };
 
       // Store encrypted record on IPFS
-      const encryptionKey = CryptoJS.lib.WordArray.random(256/8).toString();
-      const ipfsHash = await ipfsService.storeContent(medicalRecord, encryptionKey);
+      const plaintextEncryptionKey = CryptoJS.lib.WordArray.random(256/8).toString('hex'); // Generate as hex
+      const ipfsHash = await ipfsService.storeContent(medicalRecord, plaintextEncryptionKey);
       await ipfsService.pinContent(ipfsHash);
+
+      // Encrypt the plaintextEncryptionKey using SecureKeyVault
+      const encryptedDekString = await secureKeyVault.encryptDataKey(plaintextEncryptionKey);
 
       // Store IPFS content reference
       const ipfsContentRecord = await storage.createIpfsContent({
@@ -146,7 +150,7 @@ export function registerWeb3Routes(app: Express): void {
         patientDID,
         submittedBy: user.id,
         ipfsHash,
-        encryptionKey: encryptionKey,
+        encryptionKey: encryptedDekString, // Store the encrypted DEK
         recordType: "web3",
       });
 
@@ -324,10 +328,13 @@ export function registerWeb3Routes(app: Express): void {
       for (const record of patientRecords) {
         if (record.ipfsHash && record.encryptionKey) {
           try {
-            // Retrieve and decrypt content from IPFS
+            // Decrypt the DEK from the record using SecureKeyVault
+            const plaintextEncryptionKey = await secureKeyVault.decryptDataKey(record.encryptionKey);
+
+            // Retrieve and decrypt content from IPFS using the plaintext DEK
             const decryptedContent = await ipfsService.retrieveContent(
               record.ipfsHash, 
-              record.encryptionKey
+              plaintextEncryptionKey
             );
             
             accessibleRecords.push({
