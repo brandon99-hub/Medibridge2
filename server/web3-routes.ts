@@ -4,7 +4,7 @@ import { didService, vcService, ipfsService, consentService, WalletService } fro
 import { secureKeyVault } from "./secure-key-vault"; // Import SecureKeyVault
 import { z } from "zod";
 import CryptoJS from "crypto-js";
-import Hex from "crypto-js/enc-hex";
+import Hex from "crypto-js/enc-hex.js";
 import { requirePatientAuth } from "./patient-auth-middleware"; // Import the middleware
 
 export function registerWeb3Routes(app: Express): void {
