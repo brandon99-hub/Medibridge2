@@ -25,8 +25,8 @@ export class EmergencyConsentService {
       // Validate emergency conditions
       this.validateEmergencyConditions(request);
 
-      // Verify dual authorization
-      await this.verifyDualAuthorization(request.primaryPhysician, request.secondaryAuthorizer);
+      // Verify dual authorization, passing the requesting user's ID
+      await this.verifyDualAuthorization(request.primaryPhysician, request.secondaryAuthorizer, request.requestingUserId);
 
       // Check if next-of-kin is available and authorized
       const nextOfKinConsent = await this.checkNextOfKinConsent(request.patientId, request.nextOfKin);
@@ -126,11 +126,17 @@ export class EmergencyConsentService {
    */
   private async verifyDualAuthorization(
     primaryPhysician: AuthorizedPersonnel,
-    secondaryAuthorizer: AuthorizedPersonnel
+    secondaryAuthorizer: AuthorizedPersonnel,
+    requestingUserId: string
   ): Promise<void> {
-    // Ensure two different people
+    // Check that the primary physician listed in the request is the authenticated user making the request
+    if (primaryPhysician.id !== requestingUserId) {
+      throw new Error('Primary physician ID in the request must match the ID of the authenticated user submitting the request.');
+    }
+
+    // Ensure two different people for primary and secondary authorization
     if (primaryPhysician.id === secondaryAuthorizer.id) {
-      throw new Error('Emergency consent requires authorization from two different medical personnel');
+      throw new Error('Emergency consent requires authorization from two different medical personnel (primary and secondary cannot be the same).');
     }
 
     // Verify both are qualified for emergency consent
@@ -355,10 +361,13 @@ export class EmergencyConsentService {
    */
   private async contactNextOfKin(nextOfKin: NextOfKinInfo): Promise<ContactResult> {
     // In production, send SMS/call to next-of-kin
+    // Placeholder behavior:
+    console.warn(`[EmergencyConsentService] Placeholder: Attempted to contact next-of-kin ${nextOfKin.name} at ${nextOfKin.phoneNumber}. Actual contact not implemented.`);
     return {
-      consentGiven: true,
-      method: 'SMS',
-      verificationCode: '123456',
+      consentGiven: false, // Default to false as contact is not actually made
+      method: 'Placeholder - Not Attempted',
+      verificationCode: 'N/A',
+      // reason: "Automated contact placeholder - actual contact not implemented or failed." // This would go into NextOfKinConsentResult
     };
   }
 }
@@ -373,6 +382,7 @@ interface EmergencyConsentRequest {
   nextOfKin?: NextOfKinInfo;
   patientContactAttempted: boolean;
   requestedDurationMs: number;
+  requestingUserId: string; // Added to link request to authenticated user
 }
 
 interface AuthorizedPersonnel {

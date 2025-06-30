@@ -21,7 +21,6 @@ function Router() {
       <ProtectedRoute path="/" component={HomePage} />
       <AdminProtectedRoute path="/admin" component={AdminDashboard} />
       <ProtectedRoute path="/emergency-access" component={EmergencyAccessPage} /> {/* Add emergency access route */}
-      
       <Route path="/auth" component={AuthPage} />
       <Route path="/patient-portal" component={PatientPortal} />
       <Route path="/web3-patient" component={Web3PatientDashboard} />

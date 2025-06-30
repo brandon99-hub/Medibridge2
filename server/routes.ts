@@ -422,7 +422,12 @@ export function registerRoutes(app: Express): Server {
         return res.status(400).json({ message: "Invalid request body for emergency consent.", errors: validationResult.error.format() });
       }
 
-      const requestData = validationResult.data;
+      // Add requestingUserId to the data passed to the service
+      const requestDataWithUser = {
+        ...validationResult.data,
+        requestingUserId: req.user!.username, // or req.user!.id if integer ID is preferred and available
+      };
+
 
       // Add the authenticated user (requesting staff member) details if needed by the service,
       // or ensure primaryPhysician/secondaryAuthorizer are from authenticated staff.
@@ -431,7 +436,9 @@ export function registerRoutes(app: Express): Server {
       // is related to the authenticated req.user if that's the desired security model.
       // The service's verifyDualAuthorization has placeholders for such checks.
 
-      const result = await emergencyConsentService.grantEmergencyConsent(requestData);
+
+      const result = await emergencyConsentService.grantEmergencyConsent(requestDataWithUser);
+
 
       if (result.success) {
         res.status(200).json(result);
