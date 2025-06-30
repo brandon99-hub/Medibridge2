@@ -53,6 +53,14 @@ export default function NavigationHeader({ currentHospital, onHospitalSwitch, us
                 Patient Portal
               </Button>
             </Link>
+
+            {/* Admin Dashboard Link */}
+            <Link href="/admin">
+              <Button variant="outline" size="sm" className="text-orange-600 border-orange-200 hover:bg-orange-50">
+                <Shield className="h-4 w-4 mr-2" />
+                Admin Dashboard
+              </Button>
+            </Link>
             
             <div className="flex items-center space-x-4">
               <div className="text-right">
