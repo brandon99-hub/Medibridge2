@@ -25,8 +25,8 @@ export class EmergencyConsentService {
       // Validate emergency conditions
       this.validateEmergencyConditions(request);
 
-      // Verify dual authorization
-      await this.verifyDualAuthorization(request.primaryPhysician, request.secondaryAuthorizer);
+      // Verify dual authorization, passing the requesting user's ID
+      await this.verifyDualAuthorization(request.primaryPhysician, request.secondaryAuthorizer, request.requestingUserId);
 
       // Check if next-of-kin is available and authorized
       const nextOfKinConsent = await this.checkNextOfKinConsent(request.patientId, request.nextOfKin);
@@ -126,11 +126,17 @@ export class EmergencyConsentService {
    */
   private async verifyDualAuthorization(
     primaryPhysician: AuthorizedPersonnel,
-    secondaryAuthorizer: AuthorizedPersonnel
+    secondaryAuthorizer: AuthorizedPersonnel,
+    requestingUserId: string
   ): Promise<void> {
-    // Ensure two different people
+    // Check that the primary physician listed in the request is the authenticated user making the request
+    if (primaryPhysician.id !== requestingUserId) {
+      throw new Error('Primary physician ID in the request must match the ID of the authenticated user submitting the request.');
+    }
+
+    // Ensure two different people for primary and secondary authorization
     if (primaryPhysician.id === secondaryAuthorizer.id) {
-      throw new Error('Emergency consent requires authorization from two different medical personnel');
+      throw new Error('Emergency consent requires authorization from two different medical personnel (primary and secondary cannot be the same).');
     }
 
     // Verify both are qualified for emergency consent
@@ -225,8 +231,26 @@ export class EmergencyConsentService {
     };
 
     // In production, store in database
-    // await storage.createEmergencyConsentRecord(consentRecord);
+    const recordToStore = {
+      id: consentRecord.id,
+      patientId: consentRecord.patientId,
+      hospitalId: consentRecord.hospitalId,
+      emergencyType: consentRecord.emergencyType,
+      medicalJustification: consentRecord.medicalJustification,
+      grantedAt: new Date(consentRecord.grantedAt),
+      expiresAt: new Date(consentRecord.expiresAt),
+      primaryPhysicianDetails: consentRecord.primaryPhysician, // Stored as JSONB
+      secondaryAuthorizerDetails: consentRecord.secondaryAuthorizer, // Stored as JSONB
+      nextOfKinConsentDetails: consentRecord.nextOfKinConsent, // Stored as JSONB
+      limitations: consentRecord.limitations, // Stored as JSONB
+      // temporaryCredentialDetails will be updated after issuing the credential
+      auditTrail: consentRecord.auditTrail,
+    };
 
+    const storedDbRecord = await storage.createEmergencyConsentRecord(recordToStore);
+
+    // Return the service-level record structure, which might differ slightly from DB schema
+    // or could be mapped from storedDbRecord if needed. For now, using original consentRecord.
     return consentRecord;
   }
 
@@ -235,32 +259,31 @@ export class EmergencyConsentService {
    */
   private async issueTemporaryCredential(
     request: EmergencyConsentRequest,
-    emergencyConsent: EmergencyConsentRecord
+    emergencyConsentRecord: EmergencyConsentRecord // The record from createEmergencyConsentRecord method
   ): Promise<string> {
-    const credential = {
-      id: `temp_${emergencyConsent.id}`,
+    // This is the object that will be base64 encoded for the temporary credential string
+    const credentialPayload = {
+      id: `temp_${emergencyConsentRecord.id}`,
       type: 'EmergencyAccessCredential',
-      issuer: 'MediBridge_Emergency_System',
-      subject: request.hospitalId,
-      issuanceDate: new Date().toISOString(),
-      expirationDate: emergencyConsent.expiresAt,
-      credentialSubject: {
-        emergencyConsent: emergencyConsent.id,
-        patientId: request.patientId,
-        accessLevel: this.determineAccessLevel(request.emergencyType),
-        limitations: emergencyConsent.limitations,
-        autoRevoke: true,
-      },
-      proof: {
-        type: 'EmergencyAuthorization',
-        created: new Date().toISOString(),
-        primaryAuthorizer: request.primaryPhysician.id,
-        secondaryAuthorizer: request.secondaryAuthorizer.id,
-      },
+      issuer: 'MediBridge_Emergency_System', // System issues this
+      subject: request.hospitalId, // Hospital receiving access
+      issuedAt: new Date().toISOString(),
+      expiresAt: emergencyConsentRecord.expiresAt,
+      grantedToPersonnel: [request.primaryPhysician.id, request.secondaryAuthorizer.id],
+      patientId: request.patientId,
+      accessLevel: this.determineAccessLevel(request.emergencyType),
+      limitations: emergencyConsentRecord.limitations,
+      emergencyConsentRecordId: emergencyConsentRecord.id, // Link back to the persisted record
     };
 
-    // In production, create proper JWT or similar credential
-    return Buffer.from(JSON.stringify(credential)).toString('base64');
+    const credentialString = Buffer.from(JSON.stringify(credentialPayload)).toString('base64');
+
+    // Optionally, update the persisted emergencyConsentRecord with these credential details
+    // This would require an update method in storage.ts and modification to emergencyConsentRecords schema
+    // For now, this detail is part of the returned EmergencyConsentResult.
+    // e.g., await storage.updateEmergencyConsentRecord(emergencyConsentRecord.id, { temporaryCredentialDetails: credentialString });
+
+    return credentialString;
   }
 
   /**
@@ -338,10 +361,13 @@ export class EmergencyConsentService {
    */
   private async contactNextOfKin(nextOfKin: NextOfKinInfo): Promise<ContactResult> {
     // In production, send SMS/call to next-of-kin
+    // Placeholder behavior:
+    console.warn(`[EmergencyConsentService] Placeholder: Attempted to contact next-of-kin ${nextOfKin.name} at ${nextOfKin.phoneNumber}. Actual contact not implemented.`);
     return {
-      consentGiven: true,
-      method: 'SMS',
-      verificationCode: '123456',
+      consentGiven: false, // Default to false as contact is not actually made
+      method: 'Placeholder - Not Attempted',
+      verificationCode: 'N/A',
+      // reason: "Automated contact placeholder - actual contact not implemented or failed." // This would go into NextOfKinConsentResult
     };
   }
 }
@@ -356,6 +382,7 @@ interface EmergencyConsentRequest {
   nextOfKin?: NextOfKinInfo;
   patientContactAttempted: boolean;
   requestedDurationMs: number;
+  requestingUserId: string; // Added to link request to authenticated user
 }
 
 interface AuthorizedPersonnel {
