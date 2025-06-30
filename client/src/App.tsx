@@ -25,7 +25,6 @@ function Router() {
       <Route path="/auth" component={AuthPage} />
       <Route path="/patient-portal" component={PatientPortal} />
       <Route path="/web3-patient" component={Web3PatientDashboard} />
-      <Route path="/admin" component={AdminDashboard} />
       <Route component={NotFound} />
     </Switch>
   );

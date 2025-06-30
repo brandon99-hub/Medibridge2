@@ -50,20 +50,21 @@ export class PatientLookupService {
 
         return {
           found: false,
+          patientDID: undefined,
           message: "No patient found with this phone number",
           searchMethod: "phone",
         };
       }
 
       // Get patient records count and summary
-      const recordsSummary = await storage.getPatientRecordsSummary(patientIdentity.patientDID);
+      const recordsSummary = await storage.getPatientRecordsSummary(patientIdentity.did);
 
       await auditService.logEvent({
         eventType: "PATIENT_SEARCH_SUCCESS",
         actorType: "HOSPITAL",
         actorId: searchingHospitalId,
         targetType: "PATIENT",
-        targetId: patientIdentity.patientDID,
+        targetId: patientIdentity.did,
         action: "SEARCH",
         outcome: "SUCCESS",
         metadata: {
@@ -74,13 +75,20 @@ export class PatientLookupService {
         severity: "info",
       });
 
+      // Try to get patient profile for name
+      let patientProfile = null;
+      try {
+        patientProfile = await storage.getPatientProfileByDID(patientIdentity.did);
+      } catch {}
+
       return {
         found: true,
-        patientDID: patientIdentity.patientDID,
+        patientDID: patientIdentity.did,
         patientInfo: {
-          name: patientIdentity.name,
+          name: patientProfile?.fullName || "",
           phoneNumber: normalizedPhone,
-          registrationDate: patientIdentity.createdAt,
+          nationalId: patientProfile?.nationalId || undefined,
+          registrationDate: patientIdentity.createdAt ? new Date(patientIdentity.createdAt).toISOString() : undefined,
         },
         recordsSummary,
         searchMethod: "phone",
@@ -109,31 +117,28 @@ export class PatientLookupService {
     searchingStaffId: string
   ): Promise<PatientSearchResult> {
     try {
-      const patientRecord = await storage.getPatientByNationalId(nationalId);
-      
-      if (!patientRecord) {
+      // Use getPatientProfileByNationalId to get the profile
+      const patientProfile = await storage.getPatientProfileByNationalId(nationalId);
+      if (!patientProfile) {
         return {
           found: false,
           message: "No patient found with this national ID",
           searchMethod: "nationalId",
         };
       }
-
       // Try to find associated DID if patient has Web3 identity
-      const patientIdentity = await storage.getPatientIdentityByPhone(patientRecord.phoneNumber);
-
+      const patientIdentity = await storage.getPatientIdentityByPhone(patientProfile.phoneNumber);
       const result = {
         found: true,
         patientInfo: {
-          name: patientRecord.patientName,
-          nationalId: patientRecord.nationalId,
-          phoneNumber: patientRecord.phoneNumber,
+          name: patientProfile.fullName,
+          nationalId: patientProfile.nationalId,
+          phoneNumber: patientProfile.phoneNumber,
         },
         recordsSummary: await storage.getTraditionalRecordsSummary(nationalId),
         searchMethod: "nationalId" as const,
-        patientDID: patientIdentity?.patientDID,
+        patientDID: patientIdentity?.did,
       };
-
       await auditService.logEvent({
         eventType: "PATIENT_SEARCH_SUCCESS",
         actorType: "HOSPITAL",
@@ -149,7 +154,6 @@ export class PatientLookupService {
         },
         severity: "info",
       });
-
       return result;
 
     } catch (error: any) {

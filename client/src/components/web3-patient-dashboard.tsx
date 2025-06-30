@@ -37,7 +37,7 @@ export default function Web3PatientDashboard() {
   } = useWeb3();
   
   const [consentRequest, setConsentRequest] = useState({
-    requesterDID: "",
+    requesterId: "",
     contentHashes: [""],
     consentType: "read"
   });
@@ -54,12 +54,12 @@ export default function Web3PatientDashboard() {
   };
 
   const handleGrantConsent = async () => {
-    if (!patientIdentity || !consentRequest.requesterDID) return;
+    if (!patientIdentity || !consentRequest.requesterId) return;
     
     try {
       await grantConsent({
         patientDID: patientIdentity.did,
-        requesterDID: consentRequest.requesterDID,
+        requesterId: consentRequest.requesterId,
         contentHashes: consentRequest.contentHashes.filter(hash => hash.trim()),
         consentType: consentRequest.consentType,
         patientSignature: "demo_signature", // In production, sign with wallet
@@ -67,7 +67,7 @@ export default function Web3PatientDashboard() {
       
       // Reset form
       setConsentRequest({
-        requesterDID: "",
+        requesterId: "",
         contentHashes: [""],
         consentType: "read"
       });
@@ -299,11 +299,11 @@ export default function Web3PatientDashboard() {
                   <h4 className="font-medium text-slate-900">Grant Access Consent</h4>
                   
                   <div>
-                    <Label htmlFor="requesterDID">Requester DID (Hospital)</Label>
+                    <Label htmlFor="requesterId">Requester ID (Hospital)</Label>
                     <Input
-                      id="requesterDID"
-                      value={consentRequest.requesterDID}
-                      onChange={(e) => setConsentRequest({ ...consentRequest, requesterDID: e.target.value })}
+                      id="requesterId"
+                      value={consentRequest.requesterId}
+                      onChange={(e) => setConsentRequest({ ...consentRequest, requesterId: e.target.value })}
                       placeholder="did:ethr:0x..."
                     />
                   </div>
@@ -323,7 +323,7 @@ export default function Web3PatientDashboard() {
                   
                   <Button 
                     onClick={handleGrantConsent} 
-                    disabled={!consentRequest.requesterDID || isLoading}
+                    disabled={!consentRequest.requesterId || isLoading}
                     className="w-full bg-green-600 hover:bg-green-700"
                   >
                     <Shield className="h-4 w-4 mr-2" />
@@ -349,8 +349,8 @@ export default function Web3PatientDashboard() {
                     <Button 
                       variant="outline" 
                       className="w-full justify-start text-red-600 hover:text-red-700"
-                      onClick={() => revokeConsent(patientIdentity.did, consentRequest.requesterDID)}
-                      disabled={!consentRequest.requesterDID}
+                      onClick={() => revokeConsent(patientIdentity.did, consentRequest.requesterId)}
+                      disabled={!consentRequest.requesterId}
                     >
                       <XCircle className="h-4 w-4 mr-2" />
                       Revoke All Consents

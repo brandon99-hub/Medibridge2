@@ -248,7 +248,7 @@ export class ConsentService {
   // Issue consent credential
   async issueConsentCredential(
     patientDID: string, // Issuer of the consent (patient)
-    requesterDID: string, // Who is being granted consent (hospital)
+    requesterId: string, // Who is being granted consent (hospital)
     contentHash: string,  // Specific record/content hash
     consentType: string   // Type of consent (e.g., "read")
     // patientPrivateKey is no longer passed directly; it will be retrieved from SecureKeyVault
@@ -260,8 +260,8 @@ export class ConsentService {
     }
 
     const credentialSubject = {
-      // id: requesterDID, // The subject of VC is requesterDID, id in credentialSubject is for that subject
-      requester: requesterDID, // Keeping this for clarity if needed by consumers
+      // id: requesterId, // The subject of VC is requesterId, id in credentialSubject is for that subject
+      requester: requesterId, // Keeping this for clarity if needed by consumers
       contentHash,
       consentType,
       grantedAt: new Date().toISOString(),
@@ -270,10 +270,10 @@ export class ConsentService {
 
     // vcService.issueCredential now takes subjectDID as the second param
     // For a consent VC, the patient (issuerDID) issues a credential where the
-    // hospital (requesterDID which becomes subjectDID of VC) is the subject.
+    // hospital (requesterId which becomes subjectDID of VC) is the subject.
     return await this.vcService.issueCredential(
       patientDID,         // issuer: patient's DID
-      requesterDID,       // subject: hospital's DID (who is granted access)
+      requesterId,       // subject: hospital's DID (who is granted access)
       "HealthcareConsent",// credentialType
       credentialSubject,  // claims
       patientPrivateKeyHex, // patient's private key from vault
@@ -285,10 +285,10 @@ export class ConsentService {
   async verifyConsentCredential(
     jwtVc: string,
     expectedPatientDID?: string, // Optional: verify if this patient issued it (issuer of JWT/VC)
-    expectedRequesterDID?: string // Optional: verify if this hospital was the subject of JWT/VC
+    expectedRequesterId?: string // Optional: verify if this hospital was the subject of JWT/VC
   ): Promise<{ isValid: boolean; verifiedJwt?: Verifier.VerifiedJwt; error?: string }> {
     // vcService.verifyCredential now returns an object { isValid, verifiedJwt, error }
-    const verificationResult = await this.vcService.verifyCredential(jwtVc, expectedPatientDID, expectedRequesterDID);
+    const verificationResult = await this.vcService.verifyCredential(jwtVc, expectedPatientDID, expectedRequesterId);
 
     if (!verificationResult.isValid || !verificationResult.verifiedJwt) {
       return verificationResult;
@@ -303,8 +303,8 @@ export class ConsentService {
       return { isValid: false, error: "HealthcareConsent VC is missing required subject fields (requester, contentHash)" };
     }
      // Check if the VC subject matches the expected requester DID, if provided
-    if (expectedRequesterDID && vcPayload.credentialSubject?.id !== expectedRequesterDID) {
-        return { isValid: false, error: `VC subject ${vcPayload.credentialSubject?.id} does not match expected requester ${expectedRequesterDID}` };
+    if (expectedRequesterId && vcPayload.credentialSubject?.id !== expectedRequesterId) {
+        return { isValid: false, error: `VC subject ${vcPayload.credentialSubject?.id} does not match expected requester ${expectedRequesterId}` };
     }
 
 

@@ -53,6 +53,7 @@ export const consentRecords = pgTable("consent_records", {
   recordId: integer("record_id").notNull().references(() => patientRecords.id),
   consentGrantedBy: text("consent_granted_by").notNull(),
   accessedAt: timestamp("accessed_at").defaultNow(),
+  consent_type: text("consent_type").notNull().default('traditional'),
 });
 
 export const usersRelations = relations(users, ({ many }) => ({

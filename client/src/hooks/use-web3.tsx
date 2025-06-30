@@ -45,7 +45,7 @@ interface Web3ContextType {
   
   // Consent Management
   grantConsent: (consentData: any) => Promise<void>;
-  revokeConsent: (patientDID: string, requesterDID: string) => Promise<void>;
+  revokeConsent: (patientDID: string, requesterId: string) => Promise<void>;
   
   // Loading states
   isLoading: boolean;
@@ -210,7 +210,7 @@ export function Web3Provider({ children }: { children: ReactNode }) {
   const grantConsentMutation = useMutation({
     mutationFn: async (consentData: {
       patientDID: string;
-      requesterDID: string;
+      requesterId: string;
       contentHashes: string[];
       consentType: string;
       patientSignature: string; // Signature will be added before calling this
@@ -234,10 +234,10 @@ export function Web3Provider({ children }: { children: ReactNode }) {
   });
 
   const revokeConsentMutation = useMutation({
-    mutationFn: async ({ patientDID, requesterDID, patientSignature }: { patientDID: string; requesterDID: string; patientSignature: string }) => {
+    mutationFn: async ({ patientDID, requesterId, patientSignature }: { patientDID: string; requesterId: string; patientSignature: string }) => {
       const response = await apiRequest("POST", "/api/web3/revoke-consent", {
         patientDID,
-        requesterDID,
+        requesterId,
         patientSignature: patientSignature,
       });
       return await response.json();
@@ -271,7 +271,7 @@ export function Web3Provider({ children }: { children: ReactNode }) {
 
   const grantConsent = async (consentData: {
     patientDID: string;
-    requesterDID: string;
+    requesterId: string;
     contentHashes: string[];
     consentType: string;
   }) => {
@@ -286,7 +286,7 @@ export function Web3Provider({ children }: { children: ReactNode }) {
         throw new Error("MetaMask account mismatch. Please ensure the correct account is selected.");
       }
 
-      const messageToSign = `I, ${consentData.patientDID}, authorize granting ${consentData.consentType} consent to ${consentData.requesterDID} for the following content hashes: ${consentData.contentHashes.join(', ')}. Timestamp: ${Date.now()}`;
+      const messageToSign = `I, ${consentData.patientDID}, authorize granting ${consentData.consentType} consent to ${consentData.requesterId} for the following content hashes: ${consentData.contentHashes.join(', ')}. Timestamp: ${Date.now()}`;
 
       const signature = await signer.signMessage(messageToSign);
 
@@ -302,7 +302,7 @@ export function Web3Provider({ children }: { children: ReactNode }) {
     }
   };
 
-  const revokeConsent = async (patientDID: string, requesterDID: string) => {
+  const revokeConsent = async (patientDID: string, requesterId: string) => {
     if (!walletAddress || !patientIdentity || patientIdentity.did !== patientDID) {
       throw new Error("Wallet not connected or patientDID mismatch for signing revocation.");
     }
@@ -313,13 +313,13 @@ export function Web3Provider({ children }: { children: ReactNode }) {
         throw new Error("MetaMask account mismatch. Please ensure the correct account is selected.");
       }
 
-      const messageToSign = `I, ${patientDID}, authorize revoking any consent previously granted to ${requesterDID}. Timestamp: ${Date.now()}`;
+      const messageToSign = `I, ${patientDID}, authorize revoking any consent previously granted to ${requesterId}. Timestamp: ${Date.now()}`;
 
       const signature = await signer.signMessage(messageToSign);
 
       await revokeConsentMutation.mutateAsync({
         patientDID,
-        requesterDID,
+        requesterId,
         patientSignature: signature,
       });
     } catch (e: any) {

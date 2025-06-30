@@ -33,7 +33,7 @@ export class EnhancedEncryptionService {
       // Generate encryption materials
       const encryptionKey = crypto.randomBytes(32).toString('hex');
       const salt = crypto.randomBytes(16).toString('hex');
-      const iv = crypto.randomBytes(16);
+      const iv = crypto.randomBytes(12); // 12 bytes for GCM
       
       // Create record string and hash for integrity
       const recordString = JSON.stringify(recordData);
@@ -46,7 +46,7 @@ export class EnhancedEncryptionService {
         .digest('hex');
       
       // Encrypt using AES-256-GCM for authenticated encryption
-      const cipher = crypto.createCipher('aes-256-gcm', encryptionKey);
+      const cipher = crypto.createCipheriv('aes-256-gcm', Buffer.from(encryptionKey, 'hex'), iv);
       let encrypted = cipher.update(recordString, 'utf8', 'hex');
       encrypted += cipher.final('hex');
       const authTag = cipher.getAuthTag();
@@ -117,7 +117,7 @@ export class EnhancedEncryptionService {
       const authTag = Buffer.from(authTagHex, 'hex');
       
       // Decrypt using AES-256-GCM
-      const decipher = crypto.createDecipher('aes-256-gcm', encryptionKey);
+      const decipher = crypto.createDecipheriv('aes-256-gcm', Buffer.from(encryptionKey, 'hex'), iv);
       decipher.setAuthTag(authTag);
       
       let decrypted = decipher.update(encrypted, 'hex', 'utf8');

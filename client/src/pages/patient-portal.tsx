@@ -7,9 +7,12 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Phone, Shield, FileText, Clock, Key, Globe, User, ArrowLeft, Stethoscope, AlertTriangle, Calendar, Building } from "lucide-react";
+import { Phone, Shield, FileText, Clock, Key, Globe, User, ArrowLeft, Stethoscope, AlertTriangle, Calendar, Building, CreditCard, Mail, CheckCircle, ChevronDown, Settings, LogOut } from "lucide-react";
 import PatientLoginModal from "@/components/patient-login-modal";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
+import { motion, AnimatePresence } from "framer-motion";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import PatientProfileCompletion from "@/components/patient-profile-completion";
 
 interface PatientRecord {
   id: number;
@@ -32,8 +35,11 @@ interface PatientRecord {
 
 export default function PatientPortal() {
   const { toast } = useToast();
+  const [, setLocation] = useLocation();
   const [showLogin, setShowLogin] = useState(false);
   const [patient, setPatient] = useState<any>(null);
+  const [showProfileCompletion, setShowProfileCompletion] = useState(false);
+  const [currentPatientForEdit, setCurrentPatientForEdit] = useState<any>(null);
 
   // Check if patient is already logged in
   const { data: currentPatient, refetch } = useQuery({
@@ -79,6 +85,39 @@ export default function PatientPortal() {
         title: "Logged Out",
         description: "You have been logged out successfully",
       });
+      // Redirect to the auth login page
+      setLocation("/auth");
+    },
+  });
+
+  const consentResponseMutation = useMutation({
+    mutationFn: async ({ requestId, action }: { requestId: number; action: 'approve' | 'deny' }) => {
+      // Determine consent type based on patient capabilities and request context
+      // If patient has a DID and is using web3 features, use 'web3', otherwise 'traditional'
+      const consentType = patient?.patientDID ? 'web3' : 'traditional';
+      
+      const response = await apiRequest("POST", "/api/patient/respond-to-consent", {
+        requestId,
+        action,
+        reason: action === 'approve' ? 'Patient approved consent' : 'Patient denied consent',
+        consentType: consentType
+      });
+      return response.json();
+    },
+    onSuccess: (data, variables) => {
+      toast({
+        title: variables.action === 'approve' ? "Consent Approved" : "Consent Denied",
+        description: data.message,
+      });
+      // Refresh consents to show updated status
+      refetchConsents();
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Action Failed",
+        description: error.message,
+        variant: "destructive",
+      });
     },
   });
 
@@ -94,6 +133,41 @@ export default function PatientPortal() {
       description: patientData.isNewUser 
         ? "Your secure Web3 identity has been created" 
         : "Welcome back to your patient portal",
+    });
+  };
+
+  const handleConsentResponse = (requestId: number, action: 'approve' | 'deny') => {
+    consentResponseMutation.mutate({ requestId, action });
+  };
+
+  const handleEditProfile = () => {
+    const activePatient = patient || currentPatient?.patient;
+    
+    if (!activePatient.isProfileComplete) {
+      // Show profile completion for incomplete profiles
+      setCurrentPatientForEdit(activePatient);
+      setShowProfileCompletion(true);
+    } else {
+      // Profile is complete - show message or disable button
+      toast({
+        title: "Profile Complete",
+        description: "Your profile is already complete. Profile editing is not available yet.",
+        variant: "default",
+      });
+    }
+  };
+
+  const handleProfileComplete = (completedPatient: any) => {
+    // Update the patient state with completed profile
+    if (patient) {
+      setPatient(completedPatient);
+    }
+    setShowProfileCompletion(false);
+    setCurrentPatientForEdit(null);
+    
+    toast({
+      title: "Profile Completed!",
+      description: "Your profile has been successfully completed. You can now access all features.",
     });
   };
 
@@ -206,20 +280,82 @@ export default function PatientPortal() {
             </div>
             
             <div className="flex items-center space-x-4">
-              <div className="text-right">
-                <p className="text-sm font-medium text-slate-900">{activePatient.phoneNumber}</p>
-                <p className="text-xs text-slate-600">
-                  Web3 Identity: {activePatient.patientDID.substring(0, 20)}...
-                </p>
-              </div>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => logoutMutation.mutate()}
-                disabled={logoutMutation.isPending}
-              >
-                Logout
-              </Button>
+              {/* Profile Dropdown */}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" className="flex items-center space-x-2 px-3 py-2">
+                    <div className="w-8 h-8 bg-purple-100 rounded-full flex items-center justify-center">
+                      <User className="h-4 w-4 text-purple-600" />
+                    </div>
+                    <div className="text-left">
+                      <p className="text-sm font-medium text-slate-900">{activePatient.fullName || "Patient"}</p>
+                      <p className="text-xs text-slate-600">
+                        {activePatient.patientDID ? 
+                          `${activePatient.patientDID.substring(0, 12)}...` : 
+                          "Web3 Identity"
+                        }
+                      </p>
+                    </div>
+                    <ChevronDown className="h-4 w-4 text-slate-400" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-80">
+                  <DropdownMenuLabel className="font-normal">
+                    <div className="flex flex-col space-y-1">
+                      <p className="text-sm font-medium leading-none">{activePatient.fullName}</p>
+                      <p className="text-xs leading-none text-muted-foreground">
+                        {activePatient.phoneNumber || activePatient.email}
+                      </p>
+                    </div>
+                  </DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  
+                  {/* Profile Information */}
+                  <div className="px-2 py-1.5">
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="text-slate-600">National ID:</span>
+                        <span className="font-mono text-slate-900">{activePatient.nationalId || "Not set"}</span>
+                      </div>
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="text-slate-600">Phone:</span>
+                        <span className="text-slate-900">{activePatient.phoneNumber || "Not set"}</span>
+                      </div>
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="text-slate-600">Email:</span>
+                        <span className="text-slate-900">{activePatient.email || "Not set"}</span>
+                      </div>
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="text-slate-600">Status:</span>
+                        <Badge variant={activePatient.isProfileComplete ? "default" : "secondary"} className="text-xs">
+                          {activePatient.isProfileComplete ? "Complete" : "Incomplete"}
+                        </Badge>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <DropdownMenuSeparator />
+                  
+                  <DropdownMenuItem 
+                    className={`flex items-center space-x-2 ${!activePatient.isProfileComplete ? 'text-blue-600 focus:text-blue-600' : 'text-slate-400 cursor-not-allowed'}`}
+                    onClick={handleEditProfile}
+                    disabled={activePatient.isProfileComplete}
+                  >
+                    <Settings className="h-4 w-4" />
+                    <span>{activePatient.isProfileComplete ? 'Profile Complete' : 'Complete Profile'}</span>
+                  </DropdownMenuItem>
+                  
+                  <DropdownMenuSeparator />
+                  
+                  <DropdownMenuItem 
+                    className="flex items-center space-x-2 text-red-600 focus:text-red-600"
+                    onClick={() => logoutMutation.mutate()}
+                  >
+                    <LogOut className="h-4 w-4" />
+                    <span>Logout</span>
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
           </div>
         </div>
@@ -451,21 +587,88 @@ export default function PatientPortal() {
                 <CardTitle className="flex items-center space-x-2">
                   <Key className="h-5 w-5 text-purple-600" />
                   <span>Consent Management</span>
-                  {patientConsents?.totalConsents > 0 && (
-                    <Badge variant="secondary">{patientConsents.totalConsents} consents</Badge>
+                  {(patientConsents?.totalConsents || 0) + (patientConsents?.totalPendingRequests || 0) > 0 && (
+                    <Badge variant="secondary">
+                      {patientConsents?.totalConsents || 0} active, {patientConsents?.totalPendingRequests || 0} pending
+                    </Badge>
                   )}
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                {patientConsents?.traditionalConsents && patientConsents.traditionalConsents.length > 0 ? (
+                {/* Pending Consent Requests */}
+                {patientConsents?.pendingRequests && patientConsents.pendingRequests.length > 0 && (
+                  <div className="space-y-4 mb-8">
+                    <h4 className="font-medium text-slate-900 flex items-center space-x-2">
+                      <AlertTriangle className="h-4 w-4 text-amber-600" />
+                      <span>Pending Consent Requests</span>
+                      <Badge variant="outline" className="text-amber-600 border-amber-600">
+                        {patientConsents.pendingRequests.length} new
+                      </Badge>
+                    </h4>
+                    {patientConsents.pendingRequests.map((request: any, index: number) => (
+                      <Card key={index} className="border-l-4 border-l-amber-500 bg-amber-50/50">
+                        <CardContent className="pt-4">
+                          <div className="flex items-start justify-between">
+                            <div className="flex-1">
+                              <div className="flex items-center space-x-2 mb-2">
+                                <Building className="h-4 w-4 text-amber-600" />
+                                <p className="font-medium text-slate-900">{request.hospitalName}</p>
+                                <Badge variant="outline" className="text-xs">
+                                  {request.hospitalType === 'B' ? 'Hospital B' : 'Unknown'}
+                                </Badge>
+                                <Badge variant={request.consentType === 'web3' ? 'default' : 'secondary'} className={`text-xs ${request.consentType === 'web3' ? 'bg-purple-100 text-purple-800' : ''}`}>
+                                  {request.consentType === 'web3' ? 'Web3' : 'Traditional'}
+                                </Badge>
+                              </div>
+                              <p className="text-sm text-slate-600 mb-3">
+                                This hospital is requesting access to your medical records for care coordination.
+                              </p>
+                              <div className="flex items-center space-x-4 text-xs text-slate-500">
+                                <span>Request ID: #{request.id}</span>
+                                <span>•</span>
+                                <span>Requested: {new Date(request.accessedAt).toLocaleString()}</span>
+                              </div>
+                            </div>
+                            <div className="flex space-x-2 ml-4">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="border-red-200 text-red-700 hover:bg-red-50"
+                                onClick={() => handleConsentResponse(request.id, 'deny')}
+                              >
+                                Deny
+                              </Button>
+                              <Button
+                                size="sm"
+                                className="bg-green-600 hover:bg-green-700"
+                                onClick={() => handleConsentResponse(request.id, 'approve')}
+                                disabled={consentResponseMutation.isPending}
+                              >
+                                {consentResponseMutation.isPending ? 'Approving...' : 'Approve'}
+                              </Button>
+                            </div>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
+                )}
+
+                {/* Active Consents */}
+                {patientConsents?.traditionalConsents && patientConsents.traditionalConsents.length > 0 && (
                   <div className="space-y-4">
-                    <h4 className="font-medium text-slate-900">Traditional Records Access</h4>
+                    <h4 className="font-medium text-slate-900">Traditional Consents</h4>
                     {patientConsents.traditionalConsents.map((consent: any, index: number) => (
                       <Card key={index} className="border-l-4 border-l-green-500">
                         <CardContent className="pt-4">
                           <div className="flex items-center justify-between">
                             <div>
+                              <div className="flex items-center space-x-2 mb-1">
                               <p className="font-medium text-slate-900">Hospital B Access</p>
+                                <Badge variant="secondary" className="text-xs">
+                                  Traditional
+                                </Badge>
+                              </div>
                               <p className="text-sm text-slate-600">
                                 Granted by: {consent.consentGrantedBy}
                               </p>
@@ -482,7 +685,46 @@ export default function PatientPortal() {
                       </Card>
                     ))}
                   </div>
-                ) : (
+                )}
+
+                {/* Web3 Consents */}
+                {patientConsents?.web3Consents && patientConsents.web3Consents.length > 0 && (
+                  <div className="space-y-4">
+                    <h4 className="font-medium text-slate-900">Web3 Consents</h4>
+                    {patientConsents.web3Consents.map((consent: any, index: number) => (
+                      <Card key={index} className="border-l-4 border-l-purple-500">
+                        <CardContent className="pt-4">
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <div className="flex items-center space-x-2 mb-1">
+                                <p className="font-medium text-slate-900">Cryptographic Access</p>
+                                <Badge variant="default" className="text-xs bg-purple-100 text-purple-800">
+                                  Web3
+                                </Badge>
+                              </div>
+                              <p className="text-sm text-slate-600">
+                                Requester: {consent.hospitalName || consent.requesterId || 'Unknown'}
+                              </p>
+                              <p className="text-xs text-slate-500">
+                                {consent.accessedAt ? new Date(consent.accessedAt).toLocaleString() : consent.createdAt ? new Date(consent.createdAt).toLocaleString() : 'Unknown Date'}
+                              </p>
+                            </div>
+                            <Badge className="bg-purple-100 text-purple-800">
+                              <Shield className="h-3 w-3 mr-1" />
+                              Active
+                            </Badge>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
+                )}
+
+                {/* No Consents Message */}
+                {(!patientConsents || 
+                  ((patientConsents?.traditionalConsents?.length || 0) === 0 && 
+                   (patientConsents?.web3Consents?.length || 0) === 0 &&
+                   (patientConsents?.pendingRequests?.length || 0) === 0)) && (
                   <Alert>
                     <Key className="h-4 w-4" />
                     <AlertDescription>
@@ -498,6 +740,19 @@ export default function PatientPortal() {
           </TabsContent>
         </Tabs>
       </main>
+
+      {/* Profile Completion Modal for Incomplete Profiles */}
+      {showProfileCompletion && currentPatientForEdit && (
+        <PatientProfileCompletion
+          isOpen={showProfileCompletion}
+          onClose={() => {
+            setShowProfileCompletion(false);
+            setCurrentPatientForEdit(null);
+          }}
+          onComplete={handleProfileComplete}
+          patientDID={currentPatientForEdit.patientDID}
+        />
+      )}
     </div>
   );
 }

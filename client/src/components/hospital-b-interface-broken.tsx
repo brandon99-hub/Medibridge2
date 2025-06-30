@@ -50,7 +50,7 @@ export default function HospitalBInterface({ onShowConsentModal }: HospitalBInte
   
   const [web3SearchData, setWeb3SearchData] = useState({
     patientDID: "",
-    requesterDID: "",
+    requesterId: "",
   });
   
   const [patientData, setPatientData] = useState<PatientData | null>(null);
@@ -363,11 +363,11 @@ export default function HospitalBInterface({ onShowConsentModal }: HospitalBInte
                     </div>
 
                     <div>
-                      <Label htmlFor="requesterDID">Your Hospital DID</Label>
+                      <Label htmlFor="requesterId">Your Hospital DID</Label>
                       <Input
-                        id="requesterDID"
-                        value={web3SearchData.requesterDID}
-                        onChange={(e) => setWeb3SearchData({ ...web3SearchData, requesterDID: e.target.value })}
+                        id="requesterId"
+                        value={web3SearchData.requesterId}
+                        onChange={(e) => setWeb3SearchData({ ...web3SearchData, requesterId: e.target.value })}
                         placeholder="did:ethr:0x..."
                       />
                       <p className="text-xs text-slate-500 mt-1">

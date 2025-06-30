@@ -54,8 +54,8 @@ export class SecureKeyVault {
       );
 
       // Encrypt private key using AES-256-GCM
-      const iv = crypto.randomBytes(12);
-      const cipher = crypto.createCipher('aes-256-gcm', derivedKey);
+      const iv = crypto.randomBytes(12); // 12 bytes for GCM
+      const cipher = crypto.createCipheriv('aes-256-gcm', derivedKey, iv);
       cipher.setAAD(Buffer.from(patientDID)); // Additional authenticated data
 
       let encrypted = cipher.update(privateKey, 'utf8', 'hex');
@@ -117,7 +117,7 @@ export class SecureKeyVault {
       );
 
       // Decrypt private key
-      const decipher = crypto.createDecipher('aes-256-gcm', derivedKey);
+      const decipher = crypto.createDecipheriv('aes-256-gcm', derivedKey, Buffer.from(encryptedData.iv, 'hex'));
       decipher.setAAD(Buffer.from(patientDID));
       decipher.setAuthTag(Buffer.from(encryptedData.authTag, 'hex'));
 

@@ -45,7 +45,7 @@ export const ipfsContent = pgTable("ipfs_content", {
 export const consentManagement = pgTable("consent_management", {
   id: serial("id").primaryKey(),
   patientDID: text("patient_did").notNull().references(() => patientIdentities.did),
-  requesterDID: text("requester_did").notNull(), // Hospital DID requesting access
+  requesterId: text("requester_id").notNull(), // Hospital DID requesting access
   contentHash: text("content_hash").references(() => ipfsContent.contentHash),
   consentType: text("consent_type").notNull(), // "read", "write", "share"
   consentGiven: boolean("consent_given").default(false),

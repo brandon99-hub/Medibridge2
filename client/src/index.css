@@ -96,3 +96,12 @@
 .medical-dark {
   background-color: var(--medical-dark);
 }
+
+/* Remove all hover, focus, and active effects from Hospital A/B tab buttons */
+.medibridge-tab:hover,
+.medibridge-tab:focus,
+.medibridge-tab:active {
+  background: transparent !important;
+  color: inherit !important;
+  box-shadow: none !important;
+}

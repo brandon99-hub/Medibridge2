@@ -4,6 +4,7 @@ import { didService, vcService, ipfsService, consentService, WalletService } fro
 import { secureKeyVault } from "./secure-key-vault"; // Import SecureKeyVault
 import { z } from "zod";
 import CryptoJS from "crypto-js";
+import Hex from "crypto-js/enc-hex";
 import { requirePatientAuth } from "./patient-auth-middleware"; // Import the middleware
 
 export function registerWeb3Routes(app: Express): void {
@@ -70,9 +71,22 @@ export function registerWeb3Routes(app: Express): void {
         department: z.string().optional(),
       }).parse(req.body);
 
-      // Find patient profile by phone number
-      let patientProfile = await storage.getPatientProfileByPhone(recordData.phoneNumber);
-      if (!patientProfile) {
+      // Find patient profile by phone or email
+      let patientProfile = await storage.findPatientProfileByEmailOrPhone(
+        recordData.phoneNumber.includes('@') ? recordData.phoneNumber : undefined,
+        !recordData.phoneNumber.includes('@') ? recordData.phoneNumber : undefined
+      );
+      if (patientProfile) {
+        // If the profile is missing this identifier, update it
+        if (!patientProfile.phoneNumber && !recordData.phoneNumber.includes('@')) {
+          await storage.updatePatientProfileIdentifiers(patientProfile.patientDID, { phoneNumber: recordData.phoneNumber });
+        }
+        if (!patientProfile.email && recordData.phoneNumber.includes('@')) {
+          await storage.updatePatientProfileIdentifiers(patientProfile.patientDID, { email: recordData.phoneNumber });
+        }
+        // Re-fetch updated profile
+        patientProfile = await storage.getPatientProfileByDID(patientProfile.patientDID);
+      } else {
         // Check by nationalId
         patientProfile = await storage.getPatientProfileByNationalId(recordData.nationalId);
         if (!patientProfile) {
@@ -92,7 +106,7 @@ export function registerWeb3Routes(app: Express): void {
           patientProfile = await storage.createPatientProfile({
             patientDID: did,
             nationalId: recordData.nationalId,
-            phoneNumber: recordData.phoneNumber,
+            phoneNumber: recordData.phoneNumber.includes('@') ? "" : recordData.phoneNumber,
             email: recordData.phoneNumber.includes('@') ? recordData.phoneNumber : null,
             fullName: recordData.patientName,
             isProfileComplete: false,
@@ -117,7 +131,7 @@ export function registerWeb3Routes(app: Express): void {
       };
 
       // Store encrypted record on IPFS
-      const plaintextEncryptionKey = CryptoJS.lib.WordArray.random(256/8).toString('hex'); // Generate as hex
+      const plaintextEncryptionKey = CryptoJS.lib.WordArray.random(256/8).toString(Hex); // Generate as hex
       const ipfsHash = await ipfsService.storeContent(medicalRecord, plaintextEncryptionKey);
       await ipfsService.pinContent(ipfsHash);
 
@@ -149,10 +163,10 @@ export function registerWeb3Routes(app: Express): void {
         department: recordData.department,
         patientDID,
         submittedBy: user.id,
-        ipfsHash,
-        encryptionKey: encryptedDekString, // Store the encrypted DEK
-        recordType: "web3",
       });
+
+      // Update the record with ipfsHash and encryptionKey
+      await storage.updateRecordIPFS(patientRecord.id, ipfsHash, encryptedDekString);
 
       res.status(201).json({
         success: true,
@@ -224,9 +238,9 @@ export function registerWeb3Routes(app: Express): void {
   // This route is now intended for wallet-based signature authorization
   app.post("/api/web3/grant-consent", async (req: Request, res, next) => {
     try {
-      const { patientDID, requesterDID, contentHashes, consentType, patientSignature } = z.object({
+      const { patientDID, requesterId, contentHashes, consentType, patientSignature } = z.object({
         patientDID: z.string(),
-        requesterDID: z.string(),
+        requesterId: z.string(),
         contentHashes: z.array(z.string()),
         consentType: z.string(),
         patientSignature: z.string(), // Signature from patient's wallet
@@ -241,8 +255,8 @@ export function registerWeb3Routes(app: Express): void {
       // Construct the message that was signed on the frontend
       // IMPORTANT: This must exactly match the message signed on the frontend.
       // OMITTING TIMESTAMP for now for simplicity, but this is a security weakness.
-      const messageToVerify = `I, ${patientDID}, authorize granting ${consentType} consent to ${requesterDID} for the following content hashes: ${contentHashes.join(', ')}.`;
-      // const messageToVerify = `I, ${patientDID}, authorize granting ${consentType} consent to ${requesterDID} for the following content hashes: ${contentHashes.join(', ')}. Timestamp: ${SOME_TIMESTAMP_IF_PASSED_FROM_CLIENT}`;
+      const messageToVerify = `I, ${patientDID}, authorize granting ${consentType} consent to ${requesterId} for the following content hashes: ${contentHashes.join(', ')}.`;
+      // const messageToVerify = `I, ${patientDID}, authorize granting ${consentType} consent to ${requesterId} for the following content hashes: ${contentHashes.join(', ')}. Timestamp: ${SOME_TIMESTAMP_IF_PASSED_FROM_CLIENT}`;
 
 
       const isValidSignature = WalletService.verifySignature(
@@ -261,7 +275,7 @@ export function registerWeb3Routes(app: Express): void {
         // `consentService.issueConsentCredential` now retrieves the private key from SecureKeyVault
         const jwtVc = await consentService.issueConsentCredential(
           patientDID,     // Patient (issuer)
-          requesterDID,   // Hospital (subject of consent)
+          requesterId,   // Hospital (subject of consent)
           contentHash,
           consentType
           // Private key is handled internally by consentService via SecureKeyVault
@@ -282,7 +296,7 @@ export function registerWeb3Routes(app: Express): void {
         // Create consent management record
         await storage.createConsentManagement({
           patientDID,
-          requesterDID,
+          requesterId,
           contentHash,
           consentType,
           consentGiven: true,
@@ -290,13 +304,13 @@ export function registerWeb3Routes(app: Express): void {
           expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
         });
 
-        consentCredentials.push(storedCredential);
+        issuedJwtVCs.push(storedCredential);
       }
 
       res.json({
         success: true,
         message: "Consent granted via verifiable credentials",
-        consentCredentials: consentCredentials.length,
+        consentCredentials: issuedJwtVCs.length,
         expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()
       });
     } catch (error) {
@@ -312,13 +326,13 @@ export function registerWeb3Routes(app: Express): void {
       }
 
       const user = req.user!;
-      const { patientDID, requesterDID } = z.object({
+      const { patientDID, requesterId } = z.object({
         patientDID: z.string(),
-        requesterDID: z.string(),
+        requesterId: z.string(),
       }).parse(req.body);
 
       // Verify consent exists and is valid
-      const consents = await storage.getConsentByPatientAndRequester(patientDID, requesterDID);
+      const consents = await storage.getConsentByPatientAndRequester(patientDID, requesterId);
       const validConsents = consents.filter(consent => 
         consent.consentGiven && 
         (!consent.revokedAt) &&
@@ -373,9 +387,9 @@ export function registerWeb3Routes(app: Express): void {
   // Revoke Patient Consent
   app.post("/api/web3/revoke-consent", async (req, res, next) => {
     try {
-      const { patientDID, requesterDID, patientSignature } = z.object({
+      const { patientDID, requesterId, patientSignature } = z.object({
         patientDID: z.string(),
-        requesterDID: z.string(),
+        requesterId: z.string(),
         patientSignature: z.string(),
       }).parse(req.body);
 
@@ -388,8 +402,8 @@ export function registerWeb3Routes(app: Express): void {
       // Construct the message that was signed on the frontend
       // IMPORTANT: This must exactly match the message signed on the frontend.
       // OMITTING TIMESTAMP for now for simplicity.
-      const messageToVerify = `I, ${patientDID}, authorize revoking any consent previously granted to ${requesterDID}.`;
-      // const messageToVerify = `I, ${patientDID}, authorize revoking any consent previously granted to ${requesterDID}. Timestamp: ${SOME_TIMESTAMP_IF_PASSED_FROM_CLIENT}`;
+      const messageToVerify = `I, ${patientDID}, authorize revoking any consent previously granted to ${requesterId}.`;
+      // const messageToVerify = `I, ${patientDID}, authorize revoking any consent previously granted to ${requesterId}. Timestamp: ${SOME_TIMESTAMP_IF_PASSED_FROM_CLIENT}`;
 
       const isValidSignature = WalletService.verifySignature(
         messageToVerify,
@@ -402,7 +416,7 @@ export function registerWeb3Routes(app: Express): void {
       }
 
       // Get and revoke all consents
-      const consents = await storage.getConsentByPatientAndRequester(patientDID, requesterDID);
+      const consents = await storage.getConsentByPatientAndRequester(patientDID, requesterId);
       for (const consent of consents) {
         await storage.revokeConsent(consent.id);
         if (consent.consentCredentialId) {

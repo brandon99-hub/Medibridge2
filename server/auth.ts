@@ -6,6 +6,7 @@ import { scrypt, randomBytes, timingSafeEqual } from "crypto";
 import { promisify } from "util";
 import { storage } from "./storage";
 import { User as SelectUser } from "@shared/schema";
+import { auditService } from "./audit-service";
 
 declare global {
   namespace Express {
@@ -75,11 +76,86 @@ export function setupAuth(app: Express) {
     });
   });
 
-  app.post("/api/login", passport.authenticate("local"), (req, res) => {
-    res.status(200).json(req.user);
+  app.post("/api/login", async (req, res, next) => {
+    passport.authenticate("local", async (err: any, user: any, info: any) => {
+      if (err) {
+        await auditService.logEvent({
+          eventType: "LOGIN_FAILURE",
+          actorType: "HOSPITAL",
+          actorId: req.body.username || "unknown",
+          targetType: "AUTH_SYSTEM",
+          targetId: "login",
+          action: "AUTHENTICATE",
+          outcome: "FAILURE",
+          metadata: { error: err.message },
+          severity: "warning",
+        }, req);
+        return next(err);
+      }
+      
+      if (!user) {
+        await auditService.logEvent({
+          eventType: "LOGIN_FAILURE",
+          actorType: "HOSPITAL",
+          actorId: req.body.username || "unknown",
+          targetType: "AUTH_SYSTEM",
+          targetId: "login",
+          action: "AUTHENTICATE",
+          outcome: "FAILURE",
+          metadata: { reason: "Invalid credentials" },
+          severity: "warning",
+        }, req);
+        return res.status(401).json({ message: "Invalid credentials" });
+      }
+      
+      req.login(user, async (err) => {
+        if (err) {
+          await auditService.logEvent({
+            eventType: "LOGIN_FAILURE",
+            actorType: "HOSPITAL",
+            actorId: user.username,
+            targetType: "AUTH_SYSTEM",
+            targetId: "login",
+            action: "AUTHENTICATE",
+            outcome: "FAILURE",
+            metadata: { error: err.message },
+            severity: "warning",
+          }, req);
+          return next(err);
+        }
+        
+        await auditService.logEvent({
+          eventType: "LOGIN_SUCCESS",
+          actorType: "HOSPITAL",
+          actorId: user.username,
+          targetType: "AUTH_SYSTEM",
+          targetId: "login",
+          action: "AUTHENTICATE",
+          outcome: "SUCCESS",
+          metadata: { hospitalId: user.id, hospitalType: user.hospitalType },
+          severity: "info",
+        }, req);
+        
+        res.status(200).json(user);
+      });
+    })(req, res, next);
   });
 
-  app.post("/api/logout", (req, res, next) => {
+  app.post("/api/logout", async (req, res, next) => {
+    if (req.isAuthenticated()) {
+      await auditService.logEvent({
+        eventType: "LOGOUT",
+        actorType: "HOSPITAL",
+        actorId: req.user?.username || "unknown",
+        targetType: "AUTH_SYSTEM",
+        targetId: "logout",
+        action: "LOGOUT",
+        outcome: "SUCCESS",
+        metadata: { hospitalId: req.user?.id, hospitalType: req.user?.hospitalType },
+        severity: "info",
+      }, req);
+    }
+    
     req.logout((err) => {
       if (err) return next(err);
       res.sendStatus(200);

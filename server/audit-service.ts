@@ -29,8 +29,8 @@ export class AuditService {
       // For now, log to console - in production, store in database
       console.log(`[AUDIT] ${JSON.stringify(enrichedEvent)}`);
       
-      // TODO: Uncomment when audit schema is added to storage
-      // await storage.createAuditEvent(enrichedEvent);
+      // Store in audit_events table
+      await storage.createAuditEvent(enrichedEvent);
     } catch (error) {
       console.error(`[AUDIT_ERROR] Failed to log event: ${error}`);
     }
@@ -68,7 +68,7 @@ export class AuditService {
       }, req);
 
       // TODO: Store in consent audit table
-      // await storage.createConsentAudit(enrichedAudit);
+      await storage.createConsentAudit(enrichedAudit);
     } catch (error) {
       console.error(`[CONSENT_AUDIT_ERROR] Failed to log consent event: ${error}`);
     }
@@ -101,7 +101,7 @@ export class AuditService {
       }, req);
 
       // TODO: Store in security violations table
-      // await storage.createSecurityViolation(enrichedViolation);
+      await storage.createSecurityViolation(enrichedViolation);
     } catch (error) {
       console.error(`[SECURITY_AUDIT_ERROR] Failed to log security violation: ${error}`);
     }

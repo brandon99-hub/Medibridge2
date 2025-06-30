@@ -15,7 +15,7 @@ import { ShieldX, Info, Clock, FileText, User, MapPin, Activity, Shield, AlertTr
 interface ConsentModalProps {
   data: {
     patientName: string;
-    nationalId: string;
+    patientDID: string;
     recordCount: number;
     hasConsent?: boolean;
     records: Array<{
@@ -41,7 +41,7 @@ export default function ConsentModal({ data, onClose, onConsent }: ConsentModalP
   const [viewedRecords, setViewedRecords] = useState(false);
 
   const consentMutation = useMutation({
-    mutationFn: async (consentData: { nationalId: string; consentGrantedBy: string }) => {
+    mutationFn: async (consentData: { nationalId: string; consentGrantedBy: string; consentType: string }) => {
       const response = await apiRequest("POST", "/api/consent", consentData);
       return await response.json();
     },
@@ -71,10 +71,10 @@ export default function ConsentModal({ data, onClose, onConsent }: ConsentModalP
       });
       return;
     }
-    
     consentMutation.mutate({
-      nationalId: data.nationalId,
+      nationalId: (data as any).nationalId || data.patientDID,
       consentGrantedBy: consentGrantedBy,
+      consentType: 'web3',
     });
   };
 
@@ -134,12 +134,12 @@ export default function ConsentModal({ data, onClose, onConsent }: ConsentModalP
                   <p className="font-medium">{data.patientName}</p>
                 </div>
                 <div>
-                  <p className="text-sm text-slate-600">National ID</p>
-                  <p className="font-medium">{data.nationalId}</p>
+                  <p className="text-sm text-slate-600">DID</p>
+                  <p className="font-medium">{data.patientDID || '—'}</p>
                 </div>
                 <div>
                   <p className="text-sm text-slate-600">Records Found</p>
-                  <p className="font-medium">{data.recordCount} medical records</p>
+                  <p className="font-medium">{data.recordCount ?? 0} medical records</p>
                 </div>
                 <div>
                   <p className="text-sm text-slate-600">Consent Status</p>
@@ -186,141 +186,99 @@ export default function ConsentModal({ data, onClose, onConsent }: ConsentModalP
           </TabsContent>
           
           <TabsContent value="records" className="space-y-4">
-            <div className="max-h-96 overflow-y-auto space-y-3">
-              {data.records.map((record) => (
-                <div key={record.id} className="border rounded-lg p-4 bg-white">
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="flex items-center space-x-2">
-                      <Badge className={getVisitTypeColor(record.visitType)}>
-                        {record.visitType}
-                      </Badge>
-                      <span className="text-sm text-slate-600 flex items-center">
-                        <Clock className="h-3 w-3 mr-1" />
-                        {formatDate(record.visitDate)}
-                      </span>
-                    </div>
-                    <div className="text-sm text-slate-600 flex items-center">
-                      <MapPin className="h-3 w-3 mr-1" />
-                      {record.department}
-                    </div>
-                  </div>
-                  
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
-                    <div>
-                      <p className="text-slate-600">Physician</p>
-                      <p className="font-medium">{record.physician}</p>
-                    </div>
-                    <div>
-                      <p className="text-slate-600">Diagnosis</p>
-                      <p className="font-medium">{record.diagnosis}</p>
-                    </div>
-                    <div className="md:col-span-2">
-                      <p className="text-slate-600">Prescription</p>
-                      <p className="font-medium">{record.prescription}</p>
-                    </div>
-                  </div>
-                  
-                  <Separator className="my-2" />
-                  <div className="text-xs text-slate-500 flex items-center">
-                    <FileText className="h-3 w-3 mr-1" />
-                    Record submitted: {formatDate(record.submittedAt)}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </TabsContent>
-          
-          <TabsContent value="consent" className="space-y-4">
             {data.hasConsent ? (
-              <div className="space-y-4">
-                <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-                  <div className="flex items-start space-x-2">
-                    <Shield className="h-4 w-4 text-green-600 mt-0.5" />
-                    <div className="text-sm text-green-800">
-                      <p className="font-medium">Consent Already Granted</p>
-                      <p className="mt-1">
-                        Patient consent has been obtained and verified. You can proceed to view the medical records.
-                      </p>
+              <div className="max-h-96 overflow-y-auto space-y-3">
+                {data.records.map((record) => (
+                  <div key={record.id} className="border rounded-lg p-4 bg-white">
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="flex items-center space-x-2">
+                        <Badge className={getVisitTypeColor(record.visitType)}>
+                          {record.visitType}
+                        </Badge>
+                        <span className="text-sm text-slate-600 flex items-center">
+                          <Clock className="h-3 w-3 mr-1" />
+                          {formatDate(record.visitDate)}
+                        </span>
+                      </div>
+                      <div className="text-sm text-slate-600 flex items-center">
+                        <MapPin className="h-3 w-3 mr-1" />
+                        {record.department}
+                      </div>
+                    </div>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+                      <div>
+                        <p className="text-slate-600">Physician</p>
+                        <p className="font-medium">{record.physician}</p>
+                      </div>
+                      <div>
+                        <p className="text-slate-600">Diagnosis</p>
+                        <p className="font-medium">{record.diagnosis}</p>
+                      </div>
+                      <div className="md:col-span-2">
+                        <p className="text-slate-600">Prescription</p>
+                        <p className="font-medium">{record.prescription}</p>
+                      </div>
+                    </div>
+                    
+                    <Separator className="my-2" />
+                    <div className="text-xs text-slate-500 flex items-center">
+                      <FileText className="h-3 w-3 mr-1" />
+                      Record submitted: {formatDate(record.submittedAt)}
                     </div>
                   </div>
-                </div>
-                
-                <div className="flex space-x-3">
-                  <Button variant="outline" onClick={onClose} className="flex-1">
-                    Close
-                  </Button>
-                  <Button 
-                    onClick={() => onConsent("Previously granted")}
-                    className="flex-1 bg-green-600 hover:bg-green-700"
-                  >
-                    View Records
-                  </Button>
-                </div>
+                ))}
               </div>
             ) : (
-              <div className="space-y-4">
-                <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-                  <div className="flex items-start space-x-2">
-                    <Activity className="h-4 w-4 text-red-600 mt-0.5" />
-                    <div className="text-sm text-red-800">
-                      <p className="font-medium">Consent Authorization Required</p>
-                      <p className="mt-1">
-                        By proceeding, you acknowledge that you have obtained proper patient consent 
-                        to access these medical records and that this access is for legitimate healthcare purposes.
-                      </p>
-                    </div>
+              <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+                <div className="flex items-start space-x-2">
+                  <AlertTriangle className="h-4 w-4 text-amber-600 mt-0.5" />
+                  <div className="text-sm text-amber-800">
+                    <p className="font-medium">Waiting for Patient Consent</p>
+                    <p className="mt-1">
+                      The patient must approve the consent request in their portal. Once approved, medical records will be available here.
+                    </p>
                   </div>
-                </div>
-                
-                <div>
-                  <Label htmlFor="consentGrantedBy">Consent Granted By</Label>
-                  <Input
-                    id="consentGrantedBy"
-                    value={consentGrantedBy}
-                    onChange={(e) => setConsentGrantedBy(e.target.value)}
-                    placeholder="Enter name of person granting consent"
-                    required
-                  />
-                </div>
-                
-                <div className="space-y-3">
-                  <div className="flex items-start space-x-3">
-                    <Checkbox
-                      id="reviewed"
-                      checked={viewedRecords}
-                      onCheckedChange={(checked) => setViewedRecords(checked as boolean)}
-                    />
-                    <Label htmlFor="reviewed" className="text-sm text-slate-700">
-                      I have reviewed the medical records listed above
-                    </Label>
-                  </div>
-                  
-                  <div className="flex items-start space-x-3">
-                    <Checkbox
-                      id="agree"
-                      checked={agreed}
-                      onCheckedChange={(checked) => setAgreed(checked as boolean)}
-                    />
-                    <Label htmlFor="agree" className="text-sm text-slate-700">
-                      I confirm that proper patient consent has been obtained for accessing these medical records
-                    </Label>
-                  </div>
-                </div>
-                
-                <div className="flex space-x-3">
-                  <Button variant="outline" onClick={onClose} className="flex-1">
-                    Cancel
-                  </Button>
-                  <Button 
-                    onClick={handleGrantConsent}
-                    className="flex-1 bg-blue-600 hover:bg-blue-700"
-                    disabled={!agreed || !viewedRecords || !consentGrantedBy.trim() || consentMutation.isPending}
-                  >
-                    {consentMutation.isPending ? "Processing..." : "Authorize Access"}
-                  </Button>
                 </div>
               </div>
             )}
+          </TabsContent>
+          
+          <TabsContent value="consent" className="space-y-6">
+            <div className="bg-slate-50 rounded-lg p-4 space-y-3">
+              <h4 className="font-medium text-slate-900 mb-2 flex items-center">
+                <Shield className="h-4 w-4 mr-2 text-blue-600" />
+                Consent Authorization
+              </h4>
+              <div className="mb-2">
+                <div className="text-sm text-slate-600">Patient Name: <span className="font-medium text-slate-900">{data.patientName}</span></div>
+                <div className="text-sm text-slate-600">DID: <span className="font-mono text-xs">{data.patientDID || '—'}</span></div>
+                <div className="text-sm text-slate-600">Records Requested: <span className="font-medium text-slate-900">{data.recordCount ?? 0}</span></div>
+              </div>
+              <Label htmlFor="nationalId">Enter Patient National ID to Confirm Consent</Label>
+              <Input
+                id="nationalId"
+                type="text"
+                value={consentGrantedBy}
+                onChange={e => setConsentGrantedBy(e.target.value)}
+                placeholder="Enter National ID"
+                required
+                className="mb-2"
+              />
+              {consentGrantedBy.length > 0 && consentGrantedBy.length < 4 && (
+                <div className="text-xs text-red-600 mb-2">National ID must be at least 4 characters.</div>
+              )}
+              <Checkbox
+                id="agreed"
+                checked={agreed}
+                onCheckedChange={checked => setAgreed(checked === true)}
+                className="mt-2"
+              />
+              <Label htmlFor="agreed" className="ml-2">I confirm I have verified the patient's identity and consent</Label>
+              <Button className="mt-6 w-full bg-blue-600 hover:bg-blue-700" onClick={handleGrantConsent} disabled={!agreed || consentGrantedBy.length < 4 || consentMutation.isPending}>
+                {consentMutation.isPending ? 'Confirming...' : 'Confirm Consent'}
+              </Button>
+            </div>
           </TabsContent>
         </Tabs>
       </DialogContent>

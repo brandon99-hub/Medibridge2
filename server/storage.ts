@@ -16,7 +16,8 @@ import {
 import {
   auditEvents,
   consentAuditTrail,
-  securityViolations
+  securityViolations,
+  type SecurityViolation
 } from "@shared/audit-schema"; // Import audit tables
 import {
   emergencyConsentRecords,
@@ -24,7 +25,7 @@ import {
   type EmergencyConsentRecordSchema
 } from "@shared/schema"; // Import emergency consent schema
 import { db } from "./db";
-import { eq, and, or, sql } from "drizzle-orm"; // Import sql
+import { eq, and, or, sql, isNull, gt } from "drizzle-orm"; // Import sql
 import session from "express-session";
 import connectPg from "connect-pg-simple";
 import { pool } from "./db";
@@ -54,6 +55,8 @@ export interface IStorage {
   
   // Unified Consent Management
   createConsentRequest(request: any): Promise<any>;
+  getPendingConsentRequests(patientId: string): Promise<any[]>;
+  getConsentRequestById(requestId: number): Promise<any>;
   updateConsentRequestStatus(patientId: string, hospitalId: number, status: string): Promise<void>;
   revokeConsentRecords(patientId: string, hospitalId: number): Promise<void>;
   
@@ -83,7 +86,7 @@ export interface IStorage {
   
   // Web3 Consent Management
   createConsentManagement(consent: InsertConsentManagement): Promise<ConsentManagement>;
-  getConsentByPatientAndRequester(patientDID: string, requesterDID: string): Promise<ConsentManagement[]>;
+  getConsentByPatientAndRequester(patientDID: string, requesterId: string): Promise<ConsentManagement[]>;
   revokeConsent(id: number): Promise<void>;
   
   // Patient Profiles
@@ -113,8 +116,41 @@ export interface IStorage {
   // Admin/Audit Data Retrieval
   getSecurityViolations(options: { limit?: number; offset?: number; resolved?: boolean; }): Promise<SecurityViolation[]>;
 
+  // Utility: Find patient profile by email or phone
+  findPatientProfileByEmailOrPhone(email?: string, phone?: string): Promise<any>;
+
+  // Utility: Update patient profile to add missing email or phone
+  updatePatientProfileIdentifiers(patientDID: string, identifiers: { email?: string, phoneNumber?: string }): Promise<any>;
+
+  // Additional method
+  updatePatientIdentityPhoneNumber(patientDID: string, phoneNumber: string): Promise<void>;
+
+  // New method
+  getAllActiveWeb3Consents(patientDID: string): Promise<ConsentManagement[]>;
+
+  // New method
+  createWeb3Consent(consent: {
+    patientDID: string;
+    requesterId: string;
+    consentType?: string;
+    consentGiven: boolean;
+    expiresAt?: Date | null;
+    revokedAt?: Date | null;
+  }): Promise<ConsentManagement>;
+
+  // New method
+  updateWeb3Consent(id: number, updates: Partial<ConsentManagement>): Promise<void>;
 
   sessionStore: session.Store;
+
+  // Store a consent audit event in the consent_audit_trail table
+  createConsentAudit(audit: any): Promise<void>;
+
+  // Store an audit event in the audit_events table
+  createAuditEvent(audit: any): Promise<void>;
+
+  // Store a security violation in the security_violations table
+  createSecurityViolation(violation: any): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -159,19 +195,51 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getPatientRecordsByNationalId(nationalId: string): Promise<PatientRecord[]> {
-    return await db
+    console.log("=== STORAGE DEBUG: getPatientRecordsByNationalId ===");
+    console.log("Searching for nationalId:", nationalId);
+    
+    const records = await db
       .select()
       .from(patientRecords)
       .where(eq(patientRecords.nationalId, nationalId))
       .orderBy(patientRecords.submittedAt);
+    
+    console.log("Records found by nationalId:", records.length);
+    if (records.length > 0) {
+      console.log("Sample record:", {
+        id: records[0].id,
+        patientDID: records[0].patientDID,
+        nationalId: records[0].nationalId,
+        patientName: records[0].patientName
+      });
+    }
+    console.log("=== END STORAGE DEBUG ===");
+    
+    return records;
   }
 
   async getPatientRecordsByDID(patientDID: string): Promise<PatientRecord[]> {
-    return await db
+    console.log("=== STORAGE DEBUG: getPatientRecordsByDID ===");
+    console.log("Searching for patientDID:", patientDID);
+    
+    const records = await db
       .select()
       .from(patientRecords)
       .where(eq(patientRecords.patientDID, patientDID))
       .orderBy(patientRecords.submittedAt);
+    
+    console.log("Records found by patientDID:", records.length);
+    if (records.length > 0) {
+      console.log("Sample record:", {
+        id: records[0].id,
+        patientDID: records[0].patientDID,
+        nationalId: records[0].nationalId,
+        patientName: records[0].patientName
+      });
+    }
+    console.log("=== END STORAGE DEBUG ===");
+    
+    return records;
   }
 
   async getPatientRecordById(id: number): Promise<PatientRecord | undefined> {
@@ -203,10 +271,15 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getAllConsentRecordsByPatientId(patientId: string): Promise<ConsentRecord[]> {
-    return await db
+    const records = await db
       .select()
       .from(consentRecords)
       .where(eq(consentRecords.patientId, patientId));
+    // Map consent_type to consentType and remove consent_type from the returned object
+    return records.map((record: any) => {
+      const { consent_type, ...rest } = record;
+      return { ...rest, consentType: consent_type || 'traditional' };
+    });
   }
 
   async getPatientConsents(patientDID: string): Promise<ConsentRecord[]> {
@@ -333,14 +406,14 @@ export class DatabaseStorage implements IStorage {
     return consentRecord;
   }
 
-  async getConsentByPatientAndRequester(patientDID: string, requesterDID: string): Promise<ConsentManagement[]> {
+  async getConsentByPatientAndRequester(patientDID: string, requesterId: string): Promise<ConsentManagement[]> {
     return await db
       .select()
       .from(consentManagement)
       .where(
         and(
           eq(consentManagement.patientDID, patientDID),
-          eq(consentManagement.requesterDID, requesterDID)
+          eq(consentManagement.requesterId, requesterId)
         )
       );
   }
@@ -359,7 +432,22 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getPatientProfileByDID(did: string): Promise<any> {
+    console.log("=== STORAGE DEBUG: getPatientProfileByDID ===");
+    console.log("Searching for DID:", did);
+    
     const [profile] = await db.select().from(patientProfiles).where(eq(patientProfiles.patientDID, did));
+    
+    console.log("Profile found:", !!profile);
+    if (profile) {
+      console.log("Profile details:", {
+        patientDID: profile.patientDID,
+        nationalId: profile.nationalId,
+        fullName: profile.fullName,
+        phoneNumber: profile.phoneNumber
+      });
+    }
+    console.log("=== END STORAGE DEBUG ===");
+    
     return profile;
   }
 
@@ -369,7 +457,25 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getPatientProfileByNationalId(nationalId: string): Promise<any> {
+    console.log("=== STORAGE DEBUG: getPatientProfileByNationalId ===");
+    console.log("Searching for nationalId:", nationalId);
+    console.log("nationalId type:", typeof nationalId);
+    console.log("nationalId length:", nationalId.length);
+    
     const [profile] = await db.select().from(patientProfiles).where(eq(patientProfiles.nationalId, nationalId));
+    
+    console.log("Profile found:", !!profile);
+    if (profile) {
+      console.log("Profile details:", {
+        id: profile.id,
+        patientDID: profile.patientDID,
+        nationalId: profile.nationalId,
+        fullName: profile.fullName,
+        phoneNumber: profile.phoneNumber
+      });
+    }
+    console.log("=== END STORAGE DEBUG ===");
+    
     return profile;
   }
 
@@ -464,23 +570,88 @@ export class DatabaseStorage implements IStorage {
 
   // Unified Consent Management
   async createConsentRequest(request: any): Promise<any> {
+    // Get the first record for this patient to use as a valid recordId
+    const patientRecords = await this.getPatientRecordsByNationalId(request.patientId);
+    if (patientRecords.length === 0) {
+      throw new Error(`No records found for patient ${request.patientId}`);
+    }
+    // Use the first record's ID as the recordId
+    const recordId = patientRecords[0].id;
     // Store consent request in the consentRecords table with a special status
     const consentRequest = await db
       .insert(consentRecords)
       .values({
         patientId: request.patientId,
-        accessedBy: request.requestedBy,
-        recordId: 0, // Use 0 to indicate this is a request, not a specific record
-        consentGrantedBy: "pending", // Will be updated when consent is granted
+        accessedBy: request.accessedBy,
+        recordId: recordId,
+        consentGrantedBy: "pending",
+        consent_type: request.consentType || 'traditional',
       })
       .returning();
-    
-    console.log(`[INFO] Consent request created for patient ${request.patientId} by hospital ${request.requestedBy}`);
+    console.log(`[INFO] Consent request created for patient ${request.patientId} by hospital ${request.accessedBy} with recordId ${recordId} and consentType ${request.consentType || 'traditional'}`);
     return consentRequest[0];
+  }
+
+  async getPendingConsentRequests(patientId: string): Promise<any[]> {
+    // Get pending consent requests for a patient
+    const pendingRequests = await db
+      .select()
+      .from(consentRecords)
+      .where(
+        and(
+          eq(consentRecords.patientId, patientId),
+          eq(consentRecords.consentGrantedBy, "pending")
+        )
+      );
+    // Get hospital information for each request
+    const requestsWithHospitalInfo = await Promise.all(
+      pendingRequests.map(async (request: any) => {
+        const hospital = await this.getUser(request.accessedBy);
+        return {
+          ...request,
+          consentType: request.consent_type || 'traditional',
+          hospitalName: hospital?.hospitalName || "Unknown Hospital",
+          hospitalType: hospital?.hospitalType || "Unknown",
+        };
+      })
+    );
+    return requestsWithHospitalInfo;
+  }
+
+  async getConsentRequestById(requestId: number): Promise<any> {
+    // Get a specific consent request by ID
+    const [request] = await db
+      .select()
+      .from(consentRecords)
+      .where(eq(consentRecords.id, requestId));
+    if (request) {
+      const hospital = await this.getUser(request.accessedBy);
+      return {
+        ...request,
+        consentType: (request as any).consent_type || 'traditional',
+        hospitalName: hospital?.hospitalName || "Unknown Hospital",
+        hospitalType: hospital?.hospitalType || "Unknown",
+      };
+    }
+    return null;
   }
 
   async updateConsentRequestStatus(patientId: string, hospitalId: number, status: string): Promise<void> {
     // Update consent request status
+    await db
+      .update(consentRecords)
+      .set({ 
+        consentGrantedBy: status === "granted" ? hospitalId.toString() : status,
+        accessedAt: new Date()
+      })
+      .where(
+        and(
+          eq(consentRecords.patientId, patientId),
+          eq(consentRecords.accessedBy, hospitalId),
+          eq(consentRecords.consentGrantedBy, "pending")
+        )
+      );
+    
     console.log(`[INFO] Consent request status updated for patient ${patientId} by hospital ${hospitalId} to ${status}`);
   }
 
@@ -614,6 +785,103 @@ export class DatabaseStorage implements IStorage {
     }
 
     return await query;
+  }
+
+  // Utility: Find patient profile by email or phone
+  async findPatientProfileByEmailOrPhone(email?: string, phone?: string): Promise<any> {
+    if (!email && !phone) return undefined;
+    let profile: any = undefined;
+    if (email) {
+      [profile] = await db.select().from(patientProfiles).where(eq(patientProfiles.email, email));
+      if (profile) return profile;
+    }
+    if (phone) {
+      [profile] = await db.select().from(patientProfiles).where(eq(patientProfiles.phoneNumber, phone));
+      if (profile) return profile;
+    }
+    return undefined;
+  }
+
+  // Utility: Update patient profile to add missing email or phone
+  async updatePatientProfileIdentifiers(patientDID: string, identifiers: { email?: string, phoneNumber?: string }): Promise<any> {
+    const updates: any = {};
+    if (identifiers.email) updates.email = identifiers.email;
+    if (identifiers.phoneNumber) updates.phoneNumber = identifiers.phoneNumber;
+    if (Object.keys(updates).length === 0) return undefined;
+    const [updatedProfile]: any = await db
+      .update(patientProfiles)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(patientProfiles.patientDID, patientDID))
+      .returning();
+    return updatedProfile;
+  }
+
+  // Additional method
+  async updatePatientIdentityPhoneNumber(patientDID: string, phoneNumber: string): Promise<void> {
+    await db.update(patientIdentities)
+      .set({ phoneNumber, updatedAt: new Date() })
+      .where(eq(patientIdentities.did, patientDID));
+  }
+
+  // New method
+  async getAllActiveWeb3Consents(patientDID: string): Promise<ConsentManagement[]> {
+    return await db
+      .select()
+      .from(consentManagement)
+      .where(
+        and(
+          eq(consentManagement.patientDID, patientDID),
+          eq(consentManagement.consentGiven, true),
+          isNull(consentManagement.revokedAt),
+          or(isNull(consentManagement.expiresAt), gt(consentManagement.expiresAt, new Date()))
+        )
+      );
+  }
+
+  // New method
+  async createWeb3Consent(consent: {
+    patientDID: string;
+    requesterId: string;
+    consentType?: string;
+    consentGiven: boolean;
+    expiresAt?: Date | null;
+    revokedAt?: Date | null;
+  }): Promise<ConsentManagement> {
+    const [created] = await db
+      .insert(consentManagement)
+      .values({
+        patientDID: consent.patientDID,
+        requesterId: consent.requesterId,
+        consentType: consent.consentType || 'read',
+        consentGiven: consent.consentGiven,
+        expiresAt: consent.expiresAt ?? null,
+        revokedAt: consent.revokedAt ?? null,
+      })
+      .returning();
+    return created;
+  }
+
+  // New method
+  async updateWeb3Consent(id: number, updates: Partial<ConsentManagement>): Promise<void> {
+    await db
+      .update(consentManagement)
+      .set(updates)
+      .where(eq(consentManagement.id, id));
+  }
+
+  // Store a consent audit event in the consent_audit_trail table
+  async createConsentAudit(audit: any): Promise<void> {
+    await db.insert(consentAuditTrail).values(audit);
+  }
+
+  // Store an audit event in the audit_events table
+  async createAuditEvent(audit: any): Promise<void> {
+    await db.insert(auditEvents).values(audit);
+  }
+
+  // Store a security violation in the security_violations table
+  async createSecurityViolation(violation: any): Promise<void> {
+    await db.insert(securityViolations).values(violation);
   }
 }
 
