@@ -1,5 +1,6 @@
 import { storage } from "./storage";
 import { auditService } from "./audit-service";
+import { redisService } from "./redis-service";
 
 /**
  * Patient Lookup Service
@@ -29,10 +30,28 @@ export class PatientLookupService {
       // Normalize phone number format
       const normalizedPhone = this.normalizePhoneNumber(phoneNumber);
 
+      // Check cache first
+      const cacheKey = `patient_lookup:phone:${normalizedPhone}`;
+      const cachedResult = await redisService.getCachedQueryResult(cacheKey);
+      if (cachedResult) {
+        console.log(`[REDIS] Cache hit for phone lookup: ${normalizedPhone}`);
+        return cachedResult;
+      }
+
       // Find patient identity by phone number
       const patientIdentity = await storage.getPatientIdentityByPhone(normalizedPhone);
       
       if (!patientIdentity) {
+        const result: PatientSearchResult = {
+          found: false,
+          patientDID: undefined,
+          message: "No patient found with this phone number",
+          searchMethod: "phone",
+        };
+
+        // Cache negative results for a shorter time
+        await redisService.cacheQueryResult(cacheKey, result, 300); // 5 minutes
+
         await auditService.logEvent({
           eventType: "PATIENT_SEARCH_NO_RESULTS",
           actorType: "HOSPITAL",
@@ -48,12 +67,7 @@ export class PatientLookupService {
           severity: "info",
         });
 
-        return {
-          found: false,
-          patientDID: undefined,
-          message: "No patient found with this phone number",
-          searchMethod: "phone",
-        };
+        return result;
       }
 
       // Get patient records count and summary
@@ -81,7 +95,7 @@ export class PatientLookupService {
         patientProfile = await storage.getPatientProfileByDID(patientIdentity.did);
       } catch {}
 
-      return {
+      const result: PatientSearchResult = {
         found: true,
         patientDID: patientIdentity.did,
         patientInfo: {
@@ -93,6 +107,11 @@ export class PatientLookupService {
         recordsSummary,
         searchMethod: "phone",
       };
+
+      // Cache successful results
+      await redisService.cacheQueryResult(cacheKey, result, 900); // 15 minutes
+
+      return result;
 
     } catch (error: any) {
       await auditService.logSecurityViolation({
@@ -117,15 +136,29 @@ export class PatientLookupService {
     searchingStaffId: string
   ): Promise<PatientSearchResult> {
     try {
+      // Check cache first
+      const cacheKey = `patient_lookup:nationalId:${nationalId}`;
+      const cachedResult = await redisService.getCachedQueryResult(cacheKey);
+      if (cachedResult) {
+        console.log(`[REDIS] Cache hit for national ID lookup: ${nationalId}`);
+        return cachedResult;
+      }
+
       // Use getPatientProfileByNationalId to get the profile
       const patientProfile = await storage.getPatientProfileByNationalId(nationalId);
       if (!patientProfile) {
-        return {
+        const result: PatientSearchResult = {
           found: false,
           message: "No patient found with this national ID",
           searchMethod: "nationalId",
         };
+
+        // Cache negative results for a shorter time
+        await redisService.cacheQueryResult(cacheKey, result, 300); // 5 minutes
+
+        return result;
       }
+
       // Try to find associated DID if patient has Web3 identity
       const patientIdentity = await storage.getPatientIdentityByPhone(patientProfile.phoneNumber);
       const result = {
@@ -139,6 +172,10 @@ export class PatientLookupService {
         searchMethod: "nationalId" as const,
         patientDID: patientIdentity?.did,
       };
+
+      // Cache successful results
+      await redisService.cacheQueryResult(cacheKey, result, 900); // 15 minutes
+
       await auditService.logEvent({
         eventType: "PATIENT_SEARCH_SUCCESS",
         actorType: "HOSPITAL",

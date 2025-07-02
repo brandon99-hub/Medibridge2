@@ -67,7 +67,7 @@ export class AuditService {
         severity: "info",
       }, req);
 
-      // TODO: Store in consent audit table
+      // Store in consent audit table
       await storage.createConsentAudit(enrichedAudit);
     } catch (error) {
       console.error(`[CONSENT_AUDIT_ERROR] Failed to log consent event: ${error}`);
@@ -100,7 +100,7 @@ export class AuditService {
         severity: violation.severity === "critical" ? "error" : "warning",
       }, req);
 
-      // TODO: Store in security violations table
+      // Store in security violations table
       await storage.createSecurityViolation(enrichedViolation);
     } catch (error) {
       console.error(`[SECURITY_AUDIT_ERROR] Failed to log security violation: ${error}`);

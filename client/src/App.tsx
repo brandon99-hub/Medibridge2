@@ -15,6 +15,8 @@ import Web3PatientDashboard from "@/components/web3-patient-dashboard";
 
 import AdminDashboard from "@/components/admin-dashboard"; // Import AdminDashboard
 import EmergencyAccessPage from "@/pages/emergency-access-page"; // Import EmergencyAccessPage
+import EmergencyAccessDashboard from "@/components/emergency-access-dashboard"; // Import EmergencyAccessDashboard
+import AcceptInvitation from "@/pages/accept-invitation"; // Import AcceptInvitation
 
 function Router() {
   return (
@@ -22,7 +24,9 @@ function Router() {
       <ProtectedRoute path="/" component={HomePage} />
       <AdminProtectedRoute path="/admin" component={AdminDashboard} />
       <ProtectedRoute path="/emergency-access" component={EmergencyAccessPage} /> {/* Add emergency access route */}
+      <ProtectedRoute path="/emergency-dashboard" component={EmergencyAccessDashboard} /> {/* Add emergency dashboard route */}
       <Route path="/auth" component={AuthPage} />
+      <Route path="/accept-invitation" component={AcceptInvitation} /> {/* Add invitation acceptance route */}
       <Route path="/patient-portal" component={PatientPortal} />
       <Route path="/web3-patient" component={Web3PatientDashboard} />
       <Route component={NotFound} />

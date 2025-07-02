@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
@@ -32,13 +32,24 @@ export default function PatientKeyRecovery({ patientDID, isOpen, onClose }: Pati
   const [showRecoveryPhrase, setShowRecoveryPhrase] = useState(false);
   const [confirmationInput, setConfirmationInput] = useState("");
 
-  // Mock recovery data - replace with actual API calls
-  const recoveryInfo = {
-    hasBackup: true,
-    lastBackup: "2025-01-20T10:30:00Z",
-    recoveryPhrase: "abandon ability able about above absent absorb abstract absurd abuse access accident",
-    qrCodeData: "eyJkaWQiOiJkaWQ6a2V5OnpEbmFlcUNrZEV3V2VZTHJHNHpQdFgiLCJrZXkiOiIuLi4ifQ==",
+  // Fetch real recovery data from API
+  const { data: recoveryInfo, isLoading: isLoadingRecovery } = useQuery({
+    queryKey: ['patient-recovery-info', patientDID],
+    queryFn: async () => {
+      const response = await apiRequest("GET", `/api/patient/recovery-info?patientDID=${patientDID}`);
+      return response.json();
+    },
+    enabled: !!patientDID,
+  });
+
+  const defaultRecoveryInfo = {
+    hasBackup: false,
+    lastBackup: null,
+    recoveryPhrase: null,
+    qrCodeData: null,
   };
+
+  const recoveryData = recoveryInfo || defaultRecoveryInfo;
 
   const generateQRMutation = useMutation({
     mutationFn: async () => {
@@ -162,13 +173,13 @@ export default function PatientKeyRecovery({ patientDID, isOpen, onClose }: Pati
                   <div className="flex justify-between">
                     <span className="text-slate-600">Backup Status</span>
                     <span className="font-medium text-green-600">
-                      {recoveryInfo.hasBackup ? "Protected" : "No Backup"}
+                      {isLoadingRecovery ? "Loading..." : (recoveryData.hasBackup ? "Protected" : "No Backup")}
                     </span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-slate-600">Last Backup</span>
                     <span className="font-medium">
-                      {new Date(recoveryInfo.lastBackup).toLocaleDateString()}
+                      {isLoadingRecovery ? "Loading..." : (recoveryData.lastBackup ? new Date(recoveryData.lastBackup).toLocaleDateString() : "Never")}
                     </span>
                   </div>
                   <div className="flex justify-between">
@@ -258,7 +269,7 @@ export default function PatientKeyRecovery({ patientDID, isOpen, onClose }: Pati
                 {showRecoveryPhrase ? (
                   <div className="space-y-4">
                     <div className="grid grid-cols-3 gap-2 p-4 bg-slate-50 rounded-lg font-mono text-sm">
-                      {recoveryInfo.recoveryPhrase.split(" ").map((word, index) => (
+                      {recoveryData.recoveryPhrase?.split(" ").map((word: string, index: number) => (
                         <div key={index} className="flex items-center space-x-2">
                           <span className="text-slate-400 w-6">{index + 1}.</span>
                           <span className="font-medium">{word}</span>
@@ -270,7 +281,7 @@ export default function PatientKeyRecovery({ patientDID, isOpen, onClose }: Pati
                       <Button
                         variant="outline"
                         size="sm"
-                        onClick={() => copyToClipboard(recoveryInfo.recoveryPhrase)}
+                        onClick={() => copyToClipboard(recoveryData.recoveryPhrase || '')}
                         className="flex-1"
                       >
                         <Copy className="h-4 w-4 mr-2" />
@@ -280,7 +291,7 @@ export default function PatientKeyRecovery({ patientDID, isOpen, onClose }: Pati
                       <Button
                         variant="outline"
                         size="sm"
-                        onClick={generateRecoveryPhraseMutation.mutate}
+                        onClick={() => generateRecoveryPhraseMutation.mutate()}
                         disabled={generateRecoveryPhraseMutation.isPending}
                         className="flex-1"
                       >
@@ -346,7 +357,7 @@ export default function PatientKeyRecovery({ patientDID, isOpen, onClose }: Pati
 
                 <div className="space-y-2">
                   <Button
-                    onClick={generateQRMutation.mutate}
+                    onClick={() => generateQRMutation.mutate()}
                     disabled={generateQRMutation.isPending}
                     className="w-full"
                   >

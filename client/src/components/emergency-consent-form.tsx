@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { useMutation } from "@tanstack/react-query";
+import { useState, useEffect } from "react";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
@@ -9,8 +9,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { AlertTriangle, User, ShieldCheck, Users, Phone, Clock } from "lucide-react";
+import { AlertTriangle, User, ShieldCheck, Users, Phone, Clock, Loader2 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth"; // To get hospitalId potentially
+import { useLocation } from "wouter";
 
 // Define interfaces based on backend EmergencyConsentRequest for form state
 interface AuthorizedPersonnelFormState {
@@ -50,6 +51,7 @@ const initialNextOfKinState: NextOfKinFormState = {
 
 export default function EmergencyConsentForm() {
   const { user } = useAuth(); // Get authenticated hospital user
+  const [, setLocation] = useLocation();
   const [formData, setFormData] = useState<EmergencyConsentFormState>({
     patientId: "",
     hospitalId: user?.hospitalName || "", // Pre-fill from logged-in user, or make it selectable if admin
@@ -76,21 +78,21 @@ export default function EmergencyConsentForm() {
     onSuccess: (data) => {
       toast({
         title: "Emergency Consent Granted",
-        description: `Consent ID: ${data.consentId}. Access expires at ${new Date(data.expiresAt).toLocaleString()}`,
+        description: `Emergency access granted! Redirecting to patient records...`,
       });
-      // Reset form or redirect
-      setFormData({
-        patientId: "",
-        hospitalId: user?.hospitalName || "",
-        emergencyType: "",
-        medicalJustification: "",
-        primaryPhysician: { ...initialPhysicianState, id: user?.username || "", name: user?.username || "" },
-        secondaryAuthorizer: { ...initialPhysicianState },
-        nextOfKin: { ...initialNextOfKinState },
-        patientContactAttempted: false,
-        requestedDurationHours: 1,
-      });
-      setShowNextOfKin(false);
+      
+      // Prepare emergency data for dashboard
+      const emergencyData = {
+        temporaryCredential: data.temporaryCredential,
+        patientId: formData.patientId,
+        consentId: data.consentId,
+        expiresAt: data.expiresAt,
+        limitations: data.limitations || [],
+      };
+      
+      // Redirect to emergency dashboard with data
+      const encodedData = encodeURIComponent(JSON.stringify(emergencyData));
+      setLocation(`/emergency-dashboard?emergencyData=${encodedData}`);
     },
     onError: (error: Error) => {
       toast({
@@ -100,6 +102,40 @@ export default function EmergencyConsentForm() {
       });
     },
   });
+
+  // Fetch on-duty staff for the current hospital
+  const { data: staffProfileData, isLoading: staffLoading } = useQuery({
+    queryKey: ['onDutyStaff', user?.id],
+    queryFn: async () => {
+      if (!user?.id) return [];
+      const response = await apiRequest("GET", `/api/hospital/staff-profile?hospitalId=${user.id}`);
+      const data = await response.json();
+      return (data.staff || []).filter((s: any) => s.isOnDuty && s.isActive);
+    },
+    enabled: !!user?.id,
+  });
+
+  // Find the admin's staff record (by staffId === user.username)
+  const adminStaff = staffProfileData?.find((s: any) => s.staffId === user?.username);
+  
+  // Admin can authorize emergency consent even if not in staff list
+  const adminOnDuty = user?.isAdmin || !!adminStaff;
+
+  // Set primary physician to admin's staff record
+  useEffect(() => {
+    if (adminStaff && user?.username) {
+      setFormData(prev => ({
+        ...prev,
+        primaryPhysician: {
+          id: user.username, // must match backend check
+          name: adminStaff.name,
+          role: adminStaff.role,
+          licenseNumber: adminStaff.licenseNumber,
+          department: adminStaff.department,
+        }
+      }));
+    }
+  }, [adminStaff, user?.username]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value, type } = e.target;
@@ -245,37 +281,94 @@ export default function EmergencyConsentForm() {
           {/* Authorizing Personnel */}
           <div className="space-y-4 p-4 border rounded-md">
             <h3 className="font-medium text-lg flex items-center"><ShieldCheck className="mr-2 h-5 w-5"/>Authorizing Personnel</h3>
-            {/* Primary Physician */}
+            {/* Primary Physician (locked to admin) */}
             <div className="p-3 border rounded bg-slate-50">
               <Label className="font-semibold">Primary Physician (Requesting User)</Label>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-2">
-                <div><Label htmlFor="primaryPhysician.id">Staff ID *</Label><Input name="id" value={formData.primaryPhysician.id} onChange={(e) => handleNestedChange('primaryPhysician', e)} required disabled={!!user} /></div>
-                <div><Label htmlFor="primaryPhysician.name">Full Name *</Label><Input name="name" value={formData.primaryPhysician.name} onChange={(e) => handleNestedChange('primaryPhysician', e)} required disabled={!!user}/></div>
-                <div><Label htmlFor="primaryPhysician.role">Role *</Label>
-                    <Select name="role" onValueChange={handleSelectChange('role', 'primaryPhysician')} value={formData.primaryPhysician.role} required>
-                        <SelectTrigger><SelectValue placeholder="Select role" /></SelectTrigger>
-                        <SelectContent>{physicianRoles.map(r => <SelectItem key={r} value={r}>{r.replace(/_/g, ' ')}</SelectItem>)}</SelectContent>
+              <div className="mt-2">
+                {adminStaff ? (
+                  <div className="p-2 bg-white border rounded flex flex-col">
+                    <span className="font-semibold">{adminStaff.name}</span>
+                    <span className="text-sm text-slate-600">{adminStaff.role}, {adminStaff.department}</span>
+                    <span className="text-xs text-slate-500">Staff ID: {adminStaff.staffId}</span>
+                  </div>
+                ) : !!user && user.isAdmin ? (
+                  <div className="space-y-2">
+                    <div className="p-2 bg-yellow-50 border border-yellow-300 rounded text-yellow-800 mb-2">
+                      <b>Warning:</b> You are an admin but not registered as staff. Please fill in your details below to authorize emergency consent.
+                    </div>
+                    <Input
+                      name="name"
+                      placeholder="Full Name"
+                      value={formData.primaryPhysician.name}
+                      onChange={e => setFormData(prev => ({ ...prev, primaryPhysician: { ...prev.primaryPhysician, name: e.target.value } }))}
+                      required
+                    />
+                    <Select
+                      value={formData.primaryPhysician.role}
+                      onValueChange={val => setFormData(prev => ({ ...prev, primaryPhysician: { ...prev.primaryPhysician, role: val as any } }))}
+                      required
+                    >
+                      <SelectTrigger><SelectValue placeholder="Select Role" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="PHYSICIAN">Physician</SelectItem>
+                        <SelectItem value="SURGEON">Surgeon</SelectItem>
+                        <SelectItem value="EMERGENCY_DOCTOR">Emergency Doctor</SelectItem>
+                        <SelectItem value="CHIEF_RESIDENT">Chief Resident</SelectItem>
+                      </SelectContent>
                     </Select>
+                    <Input
+                      name="licenseNumber"
+                      placeholder="Medical License Number"
+                      value={formData.primaryPhysician.licenseNumber}
+                      onChange={e => setFormData(prev => ({ ...prev, primaryPhysician: { ...prev.primaryPhysician, licenseNumber: e.target.value } }))}
+                      required
+                    />
+                    <Input
+                      name="department"
+                      placeholder="Department"
+                      value={formData.primaryPhysician.department}
+                      onChange={e => setFormData(prev => ({ ...prev, primaryPhysician: { ...prev.primaryPhysician, department: e.target.value } }))}
+                      required
+                    />
+                  </div>
+                ) : (
+                  <div className="p-2 bg-yellow-50 border border-yellow-300 rounded text-yellow-800">
+                    <b>Warning:</b> You are not currently on duty. You must be on duty to authorize emergency consent.
                 </div>
-                <div><Label htmlFor="primaryPhysician.licenseNumber">License Number *</Label><Input name="licenseNumber" value={formData.primaryPhysician.licenseNumber} onChange={(e) => handleNestedChange('primaryPhysician', e)} required /></div>
-                <div className="md:col-span-2"><Label htmlFor="primaryPhysician.department">Department *</Label><Input name="department" value={formData.primaryPhysician.department} onChange={(e) => handleNestedChange('primaryPhysician', e)} required /></div>
+                )}
               </div>
             </div>
-            {/* Secondary Authorizer */}
+            {/* Secondary Authorizer Dropdown (exclude admin) */}
             <div className="p-3 border rounded bg-slate-50">
               <Label className="font-semibold">Secondary Authorizer *</Label>
-               <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-2">
-                <div><Label htmlFor="secondaryAuthorizer.id">Staff ID *</Label><Input name="id" value={formData.secondaryAuthorizer.id} onChange={(e) => handleNestedChange('secondaryAuthorizer', e)} required /></div>
-                <div><Label htmlFor="secondaryAuthorizer.name">Full Name *</Label><Input name="name" value={formData.secondaryAuthorizer.name} onChange={(e) => handleNestedChange('secondaryAuthorizer', e)} required /></div>
-                <div><Label htmlFor="secondaryAuthorizer.role">Role *</Label>
-                    <Select name="role" onValueChange={handleSelectChange('role', 'secondaryAuthorizer')} value={formData.secondaryAuthorizer.role} required>
-                        <SelectTrigger><SelectValue placeholder="Select role" /></SelectTrigger>
-                        <SelectContent>{physicianRoles.map(r => <SelectItem key={r} value={r}>{r.replace(/_/g, ' ')}</SelectItem>)}</SelectContent>
+              <Select
+                value={formData.secondaryAuthorizer.id}
+                onValueChange={staffId => {
+                  const staff = staffProfileData?.find((s: any) => s.staffId === staffId);
+                  if (staff) {
+                    setFormData(prev => ({
+                      ...prev,
+                      secondaryAuthorizer: {
+                        id: staff.staffId,
+                        name: staff.name,
+                        role: staff.role,
+                        licenseNumber: staff.licenseNumber,
+                        department: staff.department,
+                      }
+                    }));
+                  }
+                }}
+                disabled={staffLoading}
+              >
+                <SelectTrigger><SelectValue placeholder={staffLoading ? "Loading staff..." : "Select secondary authorizer"} /></SelectTrigger>
+                <SelectContent>
+                  {staffProfileData?.filter((staff: any) => staff.staffId !== user.username).map((staff: any) => (
+                    <SelectItem key={staff.staffId} value={staff.staffId}>
+                      {staff.name} ({staff.role}, {staff.department})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
                     </Select>
-                </div>
-                <div><Label htmlFor="secondaryAuthorizer.licenseNumber">License Number *</Label><Input name="licenseNumber" value={formData.secondaryAuthorizer.licenseNumber} onChange={(e) => handleNestedChange('secondaryAuthorizer', e)} required /></div>
-                <div className="md:col-span-2"><Label htmlFor="secondaryAuthorizer.department">Department *</Label><Input name="department" value={formData.secondaryAuthorizer.department} onChange={(e) => handleNestedChange('secondaryAuthorizer', e)} required /></div>
-              </div>
             </div>
           </div>
 
@@ -295,8 +388,16 @@ export default function EmergencyConsentForm() {
             )}
           </div>
 
-          <Button type="submit" className="w-full bg-red-600 hover:bg-red-700">
+          <Button type="submit" className="w-full bg-red-600 hover:bg-red-700" disabled={emergencyConsentMutation.isPending || !adminOnDuty}>
+            {emergencyConsentMutation.isPending ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Submitting...
+              </>
+            ) : (
+              <>
             <AlertTriangle className="mr-2 h-4 w-4" /> Submit Emergency Request
+              </>
+            )}
           </Button>
         </form>
       </CardContent>

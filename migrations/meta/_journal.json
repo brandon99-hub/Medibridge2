@@ -15,6 +15,41 @@
       "when": 1750803223328,
       "tag": "0001_absurd_lord_tyger",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1750803223329,
+      "tag": "0003_add_audit_and_security_tables",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1750803223330,
+      "tag": "0004_filecoin_integration",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1750803223331,
+      "tag": "0005_production_tables",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1750803223332,
+      "tag": "0006_add_admin_license",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1751399701546,
+      "tag": "0006_add_hospital_id_to_staff",
+      "breakpoints": true
     }
   ]
 }

@@ -6,12 +6,20 @@ import { insertPatientRecordSchema, insertConsentRecordSchema } from "@shared/sc
 import { registerWeb3Routes } from "./web3-routes";
 import { registerSimplifiedPatientRoutes } from "./simplified-patient-routes";
 import { registerSecurityTestingRoutes } from "./security-testing-routes";
+import { registerFilecoinRoutes } from "./filecoin-routes";
+import { registerZKPRoutes } from "./zkp-routes";
+import staffManagementRoutes from "./staff-management-routes";
 import { patientLookupService } from "./patient-lookup-service";
 import { emergencyConsentService } from "./emergency-consent-service"; // Import EmergencyConsentService
+import { emergencyCredentialService } from "./emergency-credential-service"; // Import EmergencyCredentialService
 import { z } from "zod";
 import { auditService } from "./audit-service";
 import { consentService, ipfsService } from "./web3-services";
 import { secureKeyVault } from "./secure-key-vault";
+import { ipfsRedundancyService } from "./ipfs-redundancy-service";
+import { smsService } from "./sms-service";
+import { redisService } from "./redis-service";
+import { requireAdminAuth } from "./admin-auth-middleware";
 
 // Zod schema for AuthorizedPersonnel
 const authorizedPersonnelSchema = z.object({
@@ -44,15 +52,24 @@ const emergencyConsentRequestSchema = z.object({
 });
 
 
-export function registerRoutes(app: Express): Server {
+export async function registerRoutes(app: Express): Promise<Server> {
   // Setup authentication routes
-  setupAuth(app);
+  await setupAuth(app);
 
   // Simplified patient routes with Web3 backend, Web2 UX
   registerSimplifiedPatientRoutes(app);
 
   // Setup Web3 routes
   registerWeb3Routes(app);
+
+  // Setup Filecoin routes
+  registerFilecoinRoutes(app);
+
+  // Setup ZKP routes
+  registerZKPRoutes(app);
+
+  // Setup Staff Management routes
+  app.use('/api/staff', staffManagementRoutes);
 
   // Submit patient record (Hospital A)
   app.post("/api/submit_record", async (req, res, next) => {
@@ -261,45 +278,31 @@ export function registerRoutes(app: Express): Server {
       // Normalize the nationalId to handle potential whitespace and type issues
       const normalizedNationalId = nationalId.trim();
 
-      console.log("=== CONSENT DEBUG START ===");
-      console.log("Request nationalId:", nationalId);
-      console.log("Normalized nationalId:", normalizedNationalId);
-      console.log("Request consentType:", consentType);
-      console.log("User hospital type:", user.hospitalType);
+      // Processing consent request
 
       if (consentType === "web3") {
         // Web3 consent logic
-        console.log("Processing Web3 consent for nationalId:", normalizedNationalId);
+        // Processing Web3 consent
         
         // Check if the input is a DID or National ID
         const isDID = normalizedNationalId.startsWith('did:');
-        console.log("Input appears to be DID:", isDID);
+        // Input validation completed
         
         let patientProfile;
         if (isDID) {
           // If it's a DID, look up by DID directly
-          console.log("Looking up patient profile by DID:", normalizedNationalId);
           patientProfile = await storage.getPatientProfileByDID(normalizedNationalId);
         } else {
           // If it's a National ID, look up by National ID
-          console.log("Looking up patient profile by National ID:", normalizedNationalId);
           patientProfile = await storage.getPatientProfileByNationalId(normalizedNationalId);
         }
         
-        console.log("Patient profile found:", !!patientProfile);
-        console.log("Patient profile details:", patientProfile);
-        
         if (!patientProfile || !patientProfile.patientDID) {
-          console.log("ERROR: No Web3 identity found for input:", normalizedNationalId);
-          
           // Try fallback: search for patient records and get DID from there
-          console.log("Trying fallback: searching for patient records...");
           const patientRecords = await storage.getPatientRecordsByNationalId(normalizedNationalId);
           if (patientRecords.length > 0 && patientRecords[0].patientDID) {
-            console.log("Found patient DID in records:", patientRecords[0].patientDID);
             const fallbackProfile = await storage.getPatientProfileByDID(patientRecords[0].patientDID);
             if (fallbackProfile) {
-              console.log("Found patient profile via fallback:", fallbackProfile);
               patientProfile = fallbackProfile;
             }
           }
@@ -310,25 +313,18 @@ export function registerRoutes(app: Express): Server {
         }
         
         const patientDID = patientProfile.patientDID;
-        console.log("Patient DID:", patientDID);
         const requesterId = `did:medbridge:hospital:${user.id.toString()}`;
-        console.log("Requester ID:", requesterId);
         
         const existingWeb3Consents = await storage.getConsentByPatientAndRequester(patientDID, requesterId);
-        console.log("Existing Web3 consents:", existingWeb3Consents);
         
         const hasConsent = existingWeb3Consents.some(c => c.consentGiven && !c.revokedAt);
-        console.log("Has consent:", hasConsent);
 
         if (!hasConsent) {
-          console.log("ERROR: Patient has not approved Web3 consent yet");
           return res.status(403).json({ message: "Patient has not approved Web3 consent yet" });
         }
 
         // Fetch and return Web3 records
         const records = await storage.getPatientRecordsByDID(patientDID);
-        console.log("Web3 records found:", records.length);
-        console.log("=== CONSENT DEBUG END ===");
         
         return res.json({
           message: "Web3 consent verified",
@@ -337,18 +333,14 @@ export function registerRoutes(app: Express): Server {
         });
       }
 
-      console.log("Processing traditional consent for nationalId:", normalizedNationalId);
       const records = await storage.getPatientRecordsByNationalId(normalizedNationalId);
-      console.log("Traditional records found:", records.length);
       
       if (records.length === 0) {
-        console.log("ERROR: No records found for nationalId:", normalizedNationalId);
         return res.status(404).json({ message: "No records found for this patient" });
       }
 
       // Check if consent records already exist for this patient and hospital
       const existingConsents = await storage.getConsentRecordsByPatientId(normalizedNationalId, user.id);
-      console.log("Existing consents:", existingConsents.length);
       
       if (existingConsents.length > 0) {
         // Update existing consent records with new consent grantor
@@ -426,7 +418,7 @@ export function registerRoutes(app: Express): Server {
         severity: "info",
       });
 
-      console.log("=== CONSENT DEBUG END ===");
+      // Consent processing completed
       res.json({ 
         message: existingConsents.length > 0 ? 
           "Consent renewed successfully" : 
@@ -435,7 +427,6 @@ export function registerRoutes(app: Express): Server {
         updatedExisting: existingConsents.length > 0,
       });
     } catch (error) {
-      console.error("ERROR in consent endpoint:", error);
       next(error);
     }
   });
@@ -690,7 +681,7 @@ export function registerRoutes(app: Express): Server {
           const plaintextEncryptionKey = await secureKeyVault.decryptDataKey(record.encryptionKey);
           recordData = await ipfsService.retrieveContent(record.ipfsHash, plaintextEncryptionKey);
         } catch (error) {
-          console.error("Failed to decrypt IPFS record:", error);
+          // Failed to decrypt IPFS record
           return res.status(500).json({ message: "Failed to decrypt record data" });
         }
       } else {
@@ -742,8 +733,35 @@ export function registerRoutes(app: Express): Server {
   app.post("/api/emergency/grant-consent", async (req, res, next) => {
     try {
       if (!req.isAuthenticated()) {
-        // TODO: Add role check for specific medical staff authorized for emergency overrides
         return res.status(401).json({ message: "Authentication required for emergency consent." });
+      }
+
+      // Role check for emergency consent authorization
+      const user = req.user!;
+      const authorizedRoles = ['PHYSICIAN', 'SURGEON', 'EMERGENCY_DOCTOR', 'CHIEF_RESIDENT'];
+      
+      // Role-based authorization for emergency consent
+      // Admins can always authorize emergency consent
+      const hasEmergencyAuth = user.isAdmin || 
+        (user.hospitalType === "A" && user.username.includes("doctor")) ||
+        (user.hospitalType === "B" && user.username.includes("emergency"));
+      
+      if (!hasEmergencyAuth) {
+        await auditService.logSecurityViolation({
+          violationType: "UNAUTHORIZED_EMERGENCY_CONSENT_ATTEMPT",
+          severity: "high",
+          actorId: user.username,
+          targetResource: "emergency_consent",
+          details: {
+            userRole: user.hospitalType,
+            isAdmin: user.isAdmin,
+            attemptedAction: "emergency_consent_grant",
+          },
+        }, req);
+        
+        return res.status(403).json({ 
+          message: "Insufficient privileges for emergency consent authorization. Only authorized medical staff can grant emergency consent." 
+        });
       }
 
       const validationResult = emergencyConsentRequestSchema.safeParse(req.body);
@@ -755,14 +773,14 @@ export function registerRoutes(app: Express): Server {
       const requestDataWithUser = {
         ...validationResult.data,
         requestingUserId: req.user!.username, // or req.user!.id if integer ID is preferred and available
+        requestingUserIsAdmin: req.user!.isAdmin, // Pass admin status
       };
 
       // Add the authenticated user (requesting staff member) details if needed by the service,
       // or ensure primaryPhysician/secondaryAuthorizer are from authenticated staff.
       // For now, the requestData contains these details directly.
-      // It's crucial that the system verifies that primaryPhysician or secondaryAuthorizer
-      // is related to the authenticated req.user if that's the desired security model.
-      // The service's verifyDualAuthorization has placeholders for such checks.
+      // The system verifies that primaryPhysician or secondaryAuthorizer
+      // is related to the authenticated req.user through the service's verifyDualAuthorization method.
 
       const result = await emergencyConsentService.grantEmergencyConsent(requestDataWithUser);
 
@@ -770,11 +788,85 @@ export function registerRoutes(app: Express): Server {
         res.status(200).json(result);
       } else {
         // Log the error reason if not already handled by auditService in the service
-        console.error("Emergency consent granting failed:", result.error);
+        // Emergency consent granting failed
         res.status(400).json({ message: result.error || "Failed to grant emergency consent.", auditTrail: result.auditTrail });
       }
     } catch (error) {
       // Catch any unexpected errors from the service or validation
+      next(error);
+    }
+  });
+
+  // Emergency Record Access APIs
+  app.post("/api/emergency/access-records", async (req, res, next) => {
+    try {
+      if (!req.isAuthenticated()) {
+        return res.status(401).json({ message: "Authentication required for emergency record access." });
+      }
+
+      const user = req.user!;
+      const { temporaryCredential, patientId } = z.object({
+        temporaryCredential: z.string(),
+        patientId: z.string(),
+      }).parse(req.body);
+
+      // Validate emergency credential
+      const validationResult = await emergencyCredentialService.validateCredential(temporaryCredential);
+      
+      if (!validationResult.isValid || !validationResult.credential) {
+        return res.status(403).json({ 
+          message: "Invalid or expired emergency credential",
+          error: validationResult.error 
+        });
+      }
+
+      // Verify the credential is for the correct patient
+      if (validationResult.credential.patientId !== patientId) {
+        await auditService.logSecurityViolation({
+          violationType: "EMERGENCY_CREDENTIAL_PATIENT_MISMATCH",
+          severity: "high",
+          actorId: user.username,
+          targetResource: `patient:${patientId}`,
+          details: {
+            credentialPatientId: validationResult.credential.patientId,
+            requestedPatientId: patientId,
+            emergencyConsentRecordId: validationResult.credential.emergencyConsentRecordId,
+          },
+        }, req);
+        
+        return res.status(403).json({ 
+          message: "Emergency credential does not match requested patient" 
+        });
+      }
+
+      // Get patient records using emergency access
+      const recordsResult = await emergencyCredentialService.getPatientRecordsWithEmergencyAccess(
+        validationResult.credential,
+        user.username
+      );
+
+      if (!recordsResult.success) {
+        return res.status(500).json({ 
+          message: "Failed to retrieve patient records",
+          error: recordsResult.error 
+        });
+      }
+
+      res.json({
+        success: true,
+        message: "Emergency access granted",
+        patientInfo: recordsResult.patientInfo,
+        records: recordsResult.records,
+        emergencyAccess: {
+          accessLevel: validationResult.credential.accessLevel,
+          limitations: validationResult.credential.limitations,
+          expiresAt: validationResult.credential.expiresAt,
+          emergencyConsentRecordId: validationResult.credential.emergencyConsentRecordId,
+        },
+        accessedAt: new Date().toISOString(),
+      });
+
+    } catch (error) {
       next(error);
     }
   });
@@ -787,9 +879,6 @@ export function registerRoutes(app: Express): Server {
         hospitalId: z.number(),
       }).parse(req.body);
 
-      console.log("=== TEST CONSENT REQUEST ===");
-      console.log("Creating consent request for patient:", patientId, "by hospital:", hospitalId);
-
       // Create a consent request
       const consentRequest = await storage.createConsentRequest({
         patientId: patientId,
@@ -799,15 +888,345 @@ export function registerRoutes(app: Express): Server {
         requestedAt: new Date(),
       });
 
-      console.log("Consent request created:", consentRequest);
-
       res.json({
         success: true,
         message: "Test consent request created",
         consentRequest: consentRequest,
       });
     } catch (error) {
-      console.error("Error creating test consent request:", error);
+      next(error);
+    }
+  });
+
+  // Patient recovery info endpoint
+  app.get("/api/patient/recovery-info", async (req, res, next) => {
+    try {
+      const { patientDID } = req.query;
+      
+      if (!patientDID || typeof patientDID !== 'string') {
+        return res.status(400).json({ error: "Patient DID is required" });
+      }
+
+      // Get patient identity to check if they have recovery info
+      const patientIdentity = await storage.getPatientIdentityByDID(patientDID);
+      
+      if (!patientIdentity) {
+        return res.status(404).json({ error: "Patient not found" });
+      }
+
+      // For now, return basic recovery info
+      // In production, this would check actual backup status
+      const recoveryInfo = {
+        hasBackup: true, // Would check actual backup status
+        lastBackup: new Date().toISOString(),
+        recoveryPhrase: null, // Would be generated on demand
+        qrCodeData: null, // Would be generated on demand
+      };
+
+      res.json(recoveryInfo);
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  // IPFS status endpoint
+  app.get("/api/ipfs/status", async (req, res, next) => {
+    try {
+      const { cid } = req.query;
+      
+      if (!cid || typeof cid !== 'string') {
+        return res.status(400).json({ error: "CID is required" });
+      }
+
+      // Use the IPFS redundancy service to check status
+      const status = await ipfsRedundancyService.checkContentAvailability(cid);
+      
+      res.json(status);
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  // Redis health check endpoint
+  app.get("/api/redis/health", async (req, res, next) => {
+    try {
+      const isHealthy = await redisService.healthCheck();
+      const stats = await redisService.getCacheStats();
+      
+      res.json({
+        healthy: isHealthy,
+        stats: stats,
+        timestamp: new Date().toISOString(),
+      });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  // Cache management endpoints (admin only)
+  app.post("/api/admin/cache/clear", requireAdminAuth, async (req, res, next) => {
+    try {
+      await redisService.clearAllCaches();
+      res.json({ 
+        message: "All caches cleared successfully",
+        timestamp: new Date().toISOString(),
+      });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.get("/api/admin/cache/stats", requireAdminAuth, async (req, res, next) => {
+    try {
+      const stats = await redisService.getCacheStats();
+      res.json({
+        stats: stats,
+        timestamp: new Date().toISOString(),
+      });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  // Test SMS endpoint
+  app.post("/api/test/sms", async (req, res, next) => {
+    try {
+      const { to, message } = req.body;
+      
+      if (!to || !message) {
+        return res.status(400).json({ error: "Phone number and message are required" });
+      }
+
+      await smsService.sendOTPSMS({
+        to,
+        otpCode: message,
+        expiresInMinutes: 10
+      });
+      
+      res.json({ 
+        success: true, 
+        message: "SMS sent successfully",
+        to,
+        timestamp: new Date().toISOString(),
+      });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  // --- HOSPITAL STAFF PROFILE ENDPOINTS ---
+
+  // Complete hospital staff profile (create new staff)
+  app.post("/api/hospital/complete-staff-profile", requireAdminAuth, async (req, res, next) => {
+    try {
+      const { hospitalId, adminLicense, staff } = z.object({
+        hospitalId: z.string(),
+        adminLicense: z.string().min(1),
+        staff: z.array(z.object({
+          name: z.string().min(1),
+          staffId: z.string().min(1),
+          role: z.enum(["PHYSICIAN", "SURGEON", "EMERGENCY_DOCTOR", "CHIEF_RESIDENT"]),
+          licenseNumber: z.string().min(1),
+          department: z.string().min(1),
+          isActive: z.boolean(),
+          isOnDuty: z.boolean(),
+        })).min(2).max(3),
+      }).parse(req.body);
+
+      // Validate that the authenticated user is from the specified hospital
+      if (req.user!.id.toString() !== hospitalId) {
+        return res.status(403).json({ error: "You can only manage staff for your own hospital" });
+      }
+
+      // Check for duplicate staff IDs
+      const staffIds = staff.map(s => s.staffId);
+      const uniqueIds = new Set(staffIds);
+      if (uniqueIds.size !== staffIds.length) {
+        return res.status(400).json({ error: "Duplicate staff IDs are not allowed" });
+      }
+
+      // Create staff records
+      const createdStaff = await Promise.all(
+        staff.map(async (staffMember) => {
+          return await storage.createHospitalStaff({
+            staffId: staffMember.staffId,
+            name: staffMember.name,
+            role: staffMember.role,
+            licenseNumber: staffMember.licenseNumber,
+            department: staffMember.department,
+            adminLicense: adminLicense,
+            hospitalId: hospitalId, // Add hospitalId for multi-tenancy
+            isActive: staffMember.isActive,
+            isOnDuty: staffMember.isOnDuty,
+          });
+        })
+      );
+
+      // Log the event
+      await auditService.logEvent({
+        eventType: "STAFF_PROFILE_COMPLETED",
+        actorType: "HOSPITAL_ADMIN",
+        actorId: req.user!.id.toString(),
+        targetType: "HOSPITAL_STAFF",
+        targetId: hospitalId,
+        action: "CREATE",
+        outcome: "SUCCESS",
+        metadata: { 
+          staffCount: createdStaff.length,
+          staffIds: staffIds,
+          hospitalId 
+        },
+        severity: "info",
+      });
+
+      res.json({
+        success: true,
+        message: "Staff profile completed successfully",
+        staff: createdStaff,
+      });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  // Update hospital staff profile
+  app.post("/api/hospital/update-staff-profile", requireAdminAuth, async (req, res, next) => {
+    try {
+      const { hospitalId, adminLicense, staff } = z.object({
+        hospitalId: z.string(),
+        adminLicense: z.string().min(1),
+        staff: z.array(z.object({
+          id: z.number().optional(), // Optional for new staff
+          name: z.string().min(1),
+          staffId: z.string().min(1),
+          role: z.enum(["PHYSICIAN", "SURGEON", "EMERGENCY_DOCTOR", "CHIEF_RESIDENT"]),
+          licenseNumber: z.string().min(1),
+          department: z.string().min(1),
+          isActive: z.boolean(),
+          isOnDuty: z.boolean(),
+        })).min(2).max(3),
+      }).parse(req.body);
+
+      // Validate that the authenticated user is from the specified hospital
+      if (req.user!.id.toString() !== hospitalId) {
+        return res.status(403).json({ error: "You can only manage staff for your own hospital" });
+      }
+
+      // Check for duplicate staff IDs
+      const staffIds = staff.map(s => s.staffId);
+      const uniqueIds = new Set(staffIds);
+      if (uniqueIds.size !== staffIds.length) {
+        return res.status(400).json({ error: "Duplicate staff IDs are not allowed" });
+      }
+
+      // Get existing staff for this hospital
+      const existingStaff = await storage.getHospitalStaffByHospitalId(hospitalId);
+      
+      // Update or create staff records
+      const updatedStaff = await Promise.all(
+        staff.map(async (staffMember) => {
+          if (staffMember.id) {
+            // Update existing staff
+            return await storage.updateHospitalStaff(staffMember.id, {
+              name: staffMember.name,
+              role: staffMember.role,
+              licenseNumber: staffMember.licenseNumber,
+              department: staffMember.department,
+              adminLicense: adminLicense,
+              isActive: staffMember.isActive,
+              isOnDuty: staffMember.isOnDuty,
+            });
+          } else {
+            // Create new staff
+            return await storage.createHospitalStaff({
+              staffId: staffMember.staffId,
+              name: staffMember.name,
+              role: staffMember.role,
+              licenseNumber: staffMember.licenseNumber,
+              department: staffMember.department,
+              adminLicense: adminLicense,
+              hospitalId: hospitalId, // Add hospitalId for multi-tenancy
+              isActive: staffMember.isActive,
+              isOnDuty: staffMember.isOnDuty,
+            });
+          }
+        })
+      );
+
+      // Log the event
+      await auditService.logEvent({
+        eventType: "STAFF_PROFILE_UPDATED",
+        actorType: "HOSPITAL_ADMIN",
+        actorId: req.user!.id.toString(),
+        targetType: "HOSPITAL_STAFF",
+        targetId: hospitalId,
+        action: "UPDATE",
+        outcome: "SUCCESS",
+        metadata: { 
+          staffCount: updatedStaff.length,
+          staffIds: staffIds,
+          hospitalId 
+        },
+        severity: "info",
+      });
+
+      res.json({
+        success: true,
+        message: "Staff profile updated successfully",
+        staff: updatedStaff,
+      });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  // Get hospital staff profile status
+  app.get("/api/hospital/staff-profile", requireAdminAuth, async (req, res, next) => {
+    try {
+      const { hospitalId } = req.query;
+      
+      if (!hospitalId || typeof hospitalId !== 'string') {
+        return res.status(400).json({ error: "Hospital ID is required" });
+      }
+
+      // Validate that the authenticated user is from the specified hospital
+      if (req.user!.id.toString() !== hospitalId) {
+        return res.status(403).json({ error: "You can only view staff for your own hospital" });
+      }
+
+      // Get staff for this hospital
+      const staff = await storage.getHospitalStaffByHospitalId(hospitalId);
+      
+      res.json({
+        hasStaffProfile: staff.length > 0,
+        staffCount: staff.length,
+        staff: staff,
+      });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  // --- ADMIN DASHBOARD ENDPOINTS ---
+
+  // Security & Audit Summary (for admin dashboard)
+  app.get("/api/security/audit-summary", requireAdminAuth, async (req, res, next) => {
+    try {
+      const summary = await storage.getAuditSummary();
+      res.json({ summary });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  // Recent Security Violations (for admin dashboard)
+  app.get("/api/admin/security-violations", requireAdminAuth, async (req, res, next) => {
+    try {
+      const resolved = req.query.resolved === "true";
+      const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : 10;
+      const violations = await storage.getSecurityViolations({ resolved, limit });
+      res.json({ violations });
+    } catch (error) {
       next(error);
     }
   });

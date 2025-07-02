@@ -154,22 +154,12 @@ export class SecureKeyVault {
 
   /**
    * Generate patient recovery phrase (12-word mnemonic)
-   * For optional patient export via QR or recovery phrase
+   * Now uses BIP39 standard for production-grade security.
    */
   generateRecoveryPhrase(): string {
-    const wordList = [
-      'abandon', 'ability', 'able', 'about', 'above', 'absent', 'absorb', 'abstract',
-      'absurd', 'abuse', 'access', 'accident', 'account', 'accuse', 'achieve', 'acid',
-      'acoustic', 'acquire', 'across', 'act', 'action', 'actor', 'actress', 'actual',
-      'adapt', 'add', 'addict', 'address', 'adjust', 'admit', 'adult', 'advance',
-      // ... abbreviated for example, use full BIP39 wordlist in production
-    ];
-    
-    const phrase = Array.from({ length: 12 }, () => 
-      wordList[Math.floor(Math.random() * wordList.length)]
-    ).join(' ');
-    
-    return phrase;
+    // Use bip39 for secure, standard-compliant mnemonic generation
+    const bip39 = require('bip39');
+    return bip39.generateMnemonic(128); // 12 words (128 bits entropy)
   }
 
   /**
@@ -234,7 +224,12 @@ export class SecureKeyVault {
 
       return `${iv.toString('hex')}:${encrypted}:${authTag.toString('hex')}`;
     } catch (error: any) {
-      // TODO: Log this critical failure with auditService
+      // Log this critical failure with auditService
+      await auditService.logSecurityViolation({
+        violationType: "DEK_ENCRYPTION_FAILURE",
+        severity: "critical",
+        details: { error: error.message },
+      });
       console.error("Failed to encrypt DEK:", error);
       throw new Error(`Failed to encrypt Data Key: ${error.message}`);
     }
@@ -269,7 +264,12 @@ export class SecureKeyVault {
 
       return decrypted;
     } catch (error: any) {
-      // TODO: Log this critical failure with auditService
+      // Log this critical failure with auditService
+      await auditService.logSecurityViolation({
+        violationType: "DEK_DECRYPTION_FAILURE",
+        severity: "critical",
+        details: { error: error.message },
+      });
       console.error("Failed to decrypt DEK:", error);
       throw new Error(`Failed to decrypt Data Key: ${error.message}`);
     }

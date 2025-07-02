@@ -6,6 +6,7 @@ import { createJWT, verifyJWT, ES256KSigner } from 'did-jwt';
 import { Resolver } from 'did-resolver';
 import { getResolver as getKeyResolver } from 'key-did-resolver';
 import { secureKeyVault } from "./secure-key-vault"; // Import SecureKeyVault
+import { ipfsRedundancyService } from "./ipfs-redundancy-service";
 
 const scryptAsync = promisify(scrypt);
 
@@ -121,30 +122,43 @@ export class PatientWeb3Service {
   }
 
   /**
-   * Store encrypted record on simulated IPFS
+   * Store encrypted record on IPFS with redundancy
    */
   async storeOnIPFS(encryptedData: string, metadata: any): Promise<string> {
-    // Generate mock CID for development
-    const hash = createHash('sha256');
-    hash.update(encryptedData + JSON.stringify(metadata));
-    const cid = 'bafyrei' + hash.digest('hex').substring(0, 50);
-    
-    // Store in memory for development
-    this.ipfsStorage.set(cid, { data: encryptedData, metadata });
-    
-    console.log(`[IPFS] Stored record with CID: ${cid}`);
-    return cid;
+    try {
+      // Use the redundancy service for production-ready IPFS storage
+      const result = await ipfsRedundancyService.storeWithRedundancy(
+        encryptedData,
+        metadata,
+        metadata.patientDID || 'unknown'
+      );
+      
+      console.log(`[IPFS] Stored record with CID: ${result.cid}, redundancy: ${result.redundancyLevel}`);
+      return result.cid;
+    } catch (error: any) {
+      console.error(`[IPFS_ERROR] Failed to store record: ${error.message}`);
+      throw new Error(`IPFS storage failed: ${error.message}`);
+    }
   }
 
   /**
-   * Retrieve record from simulated IPFS
+   * Retrieve record from IPFS with failover
    */
   async retrieveFromIPFS(cid: string): Promise<{ data: string; metadata: any }> {
-    const stored = this.ipfsStorage.get(cid);
-    if (!stored) {
-      throw new Error(`Record not found for CID: ${cid}`);
+    try {
+      // Use the redundancy service for production-ready IPFS retrieval
+      const data = await ipfsRedundancyService.retrieveWithFailover(cid);
+      
+      // Parse the retrieved data (assuming it's JSON)
+      const parsed = JSON.parse(data);
+      return {
+        data: parsed.data || data,
+        metadata: parsed.metadata || {}
+      };
+    } catch (error: any) {
+      console.error(`[IPFS_ERROR] Failed to retrieve record ${cid}: ${error.message}`);
+      throw new Error(`IPFS retrieval failed: ${error.message}`);
     }
-    return stored;
   }
 
   /**
@@ -164,7 +178,7 @@ export class PatientWeb3Service {
     // Create a signer object from the private key
     // The private key from ethers.Wallet is a hex string, ensure ES256KSigner can take it directly
     // or convert it to a Uint8Array if needed. ES256KSigner expects a hex private key.
-    const signer = ES256KSigner(privateKey);
+    const signer = ES256KSigner(Buffer.from(privateKey, 'hex'));
     
     const expiresAt = new Date(Date.now() + params.expiresInHours * 60 * 60 * 1000);
     
@@ -184,7 +198,7 @@ export class PatientWeb3Service {
       // issuanceDate and expirationDate will be added by createJWT by default if not in jwtOptions
     };
 
-    const jwtOptions = {
+    const jwtOptions: any = {
       alg: 'ES256K', // Algorithm used by ethers.js default signer
       issuer: params.patientDID,
       expiresIn: `${params.expiresInHours}h`,
@@ -196,8 +210,8 @@ export class PatientWeb3Service {
     // The third argument provides JWT header options (alg, issuer, expiresIn).
     const jwtVC = await createJWT(
       { vc: vcPayload, sub: params.hospitalDID }, // JWT payload: 'vc' claim holds the VC, 'sub' is the hospital.
-      { signer, did: params.patientDID }, // did-jwt SignerInfo: signer and issuer's DID
-      { ...jwtOptions, header: { alg: 'ES256K', typ: 'JWT' } } // JWT header options
+      { signer, issuer: params.patientDID }, // JWT options with signer and issuer
+      jwtOptions // JWT header options
     );
     
     return jwtVC; // This is the signed Verifiable Credential in JWT format

@@ -1,4 +1,4 @@
-import { users, patientRecords, consentRecords, type User, type InsertUser, type PatientRecord, type InsertPatientRecord, type InsertConsentRecord, type ConsentRecord, patientProfiles } from "@shared/schema";
+import { users, patientRecords, consentRecords, type User, type InsertUser, type PatientRecord, type InsertPatientRecord, type InsertConsentRecord, type ConsentRecord, patientProfiles, filecoinDeals, storageLocations, storageCosts, storageHealthMetrics, type InsertFilecoinDeal, type FilecoinDeal, type InsertStorageLocation, type StorageLocation, type InsertStorageCost, type StorageCost, type InsertStorageHealthMetric, type StorageHealthMetric, zkpProofs, zkpVerifications, type InsertZKPProof, type ZKPProof, type InsertZKPVerification, type ZKPVerification, hospitalStaff, patientEmergencyContacts, hospitalStaffInvitations, type HospitalStaff, type InsertHospitalStaff, type PatientEmergencyContact, type InsertPatientEmergencyContact, type HospitalStaffInvitation, type InsertHospitalStaffInvitation } from "@shared/schema";
 import { 
   patientIdentities, 
   verifiableCredentials, 
@@ -25,7 +25,7 @@ import {
   type EmergencyConsentRecordSchema
 } from "@shared/schema"; // Import emergency consent schema
 import { db } from "./db";
-import { eq, and, or, sql, isNull, gt } from "drizzle-orm"; // Import sql
+import { eq, and, or, sql, isNull, gt, desc, inArray } from "drizzle-orm"; // Import sql and inArray
 import session from "express-session";
 import connectPg from "connect-pg-simple";
 import { pool } from "./db";
@@ -45,6 +45,7 @@ export interface IStorage {
   getPatientRecordsByDID(patientDID: string): Promise<PatientRecord[]>;
   getPatientRecordById(id: number): Promise<PatientRecord | undefined>;
   updateRecordIPFS(recordId: number, ipfsCid: string, encryptionKey: string): Promise<void>;
+  updateRecordFilecoin(recordId: number, filecoinCid: string, storageCost: number, storageMetadata: any): Promise<void>;
   
   // Consent Management
   createConsentRecord(consent: InsertConsentRecord): Promise<ConsentRecord>;
@@ -77,6 +78,7 @@ export interface IStorage {
     expirationDate?: Date;   // Optional, from JWT
   }): Promise<VerifiableCredential>;
   getCredentialsByPatientDID(patientDID: string): Promise<VerifiableCredential[]>;
+  getCredentialById(id: number): Promise<VerifiableCredential | undefined>;
   revokeCredential(id: number): Promise<void>;
   
   // IPFS Content
@@ -106,15 +108,16 @@ export interface IStorage {
   getPatientRecordsSummary(patientDID: string): Promise<any>;
   
   // Audit Summary Methods
-  countAuditEvents(filters?: { eventType?: string; outcome?: string; }): Promise<number>;
+  countAuditEvents(filters?: { eventType?: string | string[]; outcome?: string; }): Promise<number>;
   countSecurityViolations(filters?: { violationType?: string; resolved?: boolean; }): Promise<number>;
   countConsentAuditRecords(filters?: { consentAction?: string; }): Promise<number>;
 
   // Emergency Consent Methods
   createEmergencyConsentRecord(record: InsertEmergencyConsentRecord): Promise<EmergencyConsentRecordSchema>;
+  getEmergencyConsentRecord(id: string): Promise<EmergencyConsentRecordSchema | undefined>;
 
   // Admin/Audit Data Retrieval
-  getSecurityViolations(options: { limit?: number; offset?: number; resolved?: boolean; }): Promise<SecurityViolation[]>;
+  getSecurityViolations(options?: { limit?: number; offset?: number; resolved?: boolean; }): Promise<SecurityViolation[]>;
 
   // Utility: Find patient profile by email or phone
   findPatientProfileByEmailOrPhone(email?: string, phone?: string): Promise<any>;
@@ -151,6 +154,69 @@ export interface IStorage {
 
   // Store a security violation in the security_violations table
   createSecurityViolation(violation: any): Promise<void>;
+
+  // Fetch the N most recent audit events
+  getRecentAuditEvents(limit?: number): Promise<any[]>;
+
+  // Filecoin Deals Methods
+  createFilecoinDeal(deal: InsertFilecoinDeal): Promise<FilecoinDeal>;
+  getFilecoinDealById(id: number): Promise<FilecoinDeal | undefined>;
+  getFilecoinDealByDealId(dealId: string): Promise<FilecoinDeal | undefined>;
+  getFilecoinDealsByPatientDID(patientDID: string): Promise<FilecoinDeal[]>;
+  updateFilecoinDealStatus(dealId: string, status: 'active' | 'expired' | 'terminated'): Promise<void>;
+  getExpiringFilecoinDeals(daysUntilExpiry: number): Promise<FilecoinDeal[]>;
+
+  // Storage Locations Methods
+  createStorageLocation(location: InsertStorageLocation): Promise<StorageLocation>;
+  getStorageLocationsByContentHash(contentHash: string): Promise<StorageLocation[]>;
+  updateStorageLocationStatus(id: number, status: 'active' | 'archived' | 'failed'): Promise<void>;
+  getStorageLocationsByType(storageType: 'ipfs' | 'filecoin' | 'local'): Promise<StorageLocation[]>;
+
+  // Storage Costs Methods
+  createStorageCost(cost: InsertStorageCost): Promise<StorageCost>;
+  getStorageCostsByPatientDID(patientDID: string): Promise<StorageCost[]>;
+  getTotalStorageCostsByPatientDID(patientDID: string): Promise<number>;
+  getStorageCostsByPeriod(billingPeriod: 'monthly' | 'yearly' | 'one_time'): Promise<StorageCost[]>;
+
+  // Storage Health Metrics Methods
+  createStorageHealthMetric(metric: InsertStorageHealthMetric): Promise<StorageHealthMetric>;
+  getLatestStorageHealthMetrics(): Promise<StorageHealthMetric[]>;
+  getStorageHealthMetricByType(storageType: string): Promise<StorageHealthMetric | undefined>;
+  updateStorageHealthMetric(id: number, updates: Partial<StorageHealthMetric>): Promise<void>;
+
+  // Hospital Staff Methods
+  getHospitalStaffByStaffId(staffId: string): Promise<HospitalStaff | undefined>;
+  getActiveHospitalStaff(): Promise<HospitalStaff[]>;
+  getOnDutyHospitalStaff(): Promise<HospitalStaff[]>;
+  createHospitalStaff(staff: InsertHospitalStaff): Promise<HospitalStaff>;
+  updateHospitalStaff(id: number, updates: Partial<InsertHospitalStaff>): Promise<HospitalStaff>;
+  getHospitalStaffByHospitalId(hospitalId: string): Promise<HospitalStaff[]>;
+
+  // Patient Emergency Contacts Methods
+  getPatientEmergencyContacts(patientId: string): Promise<PatientEmergencyContact[]>;
+  getVerifiedPatientEmergencyContacts(patientId: string): Promise<PatientEmergencyContact[]>;
+  createPatientEmergencyContact(contact: InsertPatientEmergencyContact): Promise<PatientEmergencyContact>;
+
+  // ZKP Methods
+  createZKPProof(proof: InsertZKPProof): Promise<ZKPProof>;
+  getZKPProofById(id: number): Promise<ZKPProof | undefined>;
+  getZKPProofsByPatientDID(patientDID: string): Promise<ZKPProof[]>;
+  updateZKPProofVerificationCount(id: number): Promise<void>;
+  deactivateZKPProof(id: number): Promise<void>;
+  createZKPVerification(verification: InsertZKPVerification): Promise<ZKPVerification>;
+  getZKPVerificationsByProofId(proofId: number): Promise<ZKPVerification[]>;
+
+  // Staff Invitation Methods
+  createHospitalStaffInvitation(invitation: InsertHospitalStaffInvitation): Promise<HospitalStaffInvitation>;
+  getInvitationByToken(token: string): Promise<HospitalStaffInvitation | undefined>;
+  getPendingInvitationByEmail(email: string): Promise<HospitalStaffInvitation | undefined>;
+  updateInvitation(id: number, updates: Partial<HospitalStaffInvitation>): Promise<void>;
+  getInvitationsByHospitalId(hospitalId: number): Promise<HospitalStaffInvitation[]>;
+  getUserByEmail(email: string): Promise<User | undefined>;
+  updateUser(id: number, updates: Partial<User>): Promise<void>;
+
+  // --- ADMIN DASHBOARD METHODS ---
+  getAuditSummary(): Promise<any>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -195,49 +261,21 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getPatientRecordsByNationalId(nationalId: string): Promise<PatientRecord[]> {
-    console.log("=== STORAGE DEBUG: getPatientRecordsByNationalId ===");
-    console.log("Searching for nationalId:", nationalId);
-    
     const records = await db
       .select()
       .from(patientRecords)
       .where(eq(patientRecords.nationalId, nationalId))
       .orderBy(patientRecords.submittedAt);
     
-    console.log("Records found by nationalId:", records.length);
-    if (records.length > 0) {
-      console.log("Sample record:", {
-        id: records[0].id,
-        patientDID: records[0].patientDID,
-        nationalId: records[0].nationalId,
-        patientName: records[0].patientName
-      });
-    }
-    console.log("=== END STORAGE DEBUG ===");
-    
     return records;
   }
 
   async getPatientRecordsByDID(patientDID: string): Promise<PatientRecord[]> {
-    console.log("=== STORAGE DEBUG: getPatientRecordsByDID ===");
-    console.log("Searching for patientDID:", patientDID);
-    
     const records = await db
       .select()
       .from(patientRecords)
       .where(eq(patientRecords.patientDID, patientDID))
       .orderBy(patientRecords.submittedAt);
-    
-    console.log("Records found by patientDID:", records.length);
-    if (records.length > 0) {
-      console.log("Sample record:", {
-        id: records[0].id,
-        patientDID: records[0].patientDID,
-        nationalId: records[0].nationalId,
-        patientName: records[0].patientName
-      });
-    }
-    console.log("=== END STORAGE DEBUG ===");
     
     return records;
   }
@@ -297,6 +335,17 @@ export class DatabaseStorage implements IStorage {
       .where(eq(patientRecords.id, recordId));
   }
 
+  async updateRecordFilecoin(recordId: number, filecoinCid: string, storageCost: number, storageMetadata: any): Promise<void> {
+    await db
+      .update(patientRecords)
+      .set({ 
+        filecoinCid, 
+        storageCost: storageCost.toString(), 
+        storageMetadata 
+      })
+      .where(eq(patientRecords.id, recordId));
+  }
+
   // Web3 Patient Identity Methods
   async createPatientIdentity(identity: InsertPatientIdentity): Promise<PatientIdentity> {
     const [patientIdentity] = await db
@@ -349,7 +398,6 @@ export class DatabaseStorage implements IStorage {
       ...(credentialData.credentialSubject && { credentialSubject: credentialData.credentialSubject }),
       ...(credentialData.issuanceDate && { issuanceDate: credentialData.issuanceDate }),
       ...(credentialData.expirationDate && { expirationDate: credentialData.expirationDate }),
-      revoked: false, // Default value
     };
 
     const [vc] = await db
@@ -364,6 +412,14 @@ export class DatabaseStorage implements IStorage {
       .select()
       .from(verifiableCredentials)
       .where(eq(verifiableCredentials.patientDID, patientDID));
+  }
+
+  async getCredentialById(id: number): Promise<VerifiableCredential | undefined> {
+    const [credential] = await db
+      .select()
+      .from(verifiableCredentials)
+      .where(eq(verifiableCredentials.id, id));
+    return credential || undefined;
   }
 
   async revokeCredential(id: number): Promise<void> {
@@ -432,22 +488,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getPatientProfileByDID(did: string): Promise<any> {
-    console.log("=== STORAGE DEBUG: getPatientProfileByDID ===");
-    console.log("Searching for DID:", did);
-    
     const [profile] = await db.select().from(patientProfiles).where(eq(patientProfiles.patientDID, did));
-    
-    console.log("Profile found:", !!profile);
-    if (profile) {
-      console.log("Profile details:", {
-        patientDID: profile.patientDID,
-        nationalId: profile.nationalId,
-        fullName: profile.fullName,
-        phoneNumber: profile.phoneNumber
-      });
-    }
-    console.log("=== END STORAGE DEBUG ===");
-    
     return profile;
   }
 
@@ -457,25 +498,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getPatientProfileByNationalId(nationalId: string): Promise<any> {
-    console.log("=== STORAGE DEBUG: getPatientProfileByNationalId ===");
-    console.log("Searching for nationalId:", nationalId);
-    console.log("nationalId type:", typeof nationalId);
-    console.log("nationalId length:", nationalId.length);
-    
     const [profile] = await db.select().from(patientProfiles).where(eq(patientProfiles.nationalId, nationalId));
-    
-    console.log("Profile found:", !!profile);
-    if (profile) {
-      console.log("Profile details:", {
-        id: profile.id,
-        patientDID: profile.patientDID,
-        nationalId: profile.nationalId,
-        fullName: profile.fullName,
-        phoneNumber: profile.phoneNumber
-      });
-    }
-    console.log("=== END STORAGE DEBUG ===");
-    
     return profile;
   }
 
@@ -491,7 +514,7 @@ export class DatabaseStorage implements IStorage {
   // Temporary storage
   async createTemporaryDIDShare(share: any): Promise<void> {
     // In production, use Redis or database
-    console.log("Temporary DID share created:", share);
+    // For now, just store in memory or log
   }
 
   // Traditional records summary
@@ -588,7 +611,7 @@ export class DatabaseStorage implements IStorage {
         consent_type: request.consentType || 'traditional',
       })
       .returning();
-    console.log(`[INFO] Consent request created for patient ${request.patientId} by hospital ${request.accessedBy} with recordId ${recordId} and consentType ${request.consentType || 'traditional'}`);
+    // Consent request created successfully
     return consentRequest[0];
   }
 
@@ -652,7 +675,7 @@ export class DatabaseStorage implements IStorage {
         )
       );
     
-    console.log(`[INFO] Consent request status updated for patient ${patientId} by hospital ${hospitalId} to ${status}`);
+    // Consent request status updated successfully
   }
 
   async revokeConsentRecords(patientId: string, hospitalId: number): Promise<void> {
@@ -675,41 +698,30 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Audit Summary Implementations
-  async countAuditEvents(filters?: { eventType?: string; outcome?: string; }): Promise<number> {
-    // This dynamic query building is a bit complex for a direct example with Drizzle's current API.
-    // A simpler approach for now is to fetch all and filter, or create specific methods for common cases.
-    // For a true dynamic filter, one might need to build the SQL where clause more manually or use a query builder.
-    // Let's implement a basic total count for now, and specific counts as needed.
-    // TODO: Implement dynamic filtering if complex queries are common.
-
+  async countAuditEvents(filters?: { eventType?: string | string[]; outcome?: string; }): Promise<number> {
     let query = db.select({ count: sql<number>`count(*)` }).from(auditEvents);
 
-    // Example of how filters could be added if Drizzle syntax allows easy conditional where clauses
-    // For now, this part is illustrative and would need specific Drizzle 'where' conditions
-    const conditions = [];
-    if (filters?.eventType) {
-      conditions.push(eq(auditEvents.eventType, filters.eventType));
-    }
-    if (filters?.outcome) {
-      conditions.push(eq(auditEvents.outcome, filters.outcome));
-    }
-    // if (conditions.length > 0) {
-    //   query = query.where(and(...conditions)); // Drizzle's 'and' might need specific handling
-    // }
-
-    // For simplicity now, let's assume filters mean specific counts are needed by type by the caller
-    // This method will just return total count if no filters, or could be enhanced.
     if (filters && Object.keys(filters).length > 0) {
-        let specificQuery = db.select({ count: sql<number>`count(*)` }).from(auditEvents);
-        if (filters.eventType && filters.outcome) {
-            specificQuery = specificQuery.where(and(eq(auditEvents.eventType, filters.eventType), eq(auditEvents.outcome, filters.outcome)));
-        } else if (filters.eventType) {
-            specificQuery = specificQuery.where(eq(auditEvents.eventType, filters.eventType));
-        } else if (filters.outcome) {
-            specificQuery = specificQuery.where(eq(auditEvents.outcome, filters.outcome));
+      if (filters.eventType && filters.outcome) {
+        if (Array.isArray(filters.eventType)) {
+          const result = await query.where(and(inArray(auditEvents.eventType, filters.eventType), eq(auditEvents.outcome, filters.outcome)));
+          return Number(result[0].count);
+        } else {
+          const result = await query.where(and(eq(auditEvents.eventType, filters.eventType), eq(auditEvents.outcome, filters.outcome)));
+          return Number(result[0].count);
         }
-        const result = await specificQuery;
+      } else if (filters.eventType) {
+        if (Array.isArray(filters.eventType)) {
+          const result = await query.where(inArray(auditEvents.eventType, filters.eventType));
+          return Number(result[0].count);
+        } else {
+          const result = await query.where(eq(auditEvents.eventType, filters.eventType));
+          return Number(result[0].count);
+        }
+      } else if (filters.outcome) {
+        const result = await query.where(eq(auditEvents.outcome, filters.outcome));
         return Number(result[0].count);
+      }
     }
 
     const result = await query;
@@ -718,25 +730,15 @@ export class DatabaseStorage implements IStorage {
 
   async countSecurityViolations(filters?: { violationType?: string; resolved?: boolean; }): Promise<number> {
     let query = db.select({ count: sql<number>`count(*)` }).from(securityViolations);
-    const conditions = [];
-    if (filters?.violationType) {
-      conditions.push(eq(securityViolations.violationType, filters.violationType));
-    }
-    if (filters?.resolved !== undefined) {
-      conditions.push(eq(securityViolations.resolved, filters.resolved));
-    }
-
-    if (conditions.length > 0) {
-      // Drizzle's 'and' expects at least two conditions if used like and(cond1, cond2, ...).
-      // For a single condition, just use .where(condition). For multiple, chain .where or use and().
-      let chainedQuery = query;
-      if (conditions.length === 1) {
-        chainedQuery = chainedQuery.where(conditions[0]);
-      } else if (conditions.length > 1) {
-        // @ts-ignore // Drizzle's 'and' type might need specific casting for dynamic arrays
-        chainedQuery = chainedQuery.where(and(...conditions));
-      }
-      const result = await chainedQuery;
+    
+    if (filters?.violationType && filters?.resolved !== undefined) {
+      const result = await query.where(and(eq(securityViolations.violationType, filters.violationType), eq(securityViolations.resolved, filters.resolved)));
+      return Number(result[0].count);
+    } else if (filters?.violationType) {
+      const result = await query.where(eq(securityViolations.violationType, filters.violationType));
+      return Number(result[0].count);
+    } else if (filters?.resolved !== undefined) {
+      const result = await query.where(eq(securityViolations.resolved, filters.resolved));
       return Number(result[0].count);
     }
 
@@ -746,9 +748,12 @@ export class DatabaseStorage implements IStorage {
 
   async countConsentAuditRecords(filters?: { consentAction?: string; }): Promise<number> {
     let query = db.select({ count: sql<number>`count(*)` }).from(consentAuditTrail);
-     if (filters?.consentAction) {
-      query = query.where(eq(consentAuditTrail.consentAction, filters.consentAction));
+    
+    if (filters?.consentAction) {
+      const result = await query.where(eq(consentAuditTrail.consentAction, filters.consentAction));
+      return Number(result[0].count);
     }
+    
     const result = await query;
     return Number(result[0].count);
   }
@@ -767,24 +772,30 @@ export class DatabaseStorage implements IStorage {
     return newRecord;
   }
 
-  async getSecurityViolations(options: {
-    limit?: number;
-    offset?: number;
-    resolved?: boolean;
-  }): Promise<SecurityViolation[]> {
-    let query = db.select().from(securityViolations).orderBy(sql`${securityViolations.createdAt} DESC`);
+  async getEmergencyConsentRecord(id: string): Promise<EmergencyConsentRecordSchema | undefined> {
+    const [record] = await db
+      .select()
+      .from(emergencyConsentRecords)
+      .where(eq(emergencyConsentRecords.id, id));
+    return record || undefined;
+  }
 
-    if (options.limit !== undefined) {
-      query = query.limit(options.limit);
+  async getSecurityViolations(options?: { limit?: number; offset?: number; resolved?: boolean; }): Promise<SecurityViolation[]> {
+    const { limit = 10, offset = 0, resolved } = options || {};
+    if (typeof resolved === "boolean") {
+      return await db.select()
+        .from(securityViolations)
+        .where(eq(securityViolations.resolved, resolved))
+        .orderBy(desc(securityViolations.createdAt))
+        .limit(limit)
+        .offset(offset);
+    } else {
+      return await db.select()
+        .from(securityViolations)
+        .orderBy(desc(securityViolations.createdAt))
+        .limit(limit)
+        .offset(offset);
     }
-    if (options.offset !== undefined) {
-      query = query.offset(options.offset);
-    }
-    if (options.resolved !== undefined) {
-      query = query.where(eq(securityViolations.resolved, options.resolved));
-    }
-
-    return await query;
   }
 
   // Utility: Find patient profile by email or phone
@@ -882,6 +893,411 @@ export class DatabaseStorage implements IStorage {
   // Store a security violation in the security_violations table
   async createSecurityViolation(violation: any): Promise<void> {
     await db.insert(securityViolations).values(violation);
+  }
+
+  // Fetch the N most recent audit events
+  async getRecentAuditEvents(limit?: number): Promise<any[]> {
+    const query = db.select().from(auditEvents).orderBy(sql`${auditEvents.createdAt} DESC`);
+    
+    if (limit) {
+      return await query.limit(limit);
+    }
+    
+    return await query;
+  }
+
+  // Filecoin Deals Methods
+  async createFilecoinDeal(deal: InsertFilecoinDeal): Promise<FilecoinDeal> {
+    const [filecoinDeal] = await db
+      .insert(filecoinDeals)
+      .values(deal)
+      .returning();
+    return filecoinDeal;
+  }
+
+  async getFilecoinDealById(id: number): Promise<FilecoinDeal | undefined> {
+    const [deal] = await db.select().from(filecoinDeals).where(eq(filecoinDeals.id, id));
+    return deal || undefined;
+  }
+
+  async getFilecoinDealByDealId(dealId: string): Promise<FilecoinDeal | undefined> {
+    const [deal] = await db.select().from(filecoinDeals).where(eq(filecoinDeals.dealId, dealId));
+    return deal || undefined;
+  }
+
+  async getFilecoinDealsByPatientDID(patientDID: string): Promise<FilecoinDeal[]> {
+    return await db
+      .select()
+      .from(filecoinDeals)
+      .where(eq(filecoinDeals.patientDID, patientDID))
+      .orderBy(desc(filecoinDeals.createdAt));
+  }
+
+  async updateFilecoinDealStatus(dealId: string, status: 'active' | 'expired' | 'terminated'): Promise<void> {
+    await db
+      .update(filecoinDeals)
+      .set({ dealStatus: status })
+      .where(eq(filecoinDeals.dealId, dealId));
+  }
+
+  async getExpiringFilecoinDeals(daysUntilExpiry: number): Promise<FilecoinDeal[]> {
+    const expiryDate = new Date();
+    expiryDate.setDate(expiryDate.getDate() + daysUntilExpiry);
+    
+    return await db
+      .select()
+      .from(filecoinDeals)
+      .where(and(
+        eq(filecoinDeals.dealStatus, 'active'),
+        gt(filecoinDeals.expiresAt, new Date()),
+        sql`${filecoinDeals.expiresAt} <= ${expiryDate}`
+      ));
+  }
+
+  // Storage Locations Methods
+  async createStorageLocation(location: InsertStorageLocation): Promise<StorageLocation> {
+    const [storageLocation] = await db
+      .insert(storageLocations)
+      .values(location)
+      .returning();
+    return storageLocation;
+  }
+
+  async getStorageLocationsByContentHash(contentHash: string): Promise<StorageLocation[]> {
+    return await db
+      .select()
+      .from(storageLocations)
+      .where(eq(storageLocations.contentHash, contentHash));
+  }
+
+  async updateStorageLocationStatus(id: number, status: 'active' | 'archived' | 'failed'): Promise<void> {
+    await db
+      .update(storageLocations)
+      .set({ status, lastVerified: new Date() })
+      .where(eq(storageLocations.id, id));
+  }
+
+  async getStorageLocationsByType(storageType: 'ipfs' | 'filecoin' | 'local'): Promise<StorageLocation[]> {
+    return await db
+      .select()
+      .from(storageLocations)
+      .where(eq(storageLocations.storageType, storageType));
+  }
+
+  // Storage Costs Methods
+  async createStorageCost(cost: InsertStorageCost): Promise<StorageCost> {
+    const [storageCost] = await db
+      .insert(storageCosts)
+      .values(cost)
+      .returning();
+    return storageCost;
+  }
+
+  async getStorageCostsByPatientDID(patientDID: string): Promise<StorageCost[]> {
+    return await db
+      .select()
+      .from(storageCosts)
+      .where(eq(storageCosts.patientDID, patientDID))
+      .orderBy(desc(storageCosts.createdAt));
+  }
+
+  async getTotalStorageCostsByPatientDID(patientDID: string): Promise<number> {
+    const result = await db
+      .select({ total: sql<number>`SUM(${storageCosts.costAmount})` })
+      .from(storageCosts)
+      .where(eq(storageCosts.patientDID, patientDID));
+    
+    return result[0]?.total || 0;
+  }
+
+  async getStorageCostsByPeriod(billingPeriod: 'monthly' | 'yearly' | 'one_time'): Promise<StorageCost[]> {
+    return await db
+      .select()
+      .from(storageCosts)
+      .where(eq(storageCosts.billingPeriod, billingPeriod))
+      .orderBy(desc(storageCosts.createdAt));
+  }
+
+  // Storage Health Metrics Methods
+  async createStorageHealthMetric(metric: InsertStorageHealthMetric): Promise<StorageHealthMetric> {
+    const [healthMetric] = await db
+      .insert(storageHealthMetrics)
+      .values(metric)
+      .returning();
+    return healthMetric;
+  }
+
+  async getLatestStorageHealthMetrics(): Promise<StorageHealthMetric[]> {
+    return await db
+      .select()
+      .from(storageHealthMetrics)
+      .orderBy(desc(storageHealthMetrics.lastCheckAt));
+  }
+
+  async getStorageHealthMetricByType(storageType: string): Promise<StorageHealthMetric | undefined> {
+    const [metric] = await db
+      .select()
+      .from(storageHealthMetrics)
+      .where(eq(storageHealthMetrics.storageType, storageType))
+      .orderBy(desc(storageHealthMetrics.lastCheckAt))
+      .limit(1);
+    return metric || undefined;
+  }
+
+  async updateStorageHealthMetric(id: number, updates: Partial<StorageHealthMetric>): Promise<void> {
+    await db
+      .update(storageHealthMetrics)
+      .set({ ...updates, lastCheckAt: new Date() })
+      .where(eq(storageHealthMetrics.id, id));
+  }
+
+  // Hospital Staff Methods
+  async getHospitalStaffByStaffId(staffId: string): Promise<HospitalStaff | undefined> {
+    const [staff] = await db.select().from(hospitalStaff).where(eq(hospitalStaff.staffId, staffId));
+    return staff || undefined;
+  }
+
+  async getActiveHospitalStaff(): Promise<HospitalStaff[]> {
+    const staff = await db.select().from(hospitalStaff).where(eq(hospitalStaff.isActive, true));
+    return staff;
+  }
+
+  async getOnDutyHospitalStaff(): Promise<HospitalStaff[]> {
+    const staff = await db.select().from(hospitalStaff).where(eq(hospitalStaff.isOnDuty, true));
+    return staff;
+  }
+
+  async createHospitalStaff(staff: InsertHospitalStaff): Promise<HospitalStaff> {
+    const [newStaff] = await db.insert(hospitalStaff).values(staff).returning();
+    return newStaff;
+  }
+
+  async updateHospitalStaff(id: number, updates: Partial<InsertHospitalStaff>): Promise<HospitalStaff> {
+    const [updatedStaff] = await db
+      .update(hospitalStaff)
+      .set(updates)
+      .where(eq(hospitalStaff.id, id))
+      .returning();
+    return updatedStaff;
+  }
+
+  async getHospitalStaffByHospitalId(hospitalId: string): Promise<HospitalStaff[]> {
+    // Filter staff by hospitalId for proper multi-tenancy
+    const staff = await db.select().from(hospitalStaff).where(
+      and(
+        eq(hospitalStaff.hospitalId, hospitalId),
+        eq(hospitalStaff.isActive, true)
+      )
+    );
+    return staff;
+  }
+
+  // Patient Emergency Contacts Methods
+  async getPatientEmergencyContacts(patientId: string): Promise<PatientEmergencyContact[]> {
+    const contacts = await db.select().from(patientEmergencyContacts).where(eq(patientEmergencyContacts.patientId, patientId));
+    return contacts;
+  }
+
+  async getVerifiedPatientEmergencyContacts(patientId: string): Promise<PatientEmergencyContact[]> {
+    const contacts = await db.select().from(patientEmergencyContacts).where(and(eq(patientEmergencyContacts.patientId, patientId), eq(patientEmergencyContacts.isVerified, true)));
+    return contacts;
+  }
+
+  async createPatientEmergencyContact(contact: InsertPatientEmergencyContact): Promise<PatientEmergencyContact> {
+    const [newContact] = await db.insert(patientEmergencyContacts).values(contact).returning();
+    return newContact;
+  }
+
+  // ZKP Methods Implementation
+  async createZKPProof(proof: InsertZKPProof): Promise<ZKPProof> {
+    const [result] = await db.insert(zkpProofs).values(proof).returning();
+    return result;
+  }
+
+  async getZKPProofById(id: number): Promise<ZKPProof | undefined> {
+    const [result] = await db.select().from(zkpProofs).where(eq(zkpProofs.id, id));
+    return result;
+  }
+
+  async getZKPProofsByPatientDID(patientDID: string): Promise<ZKPProof[]> {
+    return await db.select().from(zkpProofs).where(eq(zkpProofs.patientDID, patientDID));
+  }
+
+  async updateZKPProofVerificationCount(id: number): Promise<void> {
+    await db.update(zkpProofs)
+      .set({ 
+        verificationCount: sql`${zkpProofs.verificationCount} + 1`,
+        updatedAt: new Date()
+      })
+      .where(eq(zkpProofs.id, id));
+  }
+
+  async deactivateZKPProof(id: number): Promise<void> {
+    await db.update(zkpProofs)
+      .set({ 
+        isActive: false,
+        updatedAt: new Date()
+      })
+      .where(eq(zkpProofs.id, id));
+  }
+
+  async createZKPVerification(verification: InsertZKPVerification): Promise<ZKPVerification> {
+    const [result] = await db.insert(zkpVerifications).values(verification).returning();
+    return result;
+  }
+
+  async getZKPVerificationsByProofId(proofId: number): Promise<ZKPVerification[]> {
+    return await db.select().from(zkpVerifications).where(eq(zkpVerifications.proofId, proofId));
+  }
+
+  // --- ADMIN DASHBOARD METHODS ---
+  async getAuditSummary(): Promise<any> {
+    // Aggregate metrics for the admin dashboard
+    const [
+      totalEvents,
+      unresolvedViolations,
+      consentEvents,
+      recordAccesses,
+      successfulLogins,
+      failedLogins,
+      unauthorizedAttempts,
+      recentActivity,
+      vcStats,
+      consentStats
+    ] = await Promise.all([
+      this.countAuditEvents(),
+      this.countSecurityViolations({ resolved: false }),
+      this.countConsentAuditRecords({ consentAction: "GRANTED" }),
+      this.countAuditEvents({ eventType: ["RECORD_ACCESSED", "RECORD_ACCESS", "RECORD_ACCESSED_VIA_VC", "FILECOIN_RECORD_ACCESS"], outcome: "SUCCESS" }),
+      this.countAuditEvents({ eventType: "LOGIN_SUCCESS", outcome: "SUCCESS" }),
+      this.countAuditEvents({ eventType: "LOGIN_FAILURE", outcome: "FAILURE" }),
+      this.countAuditEvents({ eventType: "UNAUTHORIZED_ACCESS", outcome: "FAILURE" }),
+      this.getRecentAuditEvents(10),
+      this.getVCIssuanceStats(),
+      this.getConsentTrends()
+    ]);
+
+    return {
+      totalEvents,
+      securityViolations: unresolvedViolations,
+      consentEvents,
+      securityMetrics: {
+        recordAccesses,
+        successfulLogins,
+        failedLogins,
+        unauthorizedAttempts
+      },
+      recentActivity,
+      vcIssuanceStats: vcStats,
+      consentTrends: consentStats
+    };
+  }
+
+  // Helper: VC Issuance Stats
+  async getVCIssuanceStats(): Promise<any> {
+    // Counts for today, this week, this month, and avg response time (if possible)
+    const now = new Date();
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const startOfWeek = new Date(startOfToday);
+    startOfWeek.setDate(startOfWeek.getDate() - startOfWeek.getDay());
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+
+    const [today, thisWeek, thisMonth, allVCs] = await Promise.all([
+      db.select().from(verifiableCredentials).where(sql`issuance_date >= ${startOfToday}`),
+      db.select().from(verifiableCredentials).where(sql`issuance_date >= ${startOfWeek}`),
+      db.select().from(verifiableCredentials).where(sql`issuance_date >= ${startOfMonth}`),
+      db.select().from(verifiableCredentials)
+    ]);
+
+    // Calculate average issuance time if possible (difference between issuanceDate and the earliest issuanceDate)
+    let avgResponseTime = null;
+    if (allVCs.length > 1) {
+      const times = allVCs
+        .map(vc => vc.issuanceDate ? new Date(vc.issuanceDate).getTime() : null)
+        .filter(t => t !== null)
+        .sort((a, b) => a! - b!);
+      if (times.length > 1) {
+        const diffs = times.slice(1).map((t, i) => t! - times[i]!);
+        avgResponseTime = (diffs.reduce((a, b) => a + b, 0) / diffs.length) / 1000; // in seconds
+      }
+    }
+
+    return {
+      today: today.length,
+      thisWeek: thisWeek.length,
+      thisMonth: thisMonth.length,
+      avgResponseTime: avgResponseTime ? `${avgResponseTime.toFixed(1)}s` : null
+    };
+  }
+
+  // Helper: Consent Trends
+  async getConsentTrends(): Promise<any> {
+    // Grant rate, avg processing time, revocation rate from consentAuditTrail
+    const all = await db.select().from(consentAuditTrail);
+    const granted = all.filter(e => e.consentAction === "GRANTED");
+    const revoked = all.filter(e => e.consentAction === "REVOKED");
+    const expired = all.filter(e => e.consentAction === "EXPIRED");
+    const total = all.length;
+    const grantRate = total > 0 ? (granted.length / total) * 100 : 0;
+    const revocationRate = total > 0 ? (revoked.length / total) * 100 : 0;
+    // Avg processing time: difference between createdAt and expiresAt for granted consents
+    let avgProcessingTime = null;
+    if (granted.length > 0) {
+      const times = granted
+        .map(e => e.expiresAt && e.createdAt ? (new Date(e.expiresAt).getTime() - new Date(e.createdAt).getTime()) : null)
+        .filter(t => t !== null);
+      if (times.length > 0) {
+        avgProcessingTime = (times.reduce((a, b) => a + b, 0) / times.length) / 60000; // in minutes
+      }
+    }
+    return {
+      grantRate: grantRate ? `${grantRate.toFixed(1)}%` : null,
+      avgProcessingTime: avgProcessingTime ? `${avgProcessingTime.toFixed(1)} min` : null,
+      revocationRate: revocationRate ? `${revocationRate.toFixed(1)}%` : null
+    };
+  }
+
+  // Staff Invitation Methods Implementation
+  async createHospitalStaffInvitation(invitation: InsertHospitalStaffInvitation): Promise<HospitalStaffInvitation> {
+    const [result] = await db.insert(hospitalStaffInvitations).values(invitation).returning();
+    return result;
+  }
+
+  async getInvitationByToken(token: string): Promise<HospitalStaffInvitation | undefined> {
+    const [result] = await db.select().from(hospitalStaffInvitations).where(eq(hospitalStaffInvitations.invitationToken, token));
+    return result;
+  }
+
+  async getPendingInvitationByEmail(email: string): Promise<HospitalStaffInvitation | undefined> {
+    const [result] = await db.select().from(hospitalStaffInvitations).where(
+      and(
+        eq(hospitalStaffInvitations.email, email),
+        eq(hospitalStaffInvitations.status, 'pending'),
+        gt(hospitalStaffInvitations.expiresAt, new Date())
+      )
+    );
+    return result;
+  }
+
+  async updateInvitation(id: number, updates: Partial<HospitalStaffInvitation>): Promise<void> {
+    await db.update(hospitalStaffInvitations)
+      .set(updates)
+      .where(eq(hospitalStaffInvitations.id, id));
+  }
+
+  async getInvitationsByHospitalId(hospitalId: number): Promise<HospitalStaffInvitation[]> {
+    return await db.select().from(hospitalStaffInvitations).where(eq(hospitalStaffInvitations.hospitalId, hospitalId));
+  }
+
+  async getUserByEmail(email: string): Promise<User | undefined> {
+    const [result] = await db.select().from(users).where(eq(users.email, email));
+    return result;
+  }
+
+  async updateUser(id: number, updates: Partial<User>): Promise<void> {
+    await db.update(users)
+      .set(updates)
+      .where(eq(users.id, id));
   }
 }
 

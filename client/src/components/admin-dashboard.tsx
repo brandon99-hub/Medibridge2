@@ -16,12 +16,22 @@ import {
   FileText,
   TrendingUp,
   Eye,
-  Lock
+  Lock,
+  User,
+  Database,
+  Key,
+  Globe,
+  UserPlus
 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton"; // Import Skeleton
+import { useLocation } from "wouter";
+import { ArrowLeft } from "lucide-react";
+import EnhancedStaffManagement from "@/components/enhanced-staff-management";
 
 export default function AdminDashboard() {
   const [selectedTimeframe, setSelectedTimeframe] = useState("24h");
+  const [showStaffModal, setShowStaffModal] = useState(false);
+  const [, navigate] = useLocation();
 
   // Fetch security audit summary
   const { data: auditSummary, isLoading: isLoadingAuditSummary } = useQuery<any>({
@@ -52,17 +62,32 @@ export default function AdminDashboard() {
     consentEvents: 0,
   };
 
-
-  const vcIssuanceStats = {
-    today: 23,
-    thisWeek: 156,
-    thisMonth: 678,
-    avgResponseTime: "1.2s",
+  // Use real VC Issuance Stats and Consent Trends from backend
+  const vcIssuanceStats = auditSummary?.summary?.vcIssuanceStats || {
+    today: 0,
+    thisWeek: 0,
+    thisMonth: 0,
+    avgResponseTime: null,
+  };
+  const consentTrends = auditSummary?.summary?.consentTrends || {
+    grantRate: null,
+    avgProcessingTime: null,
+    revocationRate: null,
   };
 
   return (
     <div className="min-h-screen bg-slate-50 p-6">
       <div className="max-w-7xl mx-auto space-y-6">
+        {/* Back to Dashboard Button */}
+        <div className="flex items-start">
+          <button
+            className="mb-4 flex items-center px-4 py-2 rounded-full border border-blue-200 bg-white text-blue-700 shadow-sm hover:bg-blue-50 hover:border-blue-400 transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-blue-200"
+            onClick={() => navigate("/")}
+          >
+            <ArrowLeft className="h-4 w-4 mr-2" />
+            <span className="font-medium">Back to Dashboard</span>
+          </button>
+        </div>
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
@@ -138,6 +163,8 @@ export default function AdminDashboard() {
             <TabsTrigger value="violations">Security Violations</TabsTrigger>
             <TabsTrigger value="credentials">VC Monitoring</TabsTrigger>
             <TabsTrigger value="access">Access Patterns</TabsTrigger>
+            <TabsTrigger value="activity">Recent Activity</TabsTrigger>
+            <TabsTrigger value="staff">Staff Management</TabsTrigger>
             <TabsTrigger value="testing">Security Testing</TabsTrigger>
           </TabsList>
 
@@ -201,21 +228,28 @@ export default function AdminDashboard() {
                             </span>
                           </div>
                         </div>
-                        <p className="text-sm text-slate-700 mb-2">
-                          {violation.details?.error || violation.details?.message || JSON.stringify(violation.details)}
-                        </p>
-                        <div className="flex items-center justify-between">
-                          <span className="text-xs text-slate-500">
-                            Actor ID: {violation.actorId || 'N/A'}
-                            {violation.ipAddress && ` • IP: ${violation.ipAddress}`}
-                          </span>
+                        <div className="mb-2 text-slate-700 text-sm">{
+                          violation.description ||
+                          (violation.details
+                            ? typeof violation.details === 'object'
+                              ? JSON.stringify(violation.details)
+                              : violation.details
+                            : "No details provided.")
+                        }</div>
+                        <div className="flex items-center justify-between mt-2">
+                          <span className="text-xs text-slate-500">ID: {violation.id}</span>
                           <Button
                             size="sm"
-                            variant={violation.resolved ? "outline" : "default"}
-                            disabled={violation.resolved}
-                            // TODO: Add onClick handler to mark as resolved or investigate
+                            variant="outline"
+                            className="text-green-700 border-green-200 hover:bg-green-50"
+                            onClick={async () => {
+                              await apiRequest("POST", `/api/admin/security-violations/${violation.id}/resolve`);
+                              // Optionally show a toast
+                              // Refetch the violations list
+                              window.location.reload(); // Or use a better state update if available
+                            }}
                           >
-                            {violation.resolved ? "Resolved" : "Investigate"}
+                            Mark as Resolved
                           </Button>
                         </div>
                       </div>
@@ -251,7 +285,7 @@ export default function AdminDashboard() {
                   </div>
                   <div className="flex justify-between">
                     <span className="text-slate-600">Avg Response Time</span>
-                    <span className="font-bold text-green-600">{vcIssuanceStats.avgResponseTime}</span>
+                    <span className="font-bold text-green-600">{vcIssuanceStats.avgResponseTime || '--'}</span>
                   </div>
                 </CardContent>
               </Card>
@@ -267,15 +301,15 @@ export default function AdminDashboard() {
                   <div className="space-y-3">
                     <div className="flex items-center justify-between">
                       <span className="text-sm text-slate-600">Consent Grant Rate</span>
-                      <span className="text-lg font-bold text-green-600">94.2%</span>
+                      <span className="text-lg font-bold text-green-600">{consentTrends.grantRate || '--'}</span>
                     </div>
                     <div className="flex items-center justify-between">
                       <span className="text-sm text-slate-600">Avg Processing Time</span>
-                      <span className="text-lg font-bold">2.3 min</span>
+                      <span className="text-lg font-bold">{consentTrends.avgProcessingTime || '--'}</span>
                     </div>
                     <div className="flex items-center justify-between">
                       <span className="text-sm text-slate-600">Revocation Rate</span>
-                      <span className="text-lg font-bold text-orange-600">1.8%</span>
+                      <span className="text-lg font-bold text-orange-600">{consentTrends.revocationRate || '--'}</span>
                     </div>
                   </div>
                 </CardContent>
@@ -325,6 +359,138 @@ export default function AdminDashboard() {
             </Card>
           </TabsContent>
 
+          {/* Recent Activity Tab */}
+          <TabsContent value="activity" className="space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center space-x-2">
+                  <Activity className="h-5 w-5 text-blue-600" />
+                  <span>Recent System Activity</span>
+                </CardTitle>
+                <CardDescription>
+                  Latest audit events and system activities
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {isLoadingAuditSummary && (
+                  <div className="space-y-4">
+                    {[...Array(5)].map((_, i) => (
+                      <div key={i} className="border rounded-lg p-4 space-y-3">
+                        <div className="flex items-center justify-between mb-2">
+                          <Skeleton className="h-6 w-24" />
+                          <Skeleton className="h-4 w-32" />
+                        </div>
+                        <Skeleton className="h-4 w-full" />
+                        <Skeleton className="h-4 w-3/4" />
+                        <div className="flex items-center justify-between">
+                          <Skeleton className="h-4 w-28" />
+                          <Skeleton className="h-4 w-24" />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {!isLoadingAuditSummary && (!auditSummary?.summary?.recentActivity || auditSummary.summary.recentActivity.length === 0) && (
+                  <Alert>
+                    <Activity className="h-4 w-4" />
+                    <AlertDescription>
+                      No recent activity found. The system may be idle or audit logging may be disabled.
+                    </AlertDescription>
+                  </Alert>
+                )}
+                {!isLoadingAuditSummary && auditSummary?.summary?.recentActivity && auditSummary.summary.recentActivity.length > 0 && (
+                  <div className="space-y-4">
+                    {auditSummary.summary.recentActivity.map((event: any, index: number) => (
+                      <div key={event.id || index} className="border rounded-lg p-4">
+                        <div className="flex items-center justify-between mb-2">
+                          <div className="flex items-center space-x-2">
+                            <Badge
+                              variant={event.outcome === 'SUCCESS' ? 'default' : 
+                                     event.outcome === 'FAILURE' ? 'destructive' : 'secondary'}
+                            >
+                              {event.outcome}
+                            </Badge>
+                            <span className="font-medium">{event.eventType}</span>
+                          </div>
+                          <div className="flex items-center space-x-2">
+                            <Clock className="h-4 w-4 text-slate-400" />
+                            <span className="text-sm text-slate-600">
+                              {new Date(event.createdAt).toLocaleString()}
+                            </span>
+                          </div>
+                        </div>
+                        <div className="mb-2 text-slate-700 text-sm">
+                          <div className="flex items-center space-x-2 mb-1">
+                            <User className="h-3 w-3 text-slate-500" />
+                            <span className="text-xs text-slate-500">
+                              Actor: {event.actorType} ({event.actorId})
+                            </span>
+                          </div>
+                          <div className="flex items-center space-x-2 mb-1">
+                            <Database className="h-3 w-3 text-slate-500" />
+                            <span className="text-xs text-slate-500">
+                              Target: {event.targetType} ({event.targetId})
+                            </span>
+                          </div>
+                          {event.metadata && (
+                            <div className="flex items-center space-x-2">
+                              <Key className="h-3 w-3 text-slate-500" />
+                              <span className="text-xs text-slate-500">
+                                Details: {JSON.stringify(event.metadata)}
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                        <div className="flex items-center justify-between mt-2">
+                          <span className="text-xs text-slate-500">ID: {event.id}</span>
+                          <Badge variant="outline" className="text-xs">
+                            {event.severity || 'info'}
+                          </Badge>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* Staff Management Tab */}
+          <TabsContent value="staff" className="space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center space-x-2">
+                  <UserPlus className="h-5 w-5 text-green-600" />
+                  <span>Staff Management</span>
+                </CardTitle>
+                <CardDescription>
+                  Manage hospital staff accounts and invitations
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="text-center py-8">
+                  <UserPlus className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                  <h3 className="text-lg font-medium text-gray-900 mb-2">Staff Management</h3>
+                  <p className="text-gray-600 mb-6">
+                    Use the enhanced staff management interface to invite and manage staff members.
+                  </p>
+                  <Button 
+                    onClick={() => setShowStaffModal(true)}
+                    className="bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700"
+                  >
+                    <UserPlus className="h-4 w-4 mr-2" />
+                    Open Staff Management
+                  </Button>
+                  <EnhancedStaffManagement
+                    isOpen={showStaffModal}
+                    onClose={() => setShowStaffModal(false)}
+                    hospitalId={auditSummary?.summary?.hospitalId || ""}
+                  />
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
           {/* Security Testing Tab */}
           <TabsContent value="testing" className="space-y-6">
             <Card>
@@ -341,7 +507,7 @@ export default function AdminDashboard() {
                 <Alert>
                   <AlertTriangle className="h-4 w-4" />
                   <AlertDescription>
-                    Security testing will simulate real attack scenarios. Only run in development/testing environments.
+                    Security testing validates system defenses using controlled scenarios. Only run in development/testing environments.
                   </AlertDescription>
                 </Alert>
                 

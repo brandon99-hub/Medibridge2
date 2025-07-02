@@ -162,7 +162,7 @@ export class CredentialVerificationService {
 
     // Check database revocation status
     try {
-      const revokedCredential = await storage.getCredentialById(credentialId);
+      const revokedCredential = await storage.getCredentialById(parseInt(credentialId));
       if (revokedCredential && revokedCredential.revoked) {
         // Cache for future lookups
         this.revokedCredentials.add(credentialId);

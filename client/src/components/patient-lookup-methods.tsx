@@ -164,12 +164,12 @@ export default function PatientLookupMethods({ onSearch, isLoading }: PatientLoo
         >
           {isLoading ? (
             <>
-              <currentMethod.icon className="h-4 w-4 mr-2 animate-spin" />
+              {currentMethod && <currentMethod.icon className="h-4 w-4 mr-2 animate-spin" />}
               Searching...
             </>
           ) : (
             <>
-              <currentMethod.icon className="h-4 w-4 mr-2" />
+              {currentMethod && <currentMethod.icon className="h-4 w-4 mr-2" />}
               Search Patient
             </>
           )}

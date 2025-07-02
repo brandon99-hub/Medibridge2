@@ -4,7 +4,9 @@ import { storage } from "./storage";
 import { patientWeb3Service } from "./patient-web3-service";
 import { auditService } from "./audit-service";
 import { emailService } from "./email-service";
+import { smsService } from "./sms-service";
 import { nanoid } from 'nanoid';
+import { redisService } from './redis-service';
 
 // Extend session interface
 declare module 'express-session' {
@@ -20,9 +22,6 @@ declare module 'express-session' {
  * Patients authenticate via phone/OTP, DIDs generated automatically
  */
 export function registerSimplifiedPatientRoutes(app: Express): void {
-
-  // In-memory storage for OTP (replace with Redis in production)
-  const otpStore = new Map<string, { code: string; expires: number; method: string }>();
 
   // Utility to ensure patient identity exists
   async function ensurePatientIdentityExists(patientDID: string, phoneNumber?: string) {
@@ -69,13 +68,17 @@ export function registerSimplifiedPatientRoutes(app: Express): void {
       const otpCode = patientWeb3Service.generateOTP();
       const expiresAt = Date.now() + 10 * 60 * 1000; // 10 minutes
       
-      otpStore.set(contact, { code: otpCode, expires: expiresAt, method });
+      // Store OTP in Redis
+      await redisService.storeOTP(contact, { code: otpCode, expires: expiresAt, method });
       
-      // In production, send SMS via Twilio or email via SendGrid
+      // Send OTP via SMS or email
       if (method === "phone") {
-        console.log(`[SMS OTP] ${contact}: ${otpCode}`);
+        await smsService.sendOTPSMS({
+          to: contact,
+          otpCode,
+          expiresInMinutes: 10
+        });
       } else {
-        // Send email OTP using email service
         await emailService.sendOTPEmail({
           to: contact,
           otpCode,
@@ -124,14 +127,13 @@ export function registerSimplifiedPatientRoutes(app: Express): void {
         otpCode: z.string().length(6),
       }).parse(req.body);
       
-      // Verify OTP
-      const storedOtp = otpStore.get(phoneNumber);
+      // Verify OTP from Redis
+      const storedOtp = await redisService.getOTP(phoneNumber);
       if (!storedOtp || storedOtp.code !== otpCode || storedOtp.expires < Date.now()) {
         return res.status(400).json({ error: "Invalid or expired OTP" });
       }
-      
-      // Remove used OTP
-      otpStore.delete(phoneNumber);
+      // Remove used OTP from Redis
+      await redisService.deleteOTP(phoneNumber);
       
       // Try to find existing profile by phone or email
       let patientProfile = await storage.findPatientProfileByEmailOrPhone(
@@ -167,10 +169,16 @@ export function registerSimplifiedPatientRoutes(app: Express): void {
           fullName: "", // Will be set during profile completion
           isProfileComplete: false,
         });
-        console.log(`[INFO] Created patient profile: ${identity.patientDID}`);
-        // Send welcome email if it's an email-based account
+        // Patient profile created successfully
+        // Send welcome message if it's an email-based account
         if (phoneNumber.includes('@')) {
           await emailService.sendWelcomeEmail(phoneNumber, identity.patientDID);
+        } else {
+          // Send welcome SMS for phone-based accounts
+          await smsService.sendWelcomeSMS({
+            to: phoneNumber,
+            patientDID: identity.patientDID
+          });
         }
         // Re-fetch updated profile
         const latestProfile = await storage.getPatientProfileByDID(identity.patientDID);
@@ -339,56 +347,29 @@ export function registerSimplifiedPatientRoutes(app: Express): void {
    */
   app.get("/api/patient/records", async (req, res) => {
     try {
-      console.log("=== PATIENT RECORDS DEBUG START ===");
-      console.log("Session patientDID:", req.session.patientDID);
-      
       if (!req.session.patientDID) {
-        console.log("ERROR: No patientDID in session");
         return res.status(401).json({ error: "Not authenticated" });
       }
 
       const patientProfile = await storage.getPatientProfileByDID(req.session.patientDID);
-      console.log("Patient profile found:", !!patientProfile);
-      if (patientProfile) {
-        console.log("Patient profile details:", {
-          nationalId: patientProfile.nationalId,
-          fullName: patientProfile.fullName,
-          phoneNumber: patientProfile.phoneNumber,
-          patientDID: patientProfile.patientDID
-        });
-      }
       
       if (!patientProfile) {
-        console.log("ERROR: No patient profile found for DID:", req.session.patientDID);
         return res.status(401).json({ error: "Invalid session" });
       }
 
       // Get records by National ID (if available) or DID
       let records = [];
       if (patientProfile.nationalId) {
-        console.log("Searching records by National ID:", patientProfile.nationalId);
         records = await storage.getPatientRecordsByNationalId(patientProfile.nationalId);
-        console.log("Records found by National ID:", records.length);
       } else {
-        console.log("Searching records by DID:", req.session.patientDID);
         records = await storage.getPatientRecordsByDID(req.session.patientDID);
-        console.log("Records found by DID:", records.length);
       }
-
-      console.log("Raw records sample:", records.slice(0, 2).map(r => ({
-        id: r.id,
-        patientDID: r.patientDID,
-        nationalId: r.nationalId,
-        patientName: r.patientName,
-        visitDate: r.visitDate
-      })));
 
       // Get consent records for this patient
       const consentRecords = await storage.getConsentRecordsByPatientId(
         patientProfile.nationalId || req.session.patientDID,
         0 // 0 means all hospitals
       );
-      console.log("Consent records found:", consentRecords.length);
 
       // Format records with consent information
       const formattedRecords = records.map(record => {
@@ -412,9 +393,6 @@ export function registerSimplifiedPatientRoutes(app: Express): void {
           })),
         };
       });
-
-      console.log("Final formatted records count:", formattedRecords.length);
-      console.log("=== PATIENT RECORDS DEBUG END ===");
 
       await auditService.logEvent({
         eventType: "PATIENT_RECORDS_ACCESSED",
@@ -443,7 +421,6 @@ export function registerSimplifiedPatientRoutes(app: Express): void {
       });
 
     } catch (error: any) {
-      console.error("ERROR in patient records endpoint:", error);
       await auditService.logSecurityViolation({
         violationType: "PATIENT_RECORDS_ACCESS_ERROR",
         severity: "medium",

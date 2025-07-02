@@ -31,6 +31,7 @@ interface PatientRecord {
 interface PatientData {
   patientName: string;
   patientDID: string;
+  nationalId?: string;
   recordCount: number;
   records: PatientRecord[];
   hasConsent: boolean;

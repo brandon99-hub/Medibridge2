@@ -2,11 +2,14 @@ import passport from "passport";
 import { Strategy as LocalStrategy } from "passport-local";
 import { Express } from "express";
 import session from "express-session";
+import { createClient } from "redis";
+import { RedisStore } from "connect-redis";
 import { scrypt, randomBytes, timingSafeEqual } from "crypto";
 import { promisify } from "util";
 import { storage } from "./storage";
 import { User as SelectUser } from "@shared/schema";
 import { auditService } from "./audit-service";
+import { redisService } from "./redis-service";
 
 declare global {
   namespace Express {
@@ -16,7 +19,7 @@ declare global {
 
 const scryptAsync = promisify(scrypt);
 
-async function hashPassword(password: string) {
+export async function hashPassword(password: string) {
   const salt = randomBytes(16).toString("hex");
   const buf = (await scryptAsync(password, salt, 64)) as Buffer;
   return `${buf.toString("hex")}.${salt}`;
@@ -29,12 +32,47 @@ async function comparePasswords(supplied: string, stored: string) {
   return timingSafeEqual(hashedBuf, suppliedBuf);
 }
 
-export function setupAuth(app: Express) {
+export async function setupAuth(app: Express) {
+  // Wait for Redis to be ready
+  let redisStore;
+  try {
+    // Wait for Redis connection to be established
+    const isConnected = await redisService.healthCheck();
+    if (!isConnected) {
+      console.warn('[AUTH] Redis not available, falling back to memory store');
+      redisStore = undefined;
+    } else {
+      // Create a dedicated Redis client for sessions to avoid conflicts
+      const sessionRedisClient = createClient({
+        url: `redis://${process.env.REDIS_HOST || 'localhost'}:${process.env.REDIS_PORT || '6379'}`,
+        password: process.env.REDIS_PASSWORD,
+        database: parseInt(process.env.REDIS_DB || '0'),
+      });
+      
+      await sessionRedisClient.connect();
+      
+      console.log('[AUTH] Using Redis session store');
+      redisStore = new RedisStore({
+        client: sessionRedisClient,
+        prefix: "medibridge:sess:",
+        ttl: 3600, // 1 hour
+      });
+    }
+  } catch (error) {
+    console.error('[AUTH] Failed to initialize Redis session store:', error);
+    redisStore = undefined; // Fallback to memory store
+  }
+
   const sessionSettings: session.SessionOptions = {
     secret: process.env.SESSION_SECRET!,
     resave: false,
     saveUninitialized: false,
-    store: storage.sessionStore,
+    store: redisStore, // Will use memory store if Redis is not available
+    cookie: {
+      secure: process.env.NODE_ENV === 'production',
+      httpOnly: true,
+      maxAge: 3600000, // 1 hour
+    },
   };
 
   app.set("trust proxy", 1);
@@ -56,6 +94,12 @@ export function setupAuth(app: Express) {
   passport.serializeUser((user, done) => done(null, user.id));
   passport.deserializeUser(async (id: number, done) => {
     const user = await storage.getUser(id);
+    if (user) {
+      // If user comes from DB with is_admin, map it to isAdmin
+      if ('is_admin' in user) {
+        user.isAdmin = user.isAdmin ?? user.is_admin ?? false;
+      }
+    }
     done(null, user);
   });
 

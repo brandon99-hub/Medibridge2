@@ -1,4 +1,13 @@
 import { auditService } from "./audit-service";
+import { NFTStorage, File } from "nft.storage";
+import PinataClient from '@pinata/sdk';
+
+const nftStorageToken = process.env.NFT_STORAGE_TOKEN;
+const pinataApiKey = process.env.PINATA_API_KEY;
+const pinataSecretApiKey = process.env.PINATA_SECRET_API_KEY;
+
+const nftClient = nftStorageToken ? new NFTStorage({ token: nftStorageToken }) : undefined;
+const pinata = (pinataApiKey && pinataSecretApiKey) ? new PinataClient(pinataApiKey, pinataSecretApiKey) : undefined;
 
 /**
  * IPFS Redundancy Service
@@ -7,9 +16,9 @@ import { auditService } from "./audit-service";
  */
 export class IPFSRedundancyService {
   private static instance: IPFSRedundancyService;
-  private primaryGateway = "https://web3.storage";
+  private primaryGateway = "nft.storage";
   private secondaryGateways = [
-    "https://gateway.pinata.cloud",
+    "pinata",
     "https://ipfs.infura.io",
     "https://cloudflare-ipfs.com",
   ];
@@ -24,7 +33,7 @@ export class IPFSRedundancyService {
 
   /**
    * Store content with multi-location pinning
-   * Files are pinned on both Web3.storage and secondary nodes for high availability
+   * Files are pinned on both nft.storage and secondary nodes for high availability
    */
   async storeWithRedundancy(
     content: string,
@@ -35,89 +44,50 @@ export class IPFSRedundancyService {
     let primaryCID: string | null = null;
 
     try {
-      // Attempt primary storage (Web3.storage)
-      try {
-        const primaryResult = await this.storeToPrimary(content, metadata);
-        primaryCID = primaryResult.cid;
-        results.push({
-          gateway: "web3.storage",
-          success: true,
-          cid: primaryCID,
-          pinned: true,
-        });
-
-        await auditService.logEvent({
-          eventType: "IPFS_PRIMARY_STORAGE",
-          actorType: "SYSTEM",
-          actorId: "ipfs_service",
-          targetType: "RECORD",
-          targetId: primaryCID,
-          action: "STORE",
-          outcome: "SUCCESS",
-          metadata: { patientDID, size: content.length },
-          severity: "info",
-        });
-      } catch (error: any) {
-        results.push({
-          gateway: "web3.storage",
-          success: false,
-          error: error.message,
-        });
-        
-        await auditService.logSecurityViolation({
-          violationType: "PRIMARY_IPFS_FAILURE",
-          severity: "medium",
-          details: { error: error.message, patientDID },
-        });
-      }
-
-      // Attempt secondary storage (parallel pinning)
-      const secondaryPromises = this.secondaryGateways.map(async (gateway) => {
-        try {
-          const result = await this.storeToSecondary(content, gateway, primaryCID);
-          results.push({
-            gateway,
-            success: true,
-            cid: result.cid,
-            pinned: true,
-          });
-          return result;
-        } catch (error: any) {
-          results.push({
-            gateway,
-            success: false,
-            error: error.message,
-          });
-          return null;
-        }
+      // Primary storage: nft.storage
+      if (!nftClient) throw new Error('NFT_STORAGE_TOKEN not set');
+      const file = new File([Buffer.from(content, 'utf8')], metadata.filename || 'record.enc');
+      primaryCID = await nftClient.storeBlob(file);
+      results.push({
+        gateway: "nft.storage",
+        success: true,
+        cid: primaryCID,
+        pinned: true,
+      });
+      await auditService.logEvent({
+        eventType: "IPFS_PRIMARY_STORAGE",
+        actorType: "SYSTEM",
+        actorId: "ipfs_service",
+        targetType: "RECORD",
+        targetId: primaryCID,
+        action: "STORE",
+        outcome: "SUCCESS",
+        metadata: { patientDID, size: content.length },
+        severity: "info",
       });
 
-      // Wait for secondary storage attempts
-      const secondaryResults = await Promise.allSettled(secondaryPromises);
-      const successfulSecondaries = secondaryResults
-        .filter(result => result.status === 'fulfilled' && result.value)
-        .length;
-
-      // Attempt local hospital node pinning
-      if (primaryCID) {
+      // Secondary storage: Pinata (if available)
+      if (pinata) {
         try {
-          await this.pinToLocalNode(primaryCID);
+          const pinataResult = await pinata.pinJSONToIPFS({ data: content });
           results.push({
-            gateway: "local_hospital_node",
+            gateway: "pinata",
             success: true,
-            cid: primaryCID,
+            cid: pinataResult.IpfsHash,
             pinned: true,
           });
         } catch (error: any) {
           results.push({
-            gateway: "local_hospital_node",
+            gateway: "pinata",
             success: false,
             error: error.message,
           });
         }
       }
 
-      // Evaluate storage success
+      // Optionally, add logic for Infura/Cloudflare/local node if you want real pinning there
+      // For now, just log the attempt
+
       const totalSuccessful = results.filter(r => r.success).length;
       const redundancyLevel = this.calculateRedundancyLevel(totalSuccessful);
 
@@ -164,13 +134,19 @@ export class IPFSRedundancyService {
    * Attempts multiple gateways until successful retrieval
    */
   async retrieveWithFailover(cid: string): Promise<string> {
-    const gateways = [this.primaryGateway, ...this.secondaryGateways, this.localGateway];
+    const gateways = [
+      `https://ipfs.io/ipfs/${cid}`,
+      `https://gateway.pinata.cloud/ipfs/${cid}`,
+      `https://cloudflare-ipfs.com/ipfs/${cid}`,
+      this.localGateway ? `${this.localGateway}/ipfs/${cid}` : null
+    ].filter((g): g is string => typeof g === 'string');
     let lastError: Error | null = null;
 
     for (const gateway of gateways) {
       try {
-        const content = await this.retrieveFromGateway(cid, gateway);
-        
+        const response = await fetch(gateway);
+        if (!response.ok) throw new Error(`Failed to fetch from ${gateway}`);
+        const content = await response.text();
         await auditService.logEvent({
           eventType: "IPFS_RETRIEVAL_SUCCESS",
           actorType: "SYSTEM",
@@ -182,7 +158,6 @@ export class IPFSRedundancyService {
           metadata: { gateway, contentSize: content.length },
           severity: "info",
         });
-
         return content;
       } catch (error: any) {
         lastError = error;
@@ -232,94 +207,32 @@ export class IPFSRedundancyService {
   }
 
   /**
-   * Store to primary IPFS gateway (Web3.storage)
-   */
-  private async storeToPrimary(content: string, metadata: any): Promise<{ cid: string }> {
-    // Simulate Web3.storage API call
-    // In production, use actual Web3.storage client
-    const cid = this.generateCID(content);
-    
-    // Simulate network delay
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    
-    // Simulate potential failure (5% chance)
-    if (Math.random() < 0.05) {
-      throw new Error("Web3.storage temporarily unavailable");
-    }
-
-    return { cid };
-  }
-
-  /**
-   * Store to secondary IPFS gateway
-   */
-  private async storeToSecondary(
-    content: string, 
-    gateway: string, 
-    primaryCID?: string | null
-  ): Promise<{ cid: string }> {
-    // In production, pin existing CID to secondary node
-    const cid = primaryCID || this.generateCID(content);
-    
-    // Simulate pinning delay
-    await new Promise(resolve => setTimeout(resolve, 2000));
-    
-    // Simulate potential failure (10% chance)
-    if (Math.random() < 0.1) {
-      throw new Error(`${gateway} pinning failed`);
-    }
-
-    return { cid };
-  }
-
-  /**
-   * Pin to local hospital IPFS node
-   */
-  private async pinToLocalNode(cid: string): Promise<void> {
-    // In production, use IPFS HTTP API to pin content
-    await new Promise(resolve => setTimeout(resolve, 500));
-    
-    // Simulate potential failure (15% chance - local nodes less reliable)
-    if (Math.random() < 0.15) {
-      throw new Error("Local IPFS node unavailable");
-    }
-  }
-
-  /**
-   * Retrieve content from specific gateway
-   */
-  private async retrieveFromGateway(cid: string, gateway: string): Promise<string> {
-    // Simulate gateway retrieval
-    await new Promise(resolve => setTimeout(resolve, 800));
-    
-    // Simulate potential failure (20% chance per gateway)
-    if (Math.random() < 0.2) {
-      throw new Error(`${gateway} retrieval failed`);
-    }
-
-    return `Retrieved content for ${cid} from ${gateway}`;
-  }
-
-  /**
    * Check if content is available on specific gateway
    */
   private async checkGatewayAvailability(cid: string, gateway: string): Promise<boolean> {
     try {
-      // In production, make HEAD request to check availability
-      await new Promise(resolve => setTimeout(resolve, 300));
-      return Math.random() > 0.1; // 90% availability simulation
+      // Make a real HTTP HEAD request to check availability
+      let url = gateway;
+      if (!gateway.startsWith('http')) {
+        // If gateway is a label (e.g., 'nft.storage', 'pinata'), map to a real URL
+        switch (gateway) {
+          case 'nft.storage':
+            url = `https://ipfs.io/ipfs/${cid}`;
+            break;
+          case 'pinata':
+            url = `https://gateway.pinata.cloud/ipfs/${cid}`;
+            break;
+          default:
+            url = `https://ipfs.io/ipfs/${cid}`;
+        }
+      } else {
+        url = `${gateway}/ipfs/${cid}`;
+      }
+      const response = await fetch(url, { method: 'HEAD' });
+      return response.status === 200;
     } catch {
       return false;
     }
-  }
-
-  /**
-   * Generate deterministic CID for content
-   */
-  private generateCID(content: string): string {
-    const crypto = require('crypto');
-    const hash = crypto.createHash('sha256').update(content).digest('hex');
-    return `bafybei${hash.substring(0, 52)}`;
   }
 
   /**
@@ -327,8 +240,8 @@ export class IPFSRedundancyService {
    */
   private calculateRedundancyLevel(successfulNodes: number): RedundancyLevel {
     if (successfulNodes >= 3) return 'HIGH';
-    if (successfulNodes >= 2) return 'MEDIUM';
-    if (successfulNodes >= 1) return 'LOW';
+    if (successfulNodes === 2) return 'MEDIUM';
+    if (successfulNodes === 1) return 'LOW';
     return 'NONE';
   }
 
@@ -337,10 +250,11 @@ export class IPFSRedundancyService {
    */
   private getRecommendedAction(level: RedundancyLevel): string {
     switch (level) {
-      case 'HIGH': return 'Content safely stored with high redundancy';
-      case 'MEDIUM': return 'Content stored but consider adding more backup nodes';
-      case 'LOW': return 'WARNING: Low redundancy - content at risk if single node fails';
-      case 'NONE': return 'CRITICAL: Storage failed - content not preserved';
+      case 'HIGH': return 'No action needed';
+      case 'MEDIUM': return 'Consider re-pinning to more nodes';
+      case 'LOW': return 'Pin to more nodes for redundancy';
+      case 'NONE': return 'Storage failed, retry immediately';
+      default: return '';
     }
   }
 

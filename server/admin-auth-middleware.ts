@@ -11,6 +11,7 @@ import type { Request, Response, NextFunction } from 'express';
 // }
 
 export function requireAdminAuth(req: Request, res: Response, next: NextFunction) {
+  console.log("ADMIN CHECK req.user:", req.user);
   if (!req.isAuthenticated() || !req.user) {
     // This check might be redundant if all routes using this are already behind a general isAuthenticated check
     // but it's good for explicitness.

@@ -5,7 +5,7 @@ import CryptoJS from "crypto-js";
 import { v4 as uuidv4 } from "uuid";
 import PinataClient from '@pinata/sdk';
 import fetch from 'node-fetch';
-import { createJWT, verifyJWT, ES256KSigner, Verifier } from 'did-jwt';
+import { createJWT, verifyJWT, ES256KSigner } from 'did-jwt';
 import { getResolver as getKeyResolver } from 'key-did-resolver';
 import { secureKeyVault } from "./secure-key-vault"; // Import SecureKeyVault
 
@@ -82,7 +82,7 @@ export class VCService {
     privateKeyHex: string, // Issuer's private key in hex format
     expiresInHours?: number // Optional expiration in hours
   ): Promise<string> { // Returns the JWT string
-    const signer = ES256KSigner(privateKeyHex);
+    const signer = ES256KSigner(Buffer.from(privateKeyHex, 'hex'));
 
     const vcPayload = {
       '@context': [
@@ -113,7 +113,7 @@ export class VCService {
     // 'iss' (issuer) of the JWT will be the issuer's DID.
     const jwt = await createJWT(
       { vc: vcPayload, sub: subjectDID },
-      { signer, did: issuerDID },
+      { signer, issuer: issuerDID },
       { ...jwtOptions, header: { alg: 'ES256K', typ: 'JWT' } }
     );
 
@@ -125,7 +125,7 @@ export class VCService {
     jwt: string,
     expectedIssuer?: string, // Optional: verify against a specific issuer DID
     expectedSubject?: string // Optional: verify against a specific subject DID
-  ): Promise<{ isValid: boolean; verifiedJwt?: Verifier.VerifiedJwt; error?: string }> {
+  ): Promise<{ isValid: boolean; verifiedJwt?: any; error?: string }> {
     try {
       const keyResolver = getKeyResolver();
       const resolver = new Resolver({ ...keyResolver });
@@ -286,7 +286,7 @@ export class ConsentService {
     jwtVc: string,
     expectedPatientDID?: string, // Optional: verify if this patient issued it (issuer of JWT/VC)
     expectedRequesterId?: string // Optional: verify if this hospital was the subject of JWT/VC
-  ): Promise<{ isValid: boolean; verifiedJwt?: Verifier.VerifiedJwt; error?: string }> {
+  ): Promise<{ isValid: boolean; verifiedJwt?: any; error?: string }> {
     // vcService.verifyCredential now returns an object { isValid, verifiedJwt, error }
     const verificationResult = await this.vcService.verifyCredential(jwtVc, expectedPatientDID, expectedRequesterId);
 

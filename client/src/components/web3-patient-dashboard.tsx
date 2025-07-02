@@ -47,7 +47,12 @@ export default function Web3PatientDashboard() {
     queryKey: ["/api/web3/patient-dashboard", patientIdentity?.did],
     queryFn: getQueryFn({ on401: "returnNull" }),
     enabled: !!patientIdentity?.did,
-  });
+  }) as { data: {
+    medicalRecords?: number;
+    verifiableCredentials?: number;
+    activeConsents?: number;
+    totalConsents?: number;
+  } | undefined };
 
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text);
@@ -266,7 +271,7 @@ export default function Web3PatientDashboard() {
                 <div className="flex items-center space-x-2">
                   <XCircle className="h-8 w-8 text-slate-600" />
                   <div>
-                    <p className="text-2xl font-bold">{dashboardData.totalConsents - dashboardData.activeConsents}</p>
+                    <p className="text-2xl font-bold">{(dashboardData.totalConsents || 0) - (dashboardData.activeConsents || 0)}</p>
                     <p className="text-sm text-slate-600">Revoked</p>
                   </div>
                 </div>
