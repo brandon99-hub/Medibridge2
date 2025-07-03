@@ -44,7 +44,7 @@ export async function setupAuth(app: Express) {
     } else {
       // Create a dedicated Redis client for sessions to avoid conflicts
       const sessionRedisClient = createClient({
-        url: `redis://${process.env.REDIS_HOST || 'localhost'}:${process.env.REDIS_PORT || '6379'}`,
+        url: process.env.REDIS_URL || `redis://${process.env.REDIS_HOST || 'localhost'}:${process.env.REDIS_PORT || '6379'}`,
         password: process.env.REDIS_PASSWORD,
         database: parseInt(process.env.REDIS_DB || '0'),
       });
