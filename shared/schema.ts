@@ -391,3 +391,41 @@ export type InsertZKPVerification = z.infer<typeof insertZKPVerificationSchema>;
 export type ZKPVerification = typeof zkpVerifications.$inferSelect;
 export type InsertHospitalStaffInvitation = typeof hospitalStaffInvitations.$inferInsert;
 export type HospitalStaffInvitation = typeof hospitalStaffInvitations.$inferSelect;
+
+// USSD Sessions table for tracking user sessions
+export const ussdSessions = pgTable("ussd_sessions", {
+  id: serial("id").primaryKey(),
+  sessionId: text("session_id").notNull().unique(),
+  phoneNumber: text("phone_number").notNull(),
+  language: text("language").notNull().default('en'), // 'en' or 'sw'
+  currentStep: text("current_step"), // Current menu step
+  sessionData: jsonb("session_data"), // Store user selections
+  startedAt: timestamp("started_at").defaultNow(),
+  lastActivityAt: timestamp("last_activity_at").defaultNow(),
+  isActive: boolean("is_active").default(true).notNull(),
+  expiresAt: timestamp("expires_at").notNull(), // Session expiry
+});
+
+// Clinic codes table for proof renewal validation
+export const clinicCodes = pgTable("clinic_codes", {
+  id: serial("id").primaryKey(),
+  clinicCode: text("clinic_code").notNull().unique(),
+  clinicName: text("clinic_name").notNull(),
+  location: text("location"),
+  isActive: boolean("is_active").default(true).notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// USSD Analytics table for tracking usage
+export const ussdAnalytics = pgTable("ussd_analytics", {
+  id: serial("id").primaryKey(),
+  sessionId: text("session_id").notNull(),
+  phoneNumber: text("phone_number").notNull(),
+  eventType: text("event_type").notNull(), // 'PROOF_SHARED', 'EMERGENCY_PROOF', 'PROOF_RENEWED', 'FEEDBACK_SUBMITTED'
+  eventData: jsonb("event_data"), // Additional event data
+  language: text("language").notNull().default('en'),
+  timestamp: timestamp("timestamp").defaultNow(),
+  success: boolean("success").default(true).notNull(),
+  errorMessage: text("error_message"),
+});
