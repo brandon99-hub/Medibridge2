@@ -1,18 +1,20 @@
 import Redis from 'ioredis';
 
 // Redis configuration
-const redisConfig = {
-  host: process.env.REDIS_HOST || 'localhost',
-  port: parseInt(process.env.REDIS_PORT || '6379'),
-  password: process.env.REDIS_PASSWORD,
-  db: parseInt(process.env.REDIS_DB || '0'),
-  retryDelayOnFailover: 100,
-  maxRetriesPerRequest: 3,
-  lazyConnect: true,
-  keepAlive: 30000,
-  connectTimeout: 10000,
-  commandTimeout: 5000,
-};
+const redisConfig = process.env.REDIS_URL
+  ? process.env.REDIS_URL
+  : {
+      host: process.env.REDIS_HOST || 'localhost',
+      port: parseInt(process.env.REDIS_PORT || '6379'),
+      password: process.env.REDIS_PASSWORD,
+      db: parseInt(process.env.REDIS_DB || '0'),
+      retryDelayOnFailover: 100,
+      maxRetriesPerRequest: 3,
+      lazyConnect: true,
+      keepAlive: 30000,
+      connectTimeout: 10000,
+      commandTimeout: 5000,
+    };
 
 // Cache key prefixes for organization
 const CACHE_KEYS = {
@@ -60,7 +62,11 @@ class RedisService {
 
   private async initializeRedis() {
     try {
-      this.redis = new Redis(redisConfig);
+      if (typeof redisConfig === 'string') {
+        this.redis = new Redis(redisConfig);
+      } else {
+        this.redis = new Redis(redisConfig);
+      }
       
       this.redis.on('connect', () => {
         console.log('[REDIS] Connected to Redis server');
