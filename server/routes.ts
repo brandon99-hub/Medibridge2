@@ -7,7 +7,7 @@ import { registerWeb3Routes } from "./web3-routes";
 import { registerSimplifiedPatientRoutes } from "./simplified-patient-routes";
 import { registerSecurityTestingRoutes } from "./security-testing-routes";
 import { registerFilecoinRoutes } from "./filecoin-routes";
-import { registerZKPRoutes } from "./zkp-routes";
+import { registerZKMedPassRoutes } from "./zk-medpass-routes";
 import staffManagementRoutes from "./staff-management-routes";
 import { patientLookupService } from "./patient-lookup-service";
 import { emergencyConsentService } from "./emergency-consent-service"; // Import EmergencyConsentService
@@ -65,8 +65,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Setup Filecoin routes
   registerFilecoinRoutes(app);
 
-  // Setup ZKP routes
-  registerZKPRoutes(app);
+  // Setup ZK-MedPass routes
+  registerZKMedPassRoutes(app);
 
   // Setup Staff Management routes
   app.use('/api/staff', staffManagementRoutes);
@@ -94,8 +94,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         patientDID: patientProfile?.patientDID || null,
         recordType: patientProfile ? "web3" : "traditional",
         submittedBy: user.id,
+        hospital_id: user.hospital_id, // Ensure hospital_id is always set
       };
       
+      console.log("User in /api/submit_record:", user);
+      console.log("Record data to insert:", recordData);
       const record = await storage.createPatientRecord(recordData);
 
       res.status(201).json({ 
@@ -202,6 +205,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ message: "Only Hospital B can request consent" });
       }
 
+      console.log("Consent request user object:", user);
+      console.log("Consent request hospital_id value:", user.hospital_id);
+      if (!user.hospital_id) {
+        return res.status(400).json({ error: "User is missing hospital_id. Cannot create consent request." });
+      }
+
       const { nationalId, reason } = z.object({ 
         nationalId: z.string(),
         reason: z.string().optional(),
@@ -229,6 +238,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         status: hasExistingConsent ? "renewal" : "new",
         requestedAt: new Date(),
         consentType: consentType,
+        hospital_id: user.hospital_id, // Ensure hospital_id is included
       });
 
       await auditService.logEvent({
@@ -482,10 +492,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const { patientDID } = z.object({ patientDID: z.string() }).parse(req.body);
       
-      // Get Web3 records by DID
-      const records = await storage.getPatientRecordsByDID(patientDID);
+      console.log('[DEBUG] Web3 get-records: Searching for patientDID:', patientDID);
       
-      if (records.length === 0) {
+      // Get Web3 records by DID - filter for recordType: 'web3' only
+      const web3Records = await storage.getWeb3PatientRecordsByDID(patientDID);
+      console.log('[DEBUG] Web3 get-records: Web3 records found:', web3Records.length);
+      
+      if (web3Records.length === 0) {
         return res.status(404).json({ message: "No Web3 records found for this patient" });
       }
 
@@ -497,7 +510,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ 
           message: "Patient consent required to access Web3 records",
           patientDID,
-          recordCount: records.length,
+          recordCount: web3Records.length,
           requiresConsent: true
         });
       }
@@ -505,9 +518,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Return full records if consent is granted
       res.json({
         patientDID,
-        recordCount: records.length,
+        recordCount: web3Records.length,
         hasConsent: true,
-        records: records.map(record => ({
+        records: web3Records.map(record => ({
           id: record.id,
           visitDate: record.visitDate,
           visitType: record.visitType,
@@ -1042,25 +1055,39 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const staffIds = staff.map(s => s.staffId);
       const uniqueIds = new Set(staffIds);
       if (uniqueIds.size !== staffIds.length) {
-        return res.status(400).json({ error: "Duplicate staff IDs are not allowed" });
+        return res.status(400).json({ error: "Duplicate staff IDs are not allowed. Each staff member must have a unique staff ID." });
       }
 
-      // Create staff records
-      const createdStaff = await Promise.all(
-        staff.map(async (staffMember) => {
-          return await storage.createHospitalStaff({
-            staffId: staffMember.staffId,
-            name: staffMember.name,
-            role: staffMember.role,
-            licenseNumber: staffMember.licenseNumber,
-            department: staffMember.department,
-            adminLicense: adminLicense,
-            hospitalId: hospitalId, // Add hospitalId for multi-tenancy
-            isActive: staffMember.isActive,
-            isOnDuty: staffMember.isOnDuty,
-          });
-        })
-      );
+      // Create staff records (do NOT set adminLicense)
+      let createdStaff;
+      try {
+        createdStaff = await Promise.all(
+          staff.map(async (staffMember) => {
+            return await storage.createHospitalStaff({
+              staffId: staffMember.staffId,
+              name: staffMember.name,
+              role: staffMember.role,
+              licenseNumber: staffMember.licenseNumber,
+              department: staffMember.department,
+              hospitalId: hospitalId, // Add hospitalId for multi-tenancy
+              isActive: staffMember.isActive,
+              isOnDuty: staffMember.isOnDuty,
+            });
+          })
+        );
+      } catch (err: any) {
+        if (err.code === '23505' && err.detail && err.detail.includes('staff_id')) {
+          // Duplicate staffId error
+          const match = err.detail.match(/\(staff_id\)=\(([^)]+)\)/);
+          const duplicateId = match ? match[1] : undefined;
+          return res.status(400).json({ error: `Duplicate staff ID: ${duplicateId || 'unknown'}. Each staff member must have a unique staff ID.` });
+        }
+        // Other DB error
+        return res.status(500).json({ error: `Database error: ${err.message || 'Unknown error'}` });
+      }
+
+      // Update admin user's adminLicense
+      await storage.updateUser(req.user!.id, { adminLicense });
 
       // Log the event
       await auditService.logEvent({
@@ -1084,8 +1111,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         message: "Staff profile completed successfully",
         staff: createdStaff,
       });
-    } catch (error) {
-      next(error);
+    } catch (error: any) {
+      return res.status(500).json({ error: `Failed to complete staff profile: ${error.message}` });
     }
   });
 
@@ -1116,42 +1143,55 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const staffIds = staff.map(s => s.staffId);
       const uniqueIds = new Set(staffIds);
       if (uniqueIds.size !== staffIds.length) {
-        return res.status(400).json({ error: "Duplicate staff IDs are not allowed" });
+        return res.status(400).json({ error: "Duplicate staff IDs are not allowed. Each staff member must have a unique staff ID." });
       }
 
       // Get existing staff for this hospital
       const existingStaff = await storage.getHospitalStaffByHospitalId(hospitalId);
       
-      // Update or create staff records
-      const updatedStaff = await Promise.all(
-        staff.map(async (staffMember) => {
-          if (staffMember.id) {
-            // Update existing staff
-            return await storage.updateHospitalStaff(staffMember.id, {
-              name: staffMember.name,
-              role: staffMember.role,
-              licenseNumber: staffMember.licenseNumber,
-              department: staffMember.department,
-              adminLicense: adminLicense,
-              isActive: staffMember.isActive,
-              isOnDuty: staffMember.isOnDuty,
-            });
-          } else {
-            // Create new staff
-            return await storage.createHospitalStaff({
-              staffId: staffMember.staffId,
-              name: staffMember.name,
-              role: staffMember.role,
-              licenseNumber: staffMember.licenseNumber,
-              department: staffMember.department,
-              adminLicense: adminLicense,
-              hospitalId: hospitalId, // Add hospitalId for multi-tenancy
-              isActive: staffMember.isActive,
-              isOnDuty: staffMember.isOnDuty,
-            });
-          }
-        })
-      );
+      // Update or create staff records (do NOT set adminLicense)
+      let updatedStaff;
+      try {
+        updatedStaff = await Promise.all(
+          staff.map(async (staffMember) => {
+            if (staffMember.id) {
+              // Update existing staff
+              return await storage.updateHospitalStaff(staffMember.id, {
+                name: staffMember.name,
+                role: staffMember.role,
+                licenseNumber: staffMember.licenseNumber,
+                department: staffMember.department,
+                isActive: staffMember.isActive,
+                isOnDuty: staffMember.isOnDuty,
+              });
+            } else {
+              // Create new staff
+              return await storage.createHospitalStaff({
+                staffId: staffMember.staffId,
+                name: staffMember.name,
+                role: staffMember.role,
+                licenseNumber: staffMember.licenseNumber,
+                department: staffMember.department,
+                hospitalId: hospitalId, // Add hospitalId for multi-tenancy
+                isActive: staffMember.isActive,
+                isOnDuty: staffMember.isOnDuty,
+              });
+            }
+          })
+        );
+      } catch (err: any) {
+        if (err.code === '23505' && err.detail && err.detail.includes('staff_id')) {
+          // Duplicate staffId error
+          const match = err.detail.match(/\(staff_id\)=\(([^)]+)\)/);
+          const duplicateId = match ? match[1] : undefined;
+          return res.status(400).json({ error: `Duplicate staff ID: ${duplicateId || 'unknown'}. Each staff member must have a unique staff ID.` });
+        }
+        // Other DB error
+        return res.status(500).json({ error: `Database error: ${err.message || 'Unknown error'}` });
+      }
+
+      // Update admin user's adminLicense
+      await storage.updateUser(req.user!.id, { adminLicense });
 
       // Log the event
       await auditService.logEvent({
@@ -1175,8 +1215,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         message: "Staff profile updated successfully",
         staff: updatedStaff,
       });
-    } catch (error) {
-      next(error);
+    } catch (error: any) {
+      console.error('Full error in update-staff-profile:', error);
+      console.error('Error stack:', error.stack);
+      return res.status(500).json({ error: `Failed to update staff profile: ${error.message}` });
     }
   });
 

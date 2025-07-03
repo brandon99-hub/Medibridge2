@@ -17,6 +17,8 @@ export const users = pgTable("users", {
   invitationExpiresAt: timestamp("invitation_expires_at"),
   passwordChangedAt: timestamp("password_changed_at"),
   isInvitationActive: boolean("is_invitation_active").default(false),
+  hospital_id: integer("hospital_id"),
+  adminLicense: text("admin_license"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -31,6 +33,7 @@ export const patientProfiles = pgTable("patient_profiles", {
   isProfileComplete: boolean("is_profile_complete").default(false), // Whether National ID has been provided
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
+  hospital_id: integer("hospital_id"),
 });
 
 export const patientRecords = pgTable("patient_records", {
@@ -53,6 +56,7 @@ export const patientRecords = pgTable("patient_records", {
   recordType: text("record_type").default("traditional"), // "traditional" or "web3"
   storageCost: decimal("storage_cost", { precision: 20, scale: 8 }).default("0"), // Storage cost in FIL
   storageMetadata: jsonb("storage_metadata"), // Additional storage metadata
+  hospital_id: integer("hospital_id").notNull(),
 });
 
 export const consentRecords = pgTable("consent_records", {
@@ -63,6 +67,7 @@ export const consentRecords = pgTable("consent_records", {
   consentGrantedBy: text("consent_granted_by").notNull(),
   accessedAt: timestamp("accessed_at").defaultNow(),
   consent_type: text("consent_type").notNull().default('traditional'),
+  hospital_id: integer("hospital_id").notNull(),
 });
 
 // Filecoin deals table
@@ -122,7 +127,6 @@ export const hospitalStaff = pgTable("hospital_staff", {
   role: text("role").notNull(), // 'ADMIN', 'PHYSICIAN', 'SURGEON', 'EMERGENCY_DOCTOR', 'CHIEF_RESIDENT'
   licenseNumber: text("license_number").notNull(),
   department: text("department").notNull(),
-  adminLicense: text("admin_license"), // Optional - only for admin role
   hospitalId: text("hospital_id").notNull(), // Link to hospital for multi-tenancy
   isActive: boolean("is_active").default(true).notNull(),
   isOnDuty: boolean("is_on_duty").default(false).notNull(),
@@ -281,6 +285,7 @@ export const insertPatientRecordSchema = createInsertSchema(patientRecords).omit
   recordType: true,
   storageCost: true,
   storageMetadata: true,
+  hospital_id: true,
 });
 
 export const insertConsentRecordSchema = createInsertSchema(consentRecords).omit({
@@ -336,6 +341,27 @@ export const insertZKPVerificationSchema = createInsertSchema(zkpVerifications).
   id: true,
   verifiedAt: true,
 });
+
+// Feedback table for ZK-MedPass airtime rewards
+export const feedback = pgTable("feedback", {
+  id: serial("id").primaryKey(),
+  phoneNumber: text("phone_number").notNull(),
+  rating: integer("rating").notNull(),
+  feedback: text("feedback"),
+  submittedAt: timestamp("submitted_at").defaultNow(),
+  airtimeSent: boolean("airtime_sent").default(false).notNull(),
+  airtimeAmount: integer("airtime_amount").default(0).notNull(),
+});
+
+export const insertFeedbackSchema = createInsertSchema(feedback).omit({
+  id: true,
+  submittedAt: true,
+  airtimeSent: true,
+  airtimeAmount: true,
+});
+
+export type Feedback = typeof feedback.$inferSelect;
+export type InsertFeedback = typeof feedback.$inferInsert;
 
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;

@@ -40,8 +40,16 @@ export class PatientLookupService {
 
       // Find patient identity by phone number
       const patientIdentity = await storage.getPatientIdentityByPhone(normalizedPhone);
+      console.log('[DEBUG] Patient lookup by phone:', normalizedPhone, 'Found identity:', patientIdentity ? patientIdentity.did : 'NOT FOUND');
       
+      // If no identity found by phone, check patient profiles by phone number
+      let patientProfile = null;
       if (!patientIdentity) {
+        patientProfile = await storage.getPatientProfileByPhone(normalizedPhone);
+        console.log('[DEBUG] Patient lookup by phone: Found profile by phone:', patientProfile ? patientProfile.patientDID : 'NOT FOUND');
+      }
+      
+      if (!patientIdentity && !patientProfile) {
         const result: PatientSearchResult = {
           found: false,
           patientDID: undefined,
@@ -70,15 +78,21 @@ export class PatientLookupService {
         return result;
       }
 
+      // Use the DID from either patientIdentity or patientProfile
+      const patientDID = patientIdentity?.did || patientProfile?.patientDID;
+      if (!patientDID) {
+        throw new Error("No patient DID found");
+      }
+
       // Get patient records count and summary
-      const recordsSummary = await storage.getPatientRecordsSummary(patientIdentity.did);
+      const recordsSummary = await storage.getPatientRecordsSummary(patientDID);
 
       await auditService.logEvent({
         eventType: "PATIENT_SEARCH_SUCCESS",
         actorType: "HOSPITAL",
         actorId: searchingHospitalId,
         targetType: "PATIENT",
-        targetId: patientIdentity.did,
+        targetId: patientDID,
         action: "SEARCH",
         outcome: "SUCCESS",
         metadata: {
@@ -90,19 +104,19 @@ export class PatientLookupService {
       });
 
       // Try to get patient profile for name
-      let patientProfile = null;
+      let patientProfileResult = null;
       try {
-        patientProfile = await storage.getPatientProfileByDID(patientIdentity.did);
+        patientProfileResult = await storage.getPatientProfileByDID(patientDID);
       } catch {}
 
       const result: PatientSearchResult = {
         found: true,
-        patientDID: patientIdentity.did,
+        patientDID: patientDID,
         patientInfo: {
-          name: patientProfile?.fullName || "",
+          name: patientProfileResult?.fullName || "",
           phoneNumber: normalizedPhone,
-          nationalId: patientProfile?.nationalId || undefined,
-          registrationDate: patientIdentity.createdAt ? new Date(patientIdentity.createdAt).toISOString() : undefined,
+          nationalId: patientProfileResult?.nationalId || undefined,
+          registrationDate: patientIdentity?.createdAt ? new Date(patientIdentity.createdAt).toISOString() : undefined,
         },
         recordsSummary,
         searchMethod: "phone",

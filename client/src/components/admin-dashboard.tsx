@@ -28,6 +28,148 @@ import { useLocation } from "wouter";
 import { ArrowLeft } from "lucide-react";
 import EnhancedStaffManagement from "@/components/enhanced-staff-management";
 
+// ZK-MedPass Analytics Component
+function ZKMedPassAnalytics() {
+  const { data: analytics, isLoading } = useQuery<any>({
+    queryKey: ['/api/zk-medpass/analytics'],
+    queryFn: async () => apiRequest("GET", "/api/zk-medpass/analytics").then(res => res.json()),
+    refetchInterval: 30000, // Refresh every 30 seconds
+  });
+
+  const analyticsData = analytics?.analytics || {
+    totalProofs: 0,
+    activeProofs: 0,
+    expiringProofs: 0,
+    proofTypes: {
+      hiv: 0,
+      vaccination: 0,
+      insurance: 0
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* Overview Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Total ZK Proofs</CardTitle>
+            <Shield className="h-4 w-4 text-blue-600" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">
+              {isLoading ? <Skeleton className="h-8 w-1/2" /> : analyticsData.totalProofs.toLocaleString()}
+            </div>
+            <p className="text-xs text-slate-600">All time proofs issued</p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Active Proofs</CardTitle>
+            <CheckCircle className="h-4 w-4 text-green-600" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-green-600">
+              {isLoading ? <Skeleton className="h-8 w-1/2" /> : analyticsData.activeProofs.toLocaleString()}
+            </div>
+            <p className="text-xs text-slate-600">Currently valid</p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Expiring Soon</CardTitle>
+            <Clock className="h-4 w-4 text-orange-600" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-orange-600">
+              {isLoading ? <Skeleton className="h-8 w-1/2" /> : analyticsData.expiringProofs.toLocaleString()}
+            </div>
+            <p className="text-xs text-slate-600">Next 7 days</p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">USSD Sessions</CardTitle>
+            <Activity className="h-4 w-4 text-purple-600" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-purple-600">
+              {isLoading ? <Skeleton className="h-8 w-1/2" /> : "N/A"}
+            </div>
+            <p className="text-xs text-slate-600">Today's sessions</p>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Proof Types Breakdown */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Proof Types Distribution</CardTitle>
+          <CardDescription>Breakdown of ZK proofs by type (no PII shown)</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="text-center p-4 bg-blue-50 rounded-lg">
+              <div className="text-2xl font-bold text-blue-600">
+                {isLoading ? <Skeleton className="h-8 w-1/2 mx-auto" /> : analyticsData.proofTypes.hiv}
+              </div>
+              <div className="text-sm text-slate-600">HIV-Negative Proofs</div>
+            </div>
+            
+            <div className="text-center p-4 bg-green-50 rounded-lg">
+              <div className="text-2xl font-bold text-green-600">
+                {isLoading ? <Skeleton className="h-8 w-1/2 mx-auto" /> : analyticsData.proofTypes.vaccination}
+              </div>
+              <div className="text-sm text-slate-600">Vaccination Proofs</div>
+            </div>
+            
+            <div className="text-center p-4 bg-purple-50 rounded-lg">
+              <div className="text-2xl font-bold text-purple-600">
+                {isLoading ? <Skeleton className="h-8 w-1/2 mx-auto" /> : analyticsData.proofTypes.insurance}
+              </div>
+              <div className="text-sm text-slate-600">Insurance Proofs</div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Quick Actions */}
+      <Card>
+        <CardHeader>
+          <CardTitle>ZK-MedPass Quick Actions</CardTitle>
+          <CardDescription>Manage ZK-MedPass system</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <Button variant="outline" className="h-20 flex flex-col space-y-2">
+              <Shield className="h-6 w-6" />
+              <span>View Proof Logs</span>
+            </Button>
+            
+            <Button variant="outline" className="h-20 flex flex-col space-y-2">
+              <Activity className="h-6 w-6" />
+              <span>USSD Session Stats</span>
+            </Button>
+            
+            <Button variant="outline" className="h-20 flex flex-col space-y-2">
+              <TrendingUp className="h-6 w-6" />
+              <span>Export Analytics</span>
+            </Button>
+            
+            <Button variant="outline" className="h-20 flex flex-col space-y-2">
+              <Globe className="h-6 w-6" />
+              <span>Africa's Talking Status</span>
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
 export default function AdminDashboard() {
   const [selectedTimeframe, setSelectedTimeframe] = useState("24h");
   const [showStaffModal, setShowStaffModal] = useState(false);
@@ -165,6 +307,7 @@ export default function AdminDashboard() {
             <TabsTrigger value="access">Access Patterns</TabsTrigger>
             <TabsTrigger value="activity">Recent Activity</TabsTrigger>
             <TabsTrigger value="staff">Staff Management</TabsTrigger>
+            <TabsTrigger value="zk-medpass">ZK-MedPass</TabsTrigger>
             <TabsTrigger value="testing">Security Testing</TabsTrigger>
           </TabsList>
 
@@ -487,6 +630,24 @@ export default function AdminDashboard() {
                     hospitalId={auditSummary?.summary?.hospitalId || ""}
                   />
                 </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* ZK-MedPass Tab */}
+          <TabsContent value="zk-medpass" className="space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center space-x-2">
+                  <Shield className="h-5 w-5 text-green-600" />
+                  <span>ZK-MedPass Analytics</span>
+                </CardTitle>
+                <CardDescription>
+                  Privacy-respecting analytics for ZK proof usage and health verification
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <ZKMedPassAnalytics />
               </CardContent>
             </Card>
           </TabsContent>

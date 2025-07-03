@@ -6,11 +6,12 @@ import { z } from "zod";
 import CryptoJS from "crypto-js";
 import Hex from "crypto-js/enc-hex.js";
 import { requirePatientAuth } from "./patient-auth-middleware"; // Import the middleware
+import { InsertPatientRecord } from "@shared/schema";
 
 export function registerWeb3Routes(app: Express): void {
   
   // Generate Patient DID and Identity
-  app.post("/api/web3/generate-patient-identity", async (req, res, next) => {
+  app.post("/api/web3/generate-patient-identity", async (req, res) => {
     try {
       const { walletAddress } = z.object({
         walletAddress: z.string().optional(),
@@ -42,21 +43,21 @@ export function registerWeb3Routes(app: Express): void {
           mnemonic: wallet.mnemonic
         } : null
       });
-    } catch (error) {
-      next(error);
+    } catch (error: any) {
+      return res.status(400).json({ error: `Failed to generate patient identity: ${error.message}` });
     }
   });
 
   // Submit Medical Record to IPFS with Phone Number
-  app.post("/api/web3/submit-record", async (req, res, next) => {
+  app.post("/api/web3/submit-record", async (req, res) => {
     try {
       if (!req.isAuthenticated()) {
-        return res.status(401).json({ message: "Authentication required" });
+        return res.status(401).json({ error: "Authentication required. Please log in to submit medical records." });
       }
 
       const user = req.user!;
       if (user.hospitalType !== "A") {
-        return res.status(403).json({ message: "Only Hospital A can submit records" });
+        return res.status(403).json({ error: "Only Hospital A can submit records. Your hospital type does not have permission for this action." });
       }
 
       const recordData = z.object({
@@ -103,14 +104,16 @@ export function registerWeb3Routes(app: Express): void {
             publicKey,
             didDocument,
           });
-          patientProfile = await storage.createPatientProfile({
+          const newProfile = {
             patientDID: did,
             nationalId: recordData.nationalId,
             phoneNumber: recordData.phoneNumber.includes('@') ? "" : recordData.phoneNumber,
             email: recordData.phoneNumber.includes('@') ? recordData.phoneNumber : null,
             fullName: recordData.patientName,
-            isProfileComplete: false,
-          });
+            isProfileComplete: false
+          };
+          console.log('[DEBUG] Creating patient profile (web3):', newProfile);
+          patientProfile = await storage.createPatientProfile(newProfile);
         }
       }
 
@@ -152,7 +155,7 @@ export function registerWeb3Routes(app: Express): void {
       });
 
       // Store traditional record with IPFS reference
-      const patientRecord = await storage.createPatientRecord({
+      const recordToSave = {
         patientName: recordData.patientName,
         nationalId: recordData.nationalId,
         visitDate: recordData.visitDate,
@@ -163,7 +166,12 @@ export function registerWeb3Routes(app: Express): void {
         department: recordData.department,
         patientDID,
         submittedBy: user.id,
-      });
+        hospital_id: user.hospital_id || 1, // Ensure hospital_id is not null
+        recordType: "web3",
+      };
+      console.log('[DEBUG] Creating Web3 record with data:', recordToSave);
+      const patientRecord = await storage.createPatientRecord(recordToSave);
+      console.log('[DEBUG] Web3 record created with ID:', patientRecord.id, 'recordType:', patientRecord.recordType);
 
       // Update the record with ipfsHash and encryptionKey
       await storage.updateRecordIPFS(patientRecord.id, ipfsHash, encryptedDekString);
@@ -176,21 +184,21 @@ export function registerWeb3Routes(app: Express): void {
         patientDID,
         phoneNumber: recordData.phoneNumber
       });
-    } catch (error) {
-      next(error);
+    } catch (error: any) {
+      return res.status(400).json({ error: `Failed to submit medical record: ${error.message}` });
     }
   });
 
   // Request Access to Patient Records via DID
-  app.post("/api/web3/request-access", async (req, res, next) => {
+  app.post("/api/web3/request-access", async (req, res) => {
     try {
       if (!req.isAuthenticated()) {
-        return res.status(401).json({ message: "Authentication required" });
+        return res.status(401).json({ error: "Authentication required. Please log in to request access to patient records." });
       }
 
       const user = req.user!;
       if (user.hospitalType !== "B") {
-        return res.status(403).json({ message: "Only Hospital B can request access" });
+        return res.status(403).json({ error: "Only Hospital B can request access. Your hospital type does not have permission for this action." });
       }
 
       const { patientDID } = z.object({
@@ -200,14 +208,14 @@ export function registerWeb3Routes(app: Express): void {
       // Verify patient identity exists
       const patientIdentity = await storage.getPatientIdentityByDID(patientDID);
       if (!patientIdentity) {
-        return res.status(404).json({ message: "Patient DID not found" });
+        return res.status(404).json({ error: "Patient DID not found. Please verify the patient identifier and try again." });
       }
 
       // Get patient's IPFS content
       const patientContent = await storage.getContentByPatientDID(patientDID);
       
       if (patientContent.length === 0) {
-        return res.status(404).json({ message: "No medical records found for this patient" });
+        return res.status(404).json({ error: "No medical records found for this patient. The patient may not have any records in the system." });
       }
 
       // Return metadata for consent process (without actual content)
@@ -220,6 +228,7 @@ export function registerWeb3Routes(app: Express): void {
 
       res.json({
         success: true,
+        message: "Access request submitted successfully",
         patientDID,
         patientIdentity: {
           did: patientIdentity.did,
@@ -227,10 +236,9 @@ export function registerWeb3Routes(app: Express): void {
         },
         recordCount: patientContent.length,
         recordMetadata,
-        message: "Patient consent required to access medical records"
       });
-    } catch (error) {
-      next(error);
+    } catch (error: any) {
+      return res.status(400).json({ error: `Failed to request access: ${error.message}` });
     }
   });
 
@@ -249,7 +257,7 @@ export function registerWeb3Routes(app: Express): void {
       // Verify patient identity
       const patientIdentity = await storage.getPatientIdentityByDID(patientDID);
       if (!patientIdentity || !patientIdentity.walletAddress) {
-        return res.status(404).json({ message: "Patient DID not found or no wallet address associated." });
+        return res.status(404).json({ error: "Patient DID not found or no wallet address associated. Please ensure the patient has a valid Web3 identity." });
       }
 
       // Construct the message that was signed on the frontend
@@ -266,7 +274,7 @@ export function registerWeb3Routes(app: Express): void {
       );
 
       if (!isValidSignature) {
-        return res.status(401).json({ message: "Invalid patient signature." });
+        return res.status(401).json({ error: "Invalid patient signature. Please ensure you're signing with the correct wallet and try again." });
       }
 
       // Issue consent credential for each content hash
@@ -322,7 +330,7 @@ export function registerWeb3Routes(app: Express): void {
   app.post("/api/web3/access-records", async (req, res, next) => {
     try {
       if (!req.isAuthenticated()) {
-        return res.status(401).json({ message: "Authentication required" });
+        return res.status(401).json({ error: "Authentication required. Please log in to access patient records." });
       }
 
       const user = req.user!;
@@ -340,7 +348,7 @@ export function registerWeb3Routes(app: Express): void {
       );
 
       if (validConsents.length === 0) {
-        return res.status(403).json({ message: "No valid consent found for accessing patient records" });
+        return res.status(403).json({ error: "No valid consent found for accessing patient records. Please ensure the patient has granted consent for your hospital." });
       }
 
       // Get patient's records from IPFS
@@ -396,7 +404,7 @@ export function registerWeb3Routes(app: Express): void {
       // Verify patient identity and signature
       const patientIdentity = await storage.getPatientIdentityByDID(patientDID);
       if (!patientIdentity || !patientIdentity.walletAddress) {
-        return res.status(404).json({ message: "Patient DID not found or no wallet address associated." });
+        return res.status(404).json({ error: "Patient DID not found or no wallet address associated. Please ensure the patient has a valid Web3 identity." });
       }
 
       // Construct the message that was signed on the frontend
@@ -412,7 +420,7 @@ export function registerWeb3Routes(app: Express): void {
       );
 
       if (!isValidSignature) {
-        return res.status(401).json({ message: "Invalid patient signature for revocation." });
+        return res.status(401).json({ error: "Invalid patient signature for revocation. Please ensure you're signing with the correct wallet and try again." });
       }
 
       // Get and revoke all consents
@@ -442,7 +450,7 @@ export function registerWeb3Routes(app: Express): void {
 
       const patientIdentity = await storage.getPatientIdentityByDID(did);
       if (!patientIdentity) {
-        return res.status(404).json({ message: "Patient DID not found" });
+        return res.status(404).json({ error: "Patient DID not found. Please verify the patient identifier." });
       }
 
       const [content, credentials, consents] = await Promise.all([

@@ -28,47 +28,37 @@ const acceptInvitationSchema = z.object({
  */
 router.post('/invite', requireAdminAuth, async (req, res) => {
   try {
-    // Validate admin access - now handled by middleware
     if (!req.user) {
-      return res.status(403).json({ error: 'Admin access required' });
+      return res.status(403).json({ error: 'Forbidden: Admin access required.' });
     }
-
     const validation = createInvitationSchema.safeParse(req.body);
     if (!validation.success) {
-      return res.status(400).json({ error: 'Invalid request data', details: validation.error });
+      return res.status(400).json({ error: 'Invalid request data', details: validation.error.errors });
     }
-
     const { email, role, department, name } = validation.data;
     const hospitalId = req.user!.id;
-
-    // Check if hospital has reached staff limit
     const currentStaffCount = await storage.getHospitalStaffByHospitalId(hospitalId.toString());
     if (currentStaffCount.length >= 5) {
-      return res.status(400).json({ 
-        error: 'Hospital has reached maximum staff limit (4 staff + 1 admin)' 
-      });
+      return res.status(400).json({ error: 'Hospital has reached maximum staff limit (4 staff + 1 admin)' });
     }
-
-    // Create invitation
     const result = await staffInvitationService.createStaffInvitation(
       hospitalId,
-      hospitalId, // invitedBy
+      hospitalId,
       { email, role, department, name }
     );
-
     if (!result.success) {
       return res.status(400).json({ error: result.error });
     }
-
     res.json({
       success: true,
       message: 'Staff invitation sent successfully',
       invitationId: result.invitationId,
     });
-
   } catch (error: any) {
-    console.error('[Staff Management] Create invitation error:', error);
-    res.status(500).json({ error: 'Failed to create staff invitation' });
+    if (error.code === '23505' && error.detail && error.detail.includes('email')) {
+      return res.status(400).json({ error: `Duplicate email: ${req.body.email}. Each staff member must have a unique email.` });
+    }
+    return res.status(500).json({ error: `Failed to create staff invitation: ${error.message}` });
   }
 });
 
@@ -80,30 +70,24 @@ router.post('/accept-invitation', async (req, res) => {
   try {
     const validation = acceptInvitationSchema.safeParse(req.body);
     if (!validation.success) {
-      return res.status(400).json({ error: 'Invalid request data', details: validation.error });
+      return res.status(400).json({ error: 'Invalid request data', details: validation.error.errors });
     }
-
     const { invitationToken, newPassword, name } = validation.data;
-
     const result = await staffInvitationService.acceptInvitation(
       invitationToken,
       newPassword,
       name
     );
-
     if (!result.success) {
       return res.status(400).json({ error: result.error });
     }
-
     res.json({
       success: true,
       message: 'Account activated successfully',
       userId: result.userId,
     });
-
   } catch (error: any) {
-    console.error('[Staff Management] Accept invitation error:', error);
-    res.status(500).json({ error: 'Failed to accept invitation' });
+    return res.status(500).json({ error: `Failed to accept invitation: ${error.message}` });
   }
 });
 
@@ -113,20 +97,13 @@ router.post('/accept-invitation', async (req, res) => {
  */
 router.get('/list', requireAdminAuth, async (req, res) => {
   try {
-    // Validate admin access - now handled by middleware
     if (!req.user) {
-      return res.status(403).json({ error: 'Admin access required' });
+      return res.status(403).json({ error: 'Forbidden: Admin access required.' });
     }
-
     const hospitalId = req.user.id.toString();
-    
-    // Get active staff
     const staff = await storage.getHospitalStaffByHospitalId(hospitalId);
-    
-    // Get pending invitations
     const invitations = await storage.getInvitationsByHospitalId(req.user.id);
     const pendingInvitations = invitations.filter(inv => inv.status === 'pending' && inv.expiresAt > new Date());
-
     res.json({
       success: true,
       staff: staff.map(s => ({
@@ -154,10 +131,8 @@ router.get('/list', requireAdminAuth, async (req, res) => {
         pendingInvitations: pendingInvitations.length,
       }
     });
-
   } catch (error: any) {
-    console.error('[Staff Management] Get staff list error:', error);
-    res.status(500).json({ error: 'Failed to get staff list' });
+    return res.status(500).json({ error: `Failed to get staff list: ${error.message}` });
   }
 });
 
@@ -167,34 +142,24 @@ router.get('/list', requireAdminAuth, async (req, res) => {
  */
 router.delete('/invitation/:invitationId', requireAdminAuth, async (req, res) => {
   try {
-    // Validate admin access - now handled by middleware
     if (!req.user) {
-      return res.status(403).json({ error: 'Admin access required' });
+      return res.status(403).json({ error: 'Forbidden: Admin access required.' });
     }
-
     const invitationId = parseInt(req.params.invitationId);
     if (isNaN(invitationId)) {
       return res.status(400).json({ error: 'Invalid invitation ID' });
     }
-
-    // Get invitation and verify it belongs to this hospital
     const invitations = await storage.getInvitationsByHospitalId(req.user.id);
     const invitation = invitations.find(inv => inv.id === invitationId);
-    
     if (!invitation) {
-      return res.status(404).json({ error: 'Invitation not found' });
+      return res.status(404).json({ error: `Invitation with ID ${invitationId} not found.` });
     }
-
     if (invitation.status !== 'pending') {
       return res.status(400).json({ error: 'Can only cancel pending invitations' });
     }
-
-    // Cancel invitation
     await storage.updateInvitation(invitationId, {
       status: 'cancelled'
     });
-
-    // Log the cancellation
     await auditService.logEvent({
       eventType: "STAFF_INVITATION_CANCELLED",
       actorType: "HOSPITAL_ADMIN",
@@ -209,15 +174,12 @@ router.delete('/invitation/:invitationId', requireAdminAuth, async (req, res) =>
       },
       severity: "info",
     });
-
     res.json({
       success: true,
-      message: 'Invitation cancelled successfully'
+      message: 'Invitation cancelled successfully',
     });
-
   } catch (error: any) {
-    console.error('[Staff Management] Cancel invitation error:', error);
-    res.status(500).json({ error: 'Failed to cancel invitation' });
+    return res.status(500).json({ error: `Failed to cancel invitation: ${error.message}` });
   }
 });
 

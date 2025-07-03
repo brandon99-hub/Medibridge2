@@ -17,6 +17,7 @@ import AdminDashboard from "@/components/admin-dashboard"; // Import AdminDashbo
 import EmergencyAccessPage from "@/pages/emergency-access-page"; // Import EmergencyAccessPage
 import EmergencyAccessDashboard from "@/components/emergency-access-dashboard"; // Import EmergencyAccessDashboard
 import AcceptInvitation from "@/pages/accept-invitation"; // Import AcceptInvitation
+import VerifierPage from "@/pages/verifier";
 
 function Router() {
   return (
@@ -29,6 +30,7 @@ function Router() {
       <Route path="/accept-invitation" component={AcceptInvitation} /> {/* Add invitation acceptance route */}
       <Route path="/patient-portal" component={PatientPortal} />
       <Route path="/web3-patient" component={Web3PatientDashboard} />
+      <Route path="/verifier" component={VerifierPage} />
       <Route component={NotFound} />
     </Switch>
   );

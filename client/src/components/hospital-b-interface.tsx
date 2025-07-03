@@ -3,6 +3,7 @@ import { useMutation } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useWeb3 } from "@/hooks/use-web3";
+import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -46,6 +47,7 @@ interface HospitalBInterfaceProps {
 export default function HospitalBInterface({ onShowConsentModal }: HospitalBInterfaceProps) {
   const { toast } = useToast();
   const { requestRecordAccess } = useWeb3();
+  const { user } = useAuth();
   const [searchData, setSearchData] = useState<SearchFormData>({
     nationalId: "",
     dateFrom: "",
@@ -139,7 +141,7 @@ export default function HospitalBInterface({ onShowConsentModal }: HospitalBInte
       
       const response = await apiRequest("POST", "/api/issue-consent/", {
         patientId: authenticatedPatient.phoneNumber,
-        hospitalId: 2, // Hospital B
+        hospitalId: user?.hospital_id || 2, // fallback to 2 if not available
         recordId: patientData.records[0]?.id,
         validForHours: 24,
       });
@@ -474,6 +476,14 @@ export default function HospitalBInterface({ onShowConsentModal }: HospitalBInte
                         >
                           {revokeConsentMutation.isPending ? "Revoking..." : "Revoke Access"}
                         </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => searchMutation.mutate({ nationalId: patientData.nationalId || patientData.patientDID })}
+                          disabled={searchMutation.isPending}
+                        >
+                          {searchMutation.isPending ? "Fetching..." : "Fetch All Records"}
+                        </Button>
                       </div>
                     </div>
                     
@@ -556,57 +566,59 @@ export default function HospitalBInterface({ onShowConsentModal }: HospitalBInte
               )}
 
               <div className="space-y-4">
-                {patientData && showRecords && patientData.records.map((record) => (
-                  <Card key={record.id}>
-                    <CardContent className="pt-6">
-                      <div className="flex items-start justify-between mb-4">
-                        <div className="flex items-center space-x-3">
-                          <div className="w-10 h-10 bg-blue-50 rounded-full flex items-center justify-center">
-                            {record.visitType === "emergency" ? (
-                              <AlertTriangle className="h-5 w-5 text-red-600" />
-                            ) : (
-                              <Stethoscope className="h-5 w-5 text-blue-600" />
+                {patientData && showRecords && patientData.records
+                  .filter(record => record.recordType === "traditional")
+                  .map((record) => (
+                    <Card key={record.id}>
+                      <CardContent className="pt-6">
+                        <div className="flex items-start justify-between mb-4">
+                          <div className="flex items-center space-x-3">
+                            <div className="w-10 h-10 bg-blue-50 rounded-full flex items-center justify-center">
+                              {record.visitType === "emergency" ? (
+                                <AlertTriangle className="h-5 w-5 text-red-600" />
+                              ) : (
+                                <Stethoscope className="h-5 w-5 text-blue-600" />
+                              )}
+                            </div>
+                            <div>
+                              <h5 className="font-semibold text-slate-900">{record.visitType || "Medical Visit"}</h5>
+                              <p className="text-sm text-slate-600">{record.visitDate}</p>
+                              <p className="text-sm text-slate-500">
+                                Hospital A - {record.physician || "Unknown Physician"}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="flex items-center space-x-2">
+                            {record.department && (
+                              <Badge variant="secondary">{record.department}</Badge>
                             )}
                           </div>
-                          <div>
-                            <h5 className="font-semibold text-slate-900">{record.visitType || "Medical Visit"}</h5>
-                            <p className="text-sm text-slate-600">{record.visitDate}</p>
-                            <p className="text-sm text-slate-500">
-                              Hospital A - {record.physician || "Unknown Physician"}
-                            </p>
-                          </div>
-                        </div>
-                        <div className="flex items-center space-x-2">
-                          {record.department && (
-                            <Badge variant="secondary">{record.department}</Badge>
-                          )}
-                        </div>
-                      </div>
-                      
-                      <div className="space-y-3">
-                        <div>
-                          <h6 className="text-sm font-medium text-slate-700 mb-1">Diagnosis</h6>
-                          <p className="text-sm text-slate-600">{record.diagnosis}</p>
                         </div>
                         
-                        {record.prescription && (
+                        <div className="space-y-3">
                           <div>
-                            <h6 className="text-sm font-medium text-slate-700 mb-1">Prescription & Treatment</h6>
-                            <p className="text-sm text-slate-600">{record.prescription}</p>
+                            <h6 className="text-sm font-medium text-slate-700 mb-1">Diagnosis</h6>
+                            <p className="text-sm text-slate-600">{record.diagnosis}</p>
                           </div>
-                        )}
-                      </div>
-                      
-                      <div className="flex items-center justify-between mt-4 pt-4 border-t border-slate-200">
-                        <div className="flex items-center space-x-4 text-xs text-slate-500">
-                          <span>Record ID: REC-{record.id}</span>
-                          <span>•</span>
-                          <span>Submitted: {new Date(record.submittedAt).toLocaleString()}</span>
+                          
+                          {record.prescription && (
+                            <div>
+                              <h6 className="text-sm font-medium text-slate-700 mb-1">Prescription & Treatment</h6>
+                              <p className="text-sm text-slate-600">{record.prescription}</p>
+                            </div>
+                          )}
                         </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
+                        
+                        <div className="flex items-center justify-between mt-4 pt-4 border-t border-slate-200">
+                          <div className="flex items-center space-x-4 text-xs text-slate-500">
+                            <span>Record ID: REC-{record.id}</span>
+                            <span>•</span>
+                            <span>Submitted: {new Date(record.submittedAt).toLocaleString()}</span>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))}
                 
                 {!patientData && (
                   <Card>
@@ -810,47 +822,49 @@ export default function HospitalBInterface({ onShowConsentModal }: HospitalBInte
               {web3PatientData.hasConsent ? (
                 <div className="space-y-4">
                   {web3PatientData.fullRecords && web3PatientData.fullRecords.length > 0 ? (
-                    web3PatientData.fullRecords.map((record: any) => (
-                      <div key={record.id} className="border rounded-lg p-4 bg-slate-50">
-                        <div className="flex items-start justify-between mb-3">
-                          <div>
-                            <h4 className="font-semibold text-slate-900">
-                              {record.visitType || 'Medical Visit'}
-                            </h4>
-                            <p className="text-sm text-slate-600">
-                              {new Date(record.visitDate).toLocaleDateString()} • {record.department || 'General'}
-                            </p>
-                          </div>
-                          <Badge className="bg-purple-100 text-purple-800">
-                            <Globe className="h-3 w-3 mr-1" />
-                            Web3
-                          </Badge>
-                        </div>
-                        
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-                          <div>
-                            <p className="text-slate-500">Diagnosis</p>
-                            <p className="font-medium text-slate-900">{record.diagnosis}</p>
-                          </div>
-                          {record.prescription && (
+                    web3PatientData.fullRecords
+                      .filter(record => record.recordType === "web3")
+                      .map((record: any) => (
+                        <div key={record.id} className="border rounded-lg p-4 bg-slate-50">
+                          <div className="flex items-start justify-between mb-3">
                             <div>
-                              <p className="text-slate-500">Prescription</p>
-                              <p className="font-medium text-slate-900">{record.prescription}</p>
+                              <h4 className="font-semibold text-slate-900">
+                                {record.visitType || 'Medical Visit'}
+                              </h4>
+                              <p className="text-sm text-slate-600">
+                                {new Date(record.visitDate).toLocaleDateString()} • {record.department || 'General'}
+                              </p>
                             </div>
-                          )}
-                          {record.physician && (
+                            <Badge className="bg-purple-100 text-purple-800">
+                              <Globe className="h-3 w-3 mr-1" />
+                              Web3
+                            </Badge>
+                          </div>
+                          
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
                             <div>
-                              <p className="text-slate-500">Physician</p>
-                              <p className="font-medium text-slate-900">{record.physician}</p>
+                              <p className="text-slate-500">Diagnosis</p>
+                              <p className="font-medium text-slate-900">{record.diagnosis}</p>
                             </div>
-                          )}
-                          <div>
-                            <p className="text-slate-500">IPFS Hash</p>
-                            <p className="font-mono text-xs text-slate-600 break-all">{record.ipfsHash}</p>
+                            {record.prescription && (
+                              <div>
+                                <p className="text-slate-500">Prescription</p>
+                                <p className="font-medium text-slate-900">{record.prescription}</p>
+                              </div>
+                            )}
+                            {record.physician && (
+                              <div>
+                                <p className="text-slate-500">Physician</p>
+                                <p className="font-medium text-slate-900">{record.physician}</p>
+                              </div>
+                            )}
+                            <div>
+                              <p className="text-slate-500">IPFS Hash</p>
+                              <p className="font-mono text-xs text-slate-600 break-all">{record.ipfsHash}</p>
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    ))
+                      ))
                   ) : (
                     <div className="text-center text-slate-500">No medical records found.</div>
                   )}

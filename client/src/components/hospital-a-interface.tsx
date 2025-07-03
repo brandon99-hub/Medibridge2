@@ -3,6 +3,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useWeb3 } from "@/hooks/use-web3";
+import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -32,6 +33,7 @@ export default function HospitalAInterface() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { submitRecordToIPFS } = useWeb3();
+  const { user } = useAuth();
   
   const [formData, setFormData] = useState<RecordFormData>({
     patientName: "",
@@ -58,6 +60,17 @@ export default function HospitalAInterface() {
   
   const [consentChecked, setConsentChecked] = useState(false);
   const [web3ConsentChecked, setWeb3ConsentChecked] = useState(false);
+
+  const [showProofModal, setShowProofModal] = useState(false);
+  const [zkProofResult, setZkProofResult] = useState<{ code: string; message: string; full?: any } | null>(null);
+
+  const [submittedWeb3, setSubmittedWeb3] = useState(false);
+
+  const [claimType, setClaimType] = useState('hiv');
+  const [claimValue, setClaimValue] = useState('negative');
+  const [claimDate, setClaimDate] = useState('');
+
+  const [patientDID, setPatientDID] = useState<string>("");
 
   const submitRecordMutation = useMutation({
     mutationFn: async (data: RecordFormData) => {
@@ -92,9 +105,10 @@ export default function HospitalAInterface() {
 
   const submitWeb3RecordMutation = useMutation({
     mutationFn: async (data: Web3RecordFormData) => {
-      await submitRecordToIPFS(data);
+      const response = await submitRecordToIPFS({ ...data, hospital_id: user?.hospital_id });
+      return response;
     },
-    onSuccess: () => {
+    onSuccess: (data: any) => {
       setWeb3FormData({
         patientName: "",
         nationalId: "",
@@ -107,6 +121,20 @@ export default function HospitalAInterface() {
         department: "",
       });
       setWeb3ConsentChecked(false);
+      setClaimType(
+        web3FormData.diagnosis.toLowerCase().includes("hiv") ? "hiv" :
+        web3FormData.diagnosis.toLowerCase().includes("covid") ? "vaccination" :
+        web3FormData.diagnosis.toLowerCase().includes("allergy") ? "allergy" :
+        "insurance"
+      );
+      setClaimValue(web3FormData.diagnosis || "");
+      setClaimDate(web3FormData.visitDate || "");
+      setSubmittedWeb3(true);
+      if (data && data.patientDID) {
+        setPatientDID(data.patientDID);
+      } else {
+        setPatientDID("did:medbridge:patient:MOCKDID1234567890");
+      }
     },
     onError: (error: Error) => {
       toast({
@@ -114,6 +142,28 @@ export default function HospitalAInterface() {
         description: error.message,
         variant: "destructive",
       });
+      setSubmittedWeb3(false);
+    },
+  });
+
+  const generateZKProofMutation = useMutation({
+    mutationFn: async () => {
+      const isoClaimDate = claimDate ? new Date(claimDate).toISOString() : undefined;
+      const response = await apiRequest("POST", "/api/zk-medpass/generate-proof", {
+        patientDID: patientDID,
+        claimType,
+        claimValue,
+        claimDate: isoClaimDate,
+      });
+      return await response.json();
+    },
+    onSuccess: (data) => {
+      setZkProofResult({ code: data.proofId?.toString() || "", message: data.message, full: data });
+      setShowProofModal(true);
+    },
+    onError: (error: any) => {
+      setZkProofResult({ code: "", message: error.message || "Failed to generate proof" });
+      setShowProofModal(true);
     },
   });
 
@@ -508,6 +558,7 @@ export default function HospitalAInterface() {
                             department: "",
                           });
                           setWeb3ConsentChecked(false);
+                          setSubmittedWeb3(false);
                         }}
                       >
                         Clear Form
@@ -559,6 +610,58 @@ export default function HospitalAInterface() {
           </div>
         </TabsContent>
       </Tabs>
+
+      {submittedWeb3 && (
+        <div className="space-y-4 mt-4">
+          <div className="overflow-x-auto">
+            <table className="min-w-full border text-sm bg-white rounded shadow">
+              <thead>
+                <tr className="bg-slate-100">
+                  <th className="px-4 py-2 text-left">Field</th>
+                  <th className="px-4 py-2 text-left">Value</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr><td className="px-4 py-2">Claim Type</td><td className="px-4 py-2">{claimType}</td></tr>
+                <tr><td className="px-4 py-2">Claim Value</td><td className="px-4 py-2">{claimValue}</td></tr>
+                <tr><td className="px-4 py-2">Claim/Test Date</td><td className="px-4 py-2">{claimDate}</td></tr>
+                <tr><td className="px-4 py-2">Diagnosis</td><td className="px-4 py-2">{web3FormData.diagnosis}</td></tr>
+                <tr><td className="px-4 py-2">Visit Type</td><td className="px-4 py-2">{web3FormData.visitType}</td></tr>
+                <tr><td className="px-4 py-2">Physician</td><td className="px-4 py-2">{web3FormData.physician}</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <Button 
+            onClick={() => generateZKProofMutation.mutate()} 
+            className="bg-green-600 hover:bg-green-700 w-full mt-4"
+            disabled={generateZKProofMutation.isPending || !patientDID}
+          >
+            {generateZKProofMutation.isPending ? "Generating..." : !patientDID ? "Waiting for Patient DID..." : "Generate ZK Proof"}
+          </Button>
+        </div>
+      )}
+
+      {showProofModal && zkProofResult && (
+        <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 z-50">
+          <div className="bg-white rounded-lg shadow-lg p-8 max-w-2xl w-full">
+            <h2 className="text-xl font-bold mb-4">ZK Proof Result (Demo Mock)</h2>
+            <p className="mb-2 text-slate-700">This is a <span className="font-semibold">mock ZK-SNARK proof</span> generated for demo purposes. The structure and data are identical to a real proof, so the verifier and all flows work as in production.</p>
+            <div className="mb-4">
+              <div className="mb-2"><span className="font-semibold">Proof ID:</span> <span className="font-mono">{zkProofResult.code}</span></div>
+              <div className="mb-2"><span className="font-semibold">Message:</span> {zkProofResult.message}</div>
+              {zkProofResult.full && (
+                <>
+                  <div className="mb-2"><span className="font-semibold">Proof Object:</span></div>
+                  <pre className="bg-slate-100 rounded p-2 text-xs overflow-x-auto max-h-64">
+                    {JSON.stringify(zkProofResult.full, null, 2)}
+                  </pre>
+                </>
+              )}
+            </div>
+            <Button onClick={() => setShowProofModal(false)} className="w-full">Close</Button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

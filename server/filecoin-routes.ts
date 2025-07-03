@@ -7,15 +7,15 @@ import { requireAdminAuth } from "./admin-auth-middleware";
 
 export function registerFilecoinRoutes(app: Express): void {
   // Store medical record with Filecoin integration
-  app.post("/api/filecoin/store-record", async (req, res, next) => {
+  app.post("/api/filecoin/store-record", async (req, res) => {
     try {
       if (!req.isAuthenticated()) {
-        return res.status(401).json({ message: "Authentication required" });
+        return res.status(401).json({ error: "Authentication required" });
       }
 
       const user = req.user!;
       if (user.hospitalType !== "A") {
-        return res.status(403).json({ message: "Only Hospital A can submit records" });
+        return res.status(403).json({ error: "Only Hospital A can submit records" });
       }
 
       const schema = z.object({
@@ -106,21 +106,21 @@ export function registerFilecoinRoutes(app: Express): void {
         }
       });
 
-    } catch (error) {
-      next(error);
+    } catch (error: any) {
+      return res.status(400).json({ error: `Failed to store record with Filecoin: ${error.message}` });
     }
   });
 
   // Retrieve medical record with Filecoin failover
-  app.post("/api/filecoin/retrieve-record", async (req, res, next) => {
+  app.post("/api/filecoin/retrieve-record", async (req, res) => {
     try {
       if (!req.isAuthenticated()) {
-        return res.status(401).json({ message: "Authentication required" });
+        return res.status(401).json({ error: "Authentication required" });
       }
 
       const user = req.user!;
       if (user.hospitalType !== "B") {
-        return res.status(403).json({ message: "Only Hospital B can retrieve records" });
+        return res.status(403).json({ error: "Only Hospital B can retrieve records" });
       }
 
       const schema = z.object({
@@ -133,11 +133,11 @@ export function registerFilecoinRoutes(app: Express): void {
       // Get record metadata
       const record = await storage.getPatientRecordById(recordId);
       if (!record) {
-        return res.status(404).json({ message: "Record not found" });
+        return res.status(404).json({ error: "Record not found" });
       }
 
       if (!record.ipfsHash || !record.filecoinCid) {
-        return res.status(400).json({ message: "Record not stored with Filecoin integration" });
+        return res.status(400).json({ error: "Record not stored with Filecoin integration" });
       }
 
       // Retrieve with failover
@@ -176,13 +176,13 @@ export function registerFilecoinRoutes(app: Express): void {
         }
       });
 
-    } catch (error) {
-      next(error);
+    } catch (error: any) {
+      return res.status(400).json({ error: `Failed to retrieve record: ${error.message}` });
     }
   });
 
   // Get storage health metrics
-  app.get("/api/filecoin/storage-health", requireAdminAuth, async (req, res, next) => {
+  app.get("/api/filecoin/storage-health", requireAdminAuth, async (req, res) => {
     try {
       const health = await enhancedStorageService.getStorageHealth();
       
@@ -191,13 +191,13 @@ export function registerFilecoinRoutes(app: Express): void {
         health
       });
 
-    } catch (error) {
-      next(error);
+    } catch (error: any) {
+      return res.status(500).json({ error: `Failed to get storage health: ${error.message}` });
     }
   });
 
   // Get storage costs for a patient
-  app.get("/api/filecoin/storage-costs/:patientDID", requireAdminAuth, async (req, res, next) => {
+  app.get("/api/filecoin/storage-costs/:patientDID", requireAdminAuth, async (req, res) => {
     try {
       const { patientDID } = req.params;
 
@@ -210,13 +210,13 @@ export function registerFilecoinRoutes(app: Express): void {
         totalCost
       });
 
-    } catch (error) {
-      next(error);
+    } catch (error: any) {
+      return res.status(500).json({ error: `Failed to get storage costs: ${error.message}` });
     }
   });
 
   // Get expiring Filecoin deals
-  app.get("/api/filecoin/expiring-deals", requireAdminAuth, async (req, res, next) => {
+  app.get("/api/filecoin/expiring-deals", requireAdminAuth, async (req, res) => {
     try {
       const daysUntilExpiry = parseInt(req.query.days as string) || 30;
       const expiringDeals = await storage.getExpiringFilecoinDeals(daysUntilExpiry);
@@ -227,13 +227,13 @@ export function registerFilecoinRoutes(app: Express): void {
         daysUntilExpiry
       });
 
-    } catch (error) {
-      next(error);
+    } catch (error: any) {
+      return res.status(500).json({ error: `Failed to get expiring deals: ${error.message}` });
     }
   });
 
   // Get storage locations for a content hash
-  app.get("/api/filecoin/storage-locations/:contentHash", requireAdminAuth, async (req, res, next) => {
+  app.get("/api/filecoin/storage-locations/:contentHash", requireAdminAuth, async (req, res) => {
     try {
       const { contentHash } = req.params;
       const locations = await storage.getStorageLocationsByContentHash(contentHash);
@@ -244,13 +244,13 @@ export function registerFilecoinRoutes(app: Express): void {
         locations
       });
 
-    } catch (error) {
-      next(error);
+    } catch (error: any) {
+      return res.status(500).json({ error: `Failed to get storage locations: ${error.message}` });
     }
   });
 
   // Update storage location status
-  app.put("/api/filecoin/storage-location/:id/status", requireAdminAuth, async (req, res, next) => {
+  app.put("/api/filecoin/storage-location/:id/status", requireAdminAuth, async (req, res) => {
     try {
       const { id } = req.params;
       const { status } = z.object({
@@ -265,13 +265,13 @@ export function registerFilecoinRoutes(app: Express): void {
         status
       });
 
-    } catch (error) {
-      next(error);
+    } catch (error: any) {
+      return res.status(500).json({ error: `Failed to update storage location status: ${error.message}` });
     }
   });
 
   // Get storage strategy recommendation
-  app.post("/api/filecoin/storage-strategy", async (req, res, next) => {
+  app.post("/api/filecoin/storage-strategy", async (req, res) => {
     try {
       const schema = z.object({
         recordSize: z.number(),
@@ -287,8 +287,8 @@ export function registerFilecoinRoutes(app: Express): void {
         strategy
       });
 
-    } catch (error) {
-      next(error);
+    } catch (error: any) {
+      return res.status(500).json({ error: `Failed to get storage strategy: ${error.message}` });
     }
   });
 }

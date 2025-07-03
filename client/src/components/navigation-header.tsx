@@ -141,8 +141,8 @@ export default function NavigationHeader({ currentHospital, onHospitalSwitch, us
 
             {/* Right: Emergency, Profile Dropdown */}
             <div className="flex items-center space-x-2">
-              {/* Emergency Access - Only for Hospital B */}
-              {user && user.hospitalType === "B" && (
+              {/* Emergency Access - For Hospital B and Admin users */}
+              {user && (user.hospitalType === "B" || user.isAdmin) && (
                 <Link href="/emergency-access">
                   <Button variant="destructive" size="sm" className="bg-red-600 hover:bg-red-700 text-white">
                     <AlertTriangleIcon className="h-4 w-4 mr-2" />
@@ -228,6 +228,16 @@ export default function NavigationHeader({ currentHospital, onHospitalSwitch, us
                           <Link href="/patient-portal">
                             <button className="w-full text-left px-4 py-2 text-sm text-purple-700 hover:bg-purple-50 flex items-center">
                               <UserIcon className="h-4 w-4 mr-2" /> Patient Portal
+                            </button>
+                          </Link>
+                        </motion.div>
+                        {/* ZK Proof Verifier Button */}
+                        <motion.div
+                          variants={{ hidden: { opacity: 0, x: 20 }, visible: { opacity: 1, x: 0 } }}
+                        >
+                          <Link href="/verifier">
+                            <button className="w-full text-left px-4 py-2 text-sm text-blue-700 hover:bg-blue-50 flex items-center">
+                              <Shield className="h-4 w-4 mr-2" /> ZK Proof Verifier
                             </button>
                           </Link>
                         </motion.div>

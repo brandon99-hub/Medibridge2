@@ -1,4 +1,4 @@
-import { users, patientRecords, consentRecords, type User, type InsertUser, type PatientRecord, type InsertPatientRecord, type InsertConsentRecord, type ConsentRecord, patientProfiles, filecoinDeals, storageLocations, storageCosts, storageHealthMetrics, type InsertFilecoinDeal, type FilecoinDeal, type InsertStorageLocation, type StorageLocation, type InsertStorageCost, type StorageCost, type InsertStorageHealthMetric, type StorageHealthMetric, zkpProofs, zkpVerifications, type InsertZKPProof, type ZKPProof, type InsertZKPVerification, type ZKPVerification, hospitalStaff, patientEmergencyContacts, hospitalStaffInvitations, type HospitalStaff, type InsertHospitalStaff, type PatientEmergencyContact, type InsertPatientEmergencyContact, type HospitalStaffInvitation, type InsertHospitalStaffInvitation } from "@shared/schema";
+import { users, patientRecords, consentRecords, type User, type InsertUser, type PatientRecord, type InsertPatientRecord, type InsertConsentRecord, type ConsentRecord, patientProfiles, filecoinDeals, storageLocations, storageCosts, storageHealthMetrics, type InsertFilecoinDeal, type FilecoinDeal, type InsertStorageLocation, type StorageLocation, type InsertStorageCost, type StorageCost, type InsertStorageHealthMetric, type StorageHealthMetric, zkpProofs, zkpVerifications, type InsertZKPProof, type ZKPProof, type InsertZKPVerification, type ZKPVerification, hospitalStaff, patientEmergencyContacts, hospitalStaffInvitations, type HospitalStaff, type InsertHospitalStaff, type PatientEmergencyContact, type InsertPatientEmergencyContact, type HospitalStaffInvitation, type InsertHospitalStaffInvitation, feedback } from "@shared/schema";
 import { 
   patientIdentities, 
   verifiableCredentials, 
@@ -25,7 +25,7 @@ import {
   type EmergencyConsentRecordSchema
 } from "@shared/schema"; // Import emergency consent schema
 import { db } from "./db";
-import { eq, and, or, sql, isNull, gt, desc, inArray } from "drizzle-orm"; // Import sql and inArray
+import { eq, and, or, sql, isNull, gt, desc, inArray, lt } from "drizzle-orm"; // Import sql and inArray
 import session from "express-session";
 import connectPg from "connect-pg-simple";
 import { pool } from "./db";
@@ -40,9 +40,10 @@ export interface IStorage {
   updateHospitalDID(hospitalId: number, hospitalDID: string): Promise<void>;
   
   // Patient Records
-  createPatientRecord(record: InsertPatientRecord & { submittedBy: number }): Promise<PatientRecord>;
+  createPatientRecord(record: Omit<InsertPatientRecord, "hospital_id"> & { submittedBy: number, hospital_id: number }): Promise<PatientRecord>;
   getPatientRecordsByNationalId(nationalId: string): Promise<PatientRecord[]>;
   getPatientRecordsByDID(patientDID: string): Promise<PatientRecord[]>;
+  getWeb3PatientRecordsByDID(patientDID: string): Promise<PatientRecord[]>;
   getPatientRecordById(id: number): Promise<PatientRecord | undefined>;
   updateRecordIPFS(recordId: number, ipfsCid: string, encryptionKey: string): Promise<void>;
   updateRecordFilecoin(recordId: number, filecoinCid: string, storageCost: number, storageMetadata: any): Promise<void>;
@@ -252,7 +253,7 @@ export class DatabaseStorage implements IStorage {
     console.log(`[INFO] Hospital DID ${hospitalDID} assigned to hospital ${hospitalId}`);
   }
 
-  async createPatientRecord(record: InsertPatientRecord & { submittedBy: number }): Promise<PatientRecord> {
+  async createPatientRecord(record: Omit<InsertPatientRecord, "hospital_id"> & { submittedBy: number, hospital_id: number }): Promise<PatientRecord> {
     const [patientRecord] = await db
       .insert(patientRecords)
       .values(record)
@@ -275,6 +276,21 @@ export class DatabaseStorage implements IStorage {
       .select()
       .from(patientRecords)
       .where(eq(patientRecords.patientDID, patientDID))
+      .orderBy(patientRecords.submittedAt);
+    
+    return records;
+  }
+
+  async getWeb3PatientRecordsByDID(patientDID: string): Promise<PatientRecord[]> {
+    const records = await db
+      .select()
+      .from(patientRecords)
+      .where(
+        and(
+          eq(patientRecords.patientDID, patientDID),
+          eq(patientRecords.recordType, "web3")
+        )
+      )
       .orderBy(patientRecords.submittedAt);
     
     return records;
@@ -609,6 +625,7 @@ export class DatabaseStorage implements IStorage {
         recordId: recordId,
         consentGrantedBy: "pending",
         consent_type: request.consentType || 'traditional',
+        hospital_id: request.hospital_id,
       })
       .returning();
     // Consent request created successfully
@@ -1112,6 +1129,55 @@ export class DatabaseStorage implements IStorage {
   async createZKPProof(proof: InsertZKPProof): Promise<ZKPProof> {
     const [result] = await db.insert(zkpProofs).values(proof).returning();
     return result;
+  }
+
+  // ZK-MedPass Analytics Methods
+  async getTotalZKPProofs(): Promise<number> {
+    const result = await db.select({ count: sql<number>`count(*)` }).from(zkpProofs);
+    return result[0]?.count || 0;
+  }
+
+  async getActiveZKPProofs(): Promise<number> {
+    const result = await db.select({ count: sql<number>`count(*)` })
+      .from(zkpProofs)
+      .where(and(eq(zkpProofs.isActive, true), gt(zkpProofs.expiresAt, new Date())));
+    return result[0]?.count || 0;
+  }
+
+  async getExpiringZKPProofs(days: number): Promise<number> {
+    const expiryDate = new Date();
+    expiryDate.setDate(expiryDate.getDate() + days);
+    
+    const result = await db.select({ count: sql<number>`count(*)` })
+      .from(zkpProofs)
+      .where(and(
+        eq(zkpProofs.isActive, true),
+        lt(zkpProofs.expiresAt, expiryDate),
+        gt(zkpProofs.expiresAt, new Date())
+      ));
+    return result[0]?.count || 0;
+  }
+
+  async getProofCountByType(proofType: string): Promise<number> {
+    const result = await db.select({ count: sql<number>`count(*)` })
+      .from(zkpProofs)
+      .where(and(eq(zkpProofs.proofType, proofType), eq(zkpProofs.isActive, true)));
+    return result[0]?.count || 0;
+  }
+
+  // Feedback Methods
+  async createFeedback(feedbackData: {
+    phoneNumber: string;
+    rating: number;
+    feedback: string;
+    submittedAt: Date;
+  }): Promise<void> {
+    await db.insert(feedback).values({
+      phoneNumber: feedbackData.phoneNumber,
+      rating: feedbackData.rating,
+      feedback: feedbackData.feedback,
+      submittedAt: feedbackData.submittedAt,
+    });
   }
 
   async getZKPProofById(id: number): Promise<ZKPProof | undefined> {

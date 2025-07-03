@@ -112,7 +112,7 @@ export function registerSimplifiedPatientRoutes(app: Express): void {
         req,
         { error: error.message }
       );
-      res.status(400).json({ error: error.message });
+      return res.status(400).json({ error: `Failed to send OTP: ${error.message}` });
     }
   });
 
@@ -130,7 +130,7 @@ export function registerSimplifiedPatientRoutes(app: Express): void {
       // Verify OTP from Redis
       const storedOtp = await redisService.getOTP(phoneNumber);
       if (!storedOtp || storedOtp.code !== otpCode || storedOtp.expires < Date.now()) {
-        return res.status(400).json({ error: "Invalid or expired OTP" });
+        return res.status(400).json({ error: "Invalid or expired OTP. Please request a new code." });
       }
       // Remove used OTP from Redis
       await redisService.deleteOTP(phoneNumber);
@@ -161,14 +161,16 @@ export function registerSimplifiedPatientRoutes(app: Express): void {
         // Ensure identity exists for new profile
         await ensurePatientIdentityExists(identity.patientDID, phoneNumber);
         // Create basic profile (National ID will be added later)
-        patientProfile = await storage.createPatientProfile({
+        const newProfile = {
           patientDID: identity.patientDID,
           nationalId: "", // Will be set during profile completion
           phoneNumber: phoneNumber.includes('@') ? "" : phoneNumber, // Empty for email users
           email: phoneNumber.includes('@') ? phoneNumber : null,     // Email for email users
           fullName: "", // Will be set during profile completion
-          isProfileComplete: false,
-        });
+          isProfileComplete: false
+        };
+        console.log('[DEBUG] Creating patient profile:', newProfile);
+        patientProfile = await storage.createPatientProfile(newProfile);
         // Patient profile created successfully
         // Send welcome message if it's an email-based account
         if (phoneNumber.includes('@')) {
@@ -200,7 +202,7 @@ export function registerSimplifiedPatientRoutes(app: Express): void {
         },
       });
     } catch (error: any) {
-      res.status(400).json({ error: error.message });
+      return res.status(400).json({ error: `Failed to verify OTP: ${error.message}` });
     }
   });
 
@@ -530,12 +532,12 @@ export function registerSimplifiedPatientRoutes(app: Express): void {
   app.get("/api/patient/pending-requests", async (req, res) => {
     try {
       if (!req.session.patientDID) {
-        return res.status(401).json({ error: "Not authenticated" });
+        return res.status(401).json({ error: "Authentication required. Please log in to view pending requests." });
       }
 
       const patientProfile = await storage.getPatientProfileByDID(req.session.patientDID);
       if (!patientProfile) {
-        return res.status(401).json({ error: "Invalid session" });
+        return res.status(401).json({ error: "Invalid session. Please log in again." });
       }
 
       // Get pending consent requests for this patient
@@ -557,7 +559,7 @@ export function registerSimplifiedPatientRoutes(app: Express): void {
 
     } catch (error: any) {
       console.error("Error fetching pending requests:", error);
-      res.status(500).json({ error: "Failed to fetch pending requests" });
+      res.status(500).json({ error: "Failed to fetch pending requests. Please try again later." });
     }
   });
 
@@ -568,7 +570,7 @@ export function registerSimplifiedPatientRoutes(app: Express): void {
   app.post("/api/patient/respond-to-consent", async (req, res) => {
     try {
       if (!req.session.patientDID) {
-        return res.status(401).json({ error: "Not authenticated" });
+        return res.status(401).json({ error: "Authentication required. Please log in to respond to consent requests." });
       }
 
       // Accept consentType ("web3" or "traditional") for correct consent creation
@@ -582,7 +584,7 @@ export function registerSimplifiedPatientRoutes(app: Express): void {
       // Get the consent request
       const consentRequest = await storage.getConsentRequestById(requestId);
       if (!consentRequest) {
-        return res.status(404).json({ error: "Consent request not found" });
+        return res.status(404).json({ error: "Consent request not found. The request may have been deleted or already processed." });
       }
 
       // Always fetch the patient profile by national ID from the consent request
@@ -600,7 +602,7 @@ export function registerSimplifiedPatientRoutes(app: Express): void {
       console.log('Fetched patient profile (after fallback):', patientProfile);
       if (!patientProfile || !patientProfile.patientDID) {
         console.error('No Web3 identity found for nationalId:', nationalId, 'Profile:', patientProfile);
-        return res.status(404).json({ message: "No Web3 identity found for this patient" });
+        return res.status(404).json({ error: "No Web3 identity found for this patient. Please contact support." });
       }
 
       // Use the consentType from the pending request, not from the frontend
@@ -608,7 +610,7 @@ export function registerSimplifiedPatientRoutes(app: Express): void {
 
       // Verify this request belongs to the authenticated patient
       if (consentRequest.patientId !== patientProfile.nationalId) {
-        return res.status(403).json({ error: "Unauthorized to respond to this request" });
+        return res.status(403).json({ error: "Unauthorized to respond to this request. This consent request does not belong to your account." });
       }
 
       if (action === 'approve') {
@@ -732,7 +734,7 @@ export function registerSimplifiedPatientRoutes(app: Express): void {
 
     } catch (error: any) {
       console.error("Error responding to consent request:", error);
-      res.status(500).json({ error: "Failed to respond to consent request" });
+      res.status(500).json({ error: "Failed to respond to consent request. Please try again later." });
     }
   });
 
@@ -750,7 +752,7 @@ export function registerSimplifiedPatientRoutes(app: Express): void {
       // Find patient profile by full name and national ID
       const patientProfile = await storage.getPatientProfileByNationalId(nationalId);
       if (!patientProfile || patientProfile.fullName.trim().toLowerCase() !== fullName.trim().toLowerCase()) {
-        return res.status(401).json({ error: "Invalid name or National ID" });
+        return res.status(401).json({ error: "Invalid name or National ID. Please check your credentials and try again." });
       }
 
       // Create session
@@ -771,6 +773,39 @@ export function registerSimplifiedPatientRoutes(app: Express): void {
         },
       });
     } catch (error: any) {
+      res.status(400).json({ error: `Login failed: ${error.message}` });
+    }
+  });
+
+  /**
+   * Debug endpoint: Sync phone number to patient identity
+   * POST /api/patient/debug/sync-phone
+   */
+  app.post("/api/patient/debug/sync-phone", async (req, res) => {
+    try {
+      const { patientDID, phoneNumber } = z.object({
+        patientDID: z.string(),
+        phoneNumber: z.string(),
+      }).parse(req.body);
+
+      console.log('[DEBUG] Manually syncing phone number', phoneNumber, 'to DID:', patientDID);
+      
+      // Update patient identity with phone number
+      await storage.updatePatientIdentityPhoneNumber(patientDID, phoneNumber);
+      
+      // Also update patient profile if needed
+      await storage.updatePatientProfileIdentifiers(patientDID, { phoneNumber });
+      
+      console.log('[DEBUG] Phone number sync completed successfully');
+      
+      res.json({
+        success: true,
+        message: "Phone number synced successfully",
+        patientDID,
+        phoneNumber,
+      });
+    } catch (error: any) {
+      console.error('[DEBUG] Phone sync error:', error);
       res.status(400).json({ error: error.message });
     }
   });

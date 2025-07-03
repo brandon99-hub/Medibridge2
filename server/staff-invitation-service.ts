@@ -56,6 +56,15 @@ export class StaffInvitationService {
         };
       }
 
+      // Check if user with this email already exists
+      const existingUser = await storage.getUserByEmail(invitationData.email);
+      if (existingUser) {
+        return {
+          success: false,
+          error: "A user with this email address already exists"
+        };
+      }
+
       // Generate invitation token
       const invitationToken = this.generateInvitationToken();
       
@@ -78,6 +87,15 @@ export class StaffInvitationService {
       // Generate temporary credentials
       const tempUsername = this.generateTemporaryUsername(invitationData.email);
       const tempPassword = this.generateTemporaryPassword();
+
+      // Debug log to check hospitalId value and type
+      console.log('[StaffInvitationService] Debug - hospitalId:', {
+        value: hospitalId,
+        type: typeof hospitalId,
+        isNumber: typeof hospitalId === 'number',
+        isInteger: Number.isInteger(hospitalId),
+        isPositive: hospitalId > 0
+      });
 
       // Create user account with temporary credentials
       const user = await storage.createUser({
@@ -392,7 +410,9 @@ export class StaffInvitationService {
     };
 
     if (process.env.SENDGRID_API_KEY && process.env.SENDGRID_API_KEY !== 'your-sendgrid-api-key-here') {
-      await emailService.sendEmail(msg);
+      const sgMail = await import('@sendgrid/mail');
+      sgMail.default.setApiKey(process.env.SENDGRID_API_KEY);
+      await sgMail.default.send(msg);
     } else {
       console.log(`[DEV MODE] Staff invitation email would be sent to ${email}`);
       console.log(`[DEV MODE] Activation URL: ${activationUrl}`);

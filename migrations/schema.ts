@@ -10,6 +10,8 @@ export const consentRecords = pgTable("consent_records", {
 	recordId: integer("record_id").notNull(),
 	consentGrantedBy: text("consent_granted_by").notNull(),
 	accessedAt: timestamp("accessed_at", { mode: 'string' }).defaultNow(),
+	consent_type: text("consent_type").notNull().default('traditional'),
+	hospital_id: integer("hospital_id").notNull(),
 }, (table) => [
 	foreignKey({
 			columns: [table.accessedBy],
@@ -32,6 +34,13 @@ export const users = pgTable("users", {
 	walletAddress: text("wallet_address"),
 	createdAt: timestamp("created_at", { mode: 'string' }).defaultNow(),
 	isAdmin: boolean("is_admin").default(false).notNull(),
+	email: text(),
+	invitedBy: integer("invited_by"),
+	invitationExpiresAt: timestamp("invitation_expires_at", { mode: 'string' }),
+	passwordChangedAt: timestamp("password_changed_at", { mode: 'string' }),
+	isInvitationActive: boolean("is_invitation_active").default(false),
+	hospital_id: integer("hospital_id"),
+	adminLicense: text("admin_license"),
 }, (table) => [
 	unique("users_username_unique").on(table.username),
 ]);
@@ -53,6 +62,7 @@ export const patientRecords = pgTable("patient_records", {
 	ipfsHash: text("ipfs_hash"),
 	encryptionKey: text("encryption_key"),
 	recordType: text("record_type").default('traditional'),
+	hospital_id: integer("hospital_id").notNull(),
 }, (table) => [
 	foreignKey({
 			columns: [table.submittedBy],
@@ -71,6 +81,7 @@ export const patientProfiles = pgTable("patient_profiles", {
 	isProfileComplete: boolean("is_profile_complete").default(false),
 	createdAt: timestamp("created_at", { mode: 'string' }).defaultNow(),
 	updatedAt: timestamp("updated_at", { mode: 'string' }).defaultNow(),
+	hospital_id: integer("hospital_id"),
 }, (table) => [
 	unique("patient_profiles_patient_did_unique").on(table.patientDid),
 	unique("patient_profiles_national_id_unique").on(table.nationalId),
@@ -228,4 +239,20 @@ export const ipfsContent = pgTable("ipfs_content", {
 			name: "ipfs_content_patient_did_fkey"
 		}),
 	unique("ipfs_content_content_hash_key").on(table.contentHash),
+]);
+
+export const hospitalStaff = pgTable("hospital_staff", {
+	id: serial().primaryKey().notNull(),
+	staffId: text("staff_id").notNull(),
+	name: text("name").notNull(),
+	role: text("role").notNull(),
+	licenseNumber: text("license_number").notNull(),
+	department: text("department").notNull(),
+	hospitalId: text("hospital_id").notNull(),
+	isActive: boolean("is_active").default(true).notNull(),
+	isOnDuty: boolean("is_on_duty").default(false).notNull(),
+	createdAt: timestamp("created_at", { mode: 'string' }).defaultNow(),
+	updatedAt: timestamp("updated_at", { mode: 'string' }).defaultNow(),
+}, (table) => [
+	unique("hospital_staff_staff_id_unique").on(table.staffId),
 ]);
