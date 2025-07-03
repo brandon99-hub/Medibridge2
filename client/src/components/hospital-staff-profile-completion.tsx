@@ -42,6 +42,7 @@ export interface HospitalStaffProfileCompletionProps {
   hospitalId: string;
   isEdit?: boolean;
   existingStaff?: any[];
+  existingAdminLicense?: string;
 }
 
 export default function HospitalStaffProfileCompletion({
@@ -50,7 +51,8 @@ export default function HospitalStaffProfileCompletion({
   onComplete,
   hospitalId,
   isEdit = false,
-  existingStaff = []
+  existingStaff = [],
+  existingAdminLicense = ""
 }: HospitalStaffProfileCompletionProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -63,12 +65,12 @@ export default function HospitalStaffProfileCompletion({
   const [submitting, setSubmitting] = useState(false);
   const [adminLicense, setAdminLicense] = useState("");
 
-  // Always pre-fill staffList when editing and existingStaff changes
   useEffect(() => {
     if (isEdit && existingStaff.length > 0) {
       setStaffList(existingStaff);
+      setAdminLicense(existingAdminLicense);
     }
-  }, [isEdit, existingStaff]);
+  }, [isEdit, existingStaff, existingAdminLicense]);
 
   // Validation helpers
   const isStaffValid = (staff: any) =>

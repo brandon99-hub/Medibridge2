@@ -123,6 +123,7 @@ export default function HomePage() {
           hospitalId={user.id?.toString() || ""}
           isEdit={existingStaff.length > 0}
           existingStaff={existingStaff}
+          existingAdminLicense={staffProfileData?.adminLicense || ""}
         />
       )}
     </div>

@@ -1238,11 +1238,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Get staff for this hospital
       const staff = await storage.getHospitalStaffByHospitalId(hospitalId);
-      
+
+      // Get admin license for this hospital (from the admin user)
+      const adminUser = await storage.getUser(parseInt(hospitalId));
+      const adminLicense = adminUser?.adminLicense || "";
+
       res.json({
         hasStaffProfile: staff.length > 0,
         staffCount: staff.length,
         staff: staff,
+        adminLicense,
       });
     } catch (error) {
       next(error);
