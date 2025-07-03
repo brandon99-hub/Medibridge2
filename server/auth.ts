@@ -7,7 +7,7 @@ import { RedisStore } from "connect-redis";
 import { scrypt, randomBytes, timingSafeEqual } from "crypto";
 import { promisify } from "util";
 import { storage } from "./storage";
-import { User as SelectUser } from "@shared/schema";
+import { User as SelectUser, User } from "@shared/schema";
 import { auditService } from "./audit-service";
 import { redisService } from "./redis-service";
 
@@ -109,9 +109,16 @@ export async function setupAuth(app: Express) {
       return res.status(400).send("Username already exists");
     }
 
+    // Generate a unique hospital_id for new hospital registrations
+    const allUsers = await storage.getAllUsers();
+    const maxHospitalId = Math.max(0, ...allUsers.map((user: User) => user.hospital_id || 0));
+    const newHospitalId = maxHospitalId + 1;
+
     const user = await storage.createUser({
       ...req.body,
       password: await hashPassword(req.body.password),
+      hospital_id: newHospitalId, // Assign unique hospital_id
+      isAdmin: true, // Make new hospital registrations admin by default
     });
 
     req.login(user, (err) => {

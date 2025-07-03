@@ -17,7 +17,7 @@ export const users = pgTable("users", {
   invitationExpiresAt: timestamp("invitation_expires_at"),
   passwordChangedAt: timestamp("password_changed_at"),
   isInvitationActive: boolean("is_invitation_active").default(false),
-  hospital_id: integer("hospital_id"),
+  hospital_id: integer("hospital_id").notNull(),
   adminLicense: text("admin_license"),
   createdAt: timestamp("created_at").defaultNow(),
 });
