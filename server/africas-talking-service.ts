@@ -18,8 +18,8 @@ const MENUS = {
     sw: `CON Chagua lugha unayopendelea:\n1. Kiingereza\n2. Kiswahili`
   },
   languageSaved: {
-    en: `END Language preference saved.`,
-    sw: `END Lugha imehifadhiwa.`
+    en: `CON Language preference saved.\n\nWelcome to ZK-MedPass\n1. Prove Health Status\n2. Emergency Proof\n3. Renew My Proof\n4. Give Feedback (Get Airtime)\n5. Help & Language`,
+    sw: `CON Lugha imehifadhiwa.\n\nKaribu ZK-MedPass\n1. Thibitisha Hali ya Afya\n2. Uthibitisho wa Dharura\n3. Fanya Upya Uthibitisho\n4. Toa Maoni (Pata Airtime)\n5. Msaada & Lugha`
   },
   // Prove Health Status menus
   proofType: {
