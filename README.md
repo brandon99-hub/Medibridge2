@@ -2,13 +2,8 @@
 
 <div align="center">
 
-![MediBridge Logo](https://img.shields.io/badge/MediBridge-Healthcare%20Web3-blue?style=for-the-badge&logo=medical)
-![Security](https://img.shields.io/badge/Security-AES256%20%7C%20HSTS%20%7C%20CSRF-green?style=for-the-badge)
-![Web3](https://img.shields.io/badge/Web3-DID%20%7C%20IPFS%20%7C%20Filecoin-purple?style=for-the-badge)
-![ZK](https://img.shields.io/badge/ZK-Proofs%20%7C%20Privacy%20Preserving-orange?style=for-the-badge)
-![TypeScript](https://img.shields.io/badge/TypeScript-100%25-blue?style=for-the-badge&logo=typescript)
 
-**🏆 Hackathon Project - Bridging Healthcare with Web3 Technology**
+**🏆  Bridging Healthcare with Web3 Technology**
 
 *A secure, decentralized healthcare data interoperability platform with zero-knowledge proofs, USSD integration, and comprehensive emergency protocols designed for the future of medical record sharing in Kenya and beyond. Powered by invisible Web3 technology.*
 
@@ -487,19 +482,9 @@ CMD ["npm", "start"]
 
 [🌐 Live Demo](https://medibrigde.onrender.com/) • [📧 Email](mailto:brandon@medibridge.health) • [🐦 Twitter](#) • [💼 LinkedIn](#) • [📖 Documentation](#)
 
-**🏆 This project was built for the [Hackathon Name] hackathon**
 
 *MediBridge - Where Healthcare Meets Web3 Innovation*
 
 </div>
 
 ---
-
-<div align="center">
-
-![Made with ❤️ in Kenya](https://img.shields.io/badge/Made%20with-❤️%20in%20Kenya-red?style=for-the-badge)
-![License](https://img.shields.io/badge/License-MIT-green?style=for-the-badge)
-![Status](https://img.shields.io/badge/Status-Production%20Ready-brightgreen?style=for-the-badge)
-![ZK Proofs](https://img.shields.io/badge/ZK%20Proofs-Privacy%20Preserving-orange?style=for-the-badge)
-
-</div> 
