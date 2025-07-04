@@ -386,6 +386,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
             accessedBy: user.id,
             recordId: record.id,
             consentGrantedBy: user.id.toString(),
+            hospital_id: user.hospital_id,
+            consent_type: 'traditional',
           });
           
           // Log record access event
@@ -1244,7 +1246,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const adminLicense = adminUser?.adminLicense || "";
 
       res.json({
-        hasStaffProfile: staff.length > 0,
+        hasStaffProfile: staff.length >= 2 && !!adminLicense,
         staffCount: staff.length,
         staff: staff,
         adminLicense,
@@ -1259,7 +1261,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Security & Audit Summary (for admin dashboard)
   app.get("/api/security/audit-summary", requireAdminAuth, async (req, res, next) => {
     try {
-      const summary = await storage.getAuditSummary();
+      const summary = await storage.getAuditSummary(req.user!.hospital_id);
       res.json({ summary });
     } catch (error) {
       next(error);
@@ -1271,7 +1273,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const resolved = req.query.resolved === "true";
       const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : 10;
-      const violations = await storage.getSecurityViolations({ resolved, limit });
+      const violations = await storage.getSecurityViolations({ resolved, limit, hospital_id: req.user!.hospital_id });
       res.json({ violations });
     } catch (error) {
       next(error);

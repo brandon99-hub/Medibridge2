@@ -20,6 +20,7 @@ export const auditEvents = pgTable("audit_events", {
   metadata: jsonb("metadata"), // Additional context data
   severity: text("severity").notNull().default("info"), // info, warning, error, critical
   createdAt: timestamp("created_at").defaultNow(),
+  hospital_id: integer("hospital_id"), // NEW: for multi-tenancy
 });
 
 /**
@@ -37,6 +38,7 @@ export const securityViolations = pgTable("security_violations", {
   resolved: boolean("resolved").default(false),
   resolvedAt: timestamp("resolved_at"),
   createdAt: timestamp("created_at").defaultNow(),
+  hospital_id: integer("hospital_id"), // NEW: for multi-tenancy
 });
 
 /**

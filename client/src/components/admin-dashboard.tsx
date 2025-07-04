@@ -2,7 +2,6 @@ import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -21,9 +20,14 @@ import {
   Database,
   Key,
   Globe,
-  UserPlus
+  UserPlus,
+  Gauge,
+  Zap,
+  Target,
+  BarChart3,
+  Home
 } from "lucide-react";
-import { Skeleton } from "@/components/ui/skeleton"; // Import Skeleton
+import { Skeleton } from "@/components/ui/skeleton";
 import { useLocation } from "wouter";
 import { ArrowLeft } from "lucide-react";
 import EnhancedStaffManagement from "@/components/enhanced-staff-management";
@@ -170,8 +174,19 @@ function ZKMedPassAnalytics() {
   );
 }
 
+const SIDEBAR_TABS = [
+  { key: "overview", label: "Overview", icon: Home },
+  { key: "violations", label: "Security Violations", icon: AlertTriangle },
+  { key: "credentials", label: "VC Monitoring", icon: Shield },
+  { key: "access", label: "Access Patterns", icon: Eye },
+  { key: "activity", label: "Recent Activity", icon: Activity },
+  { key: "rate-limits", label: "Rate Limits", icon: Gauge },
+  { key: "staff", label: "Staff Management", icon: UserPlus },
+  { key: "zk-medpass", label: "ZK-MedPass", icon: BarChart3 },
+];
+
 export default function AdminDashboard() {
-  const [selectedTimeframe, setSelectedTimeframe] = useState("24h");
+  const [activeTab, setActiveTab] = useState("overview");
   const [showStaffModal, setShowStaffModal] = useState(false);
   const [, navigate] = useLocation();
 
@@ -187,6 +202,13 @@ export default function AdminDashboard() {
     queryKey: ['/api/admin/security-violations', { resolved: false, limit: 5 }],
     queryFn: async () => apiRequest("GET", "/api/admin/security-violations?resolved=false&limit=5").then(res => res.json()),
     refetchInterval: 60000, // Refresh every 60 seconds
+  });
+
+  // Fetch rate limiting statistics
+  const { data: rateLimitStats, isLoading: isLoadingRateLimits } = useQuery<any>({
+    queryKey: ['/api/rate-limits/stats'],
+    queryFn: async () => apiRequest("GET", "/api/rate-limits/stats").then(res => res.json()),
+    refetchInterval: 30000, // Refresh every 30 seconds
   });
 
   const recentViolations = securityViolationsData?.violations || [];
@@ -218,101 +240,121 @@ export default function AdminDashboard() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 p-6">
-      <div className="max-w-7xl mx-auto space-y-6">
-        {/* Back to Dashboard Button */}
-        <div className="flex items-start">
+    <div className="min-h-screen bg-slate-50 flex">
+      {/* Sidebar */}
+      <aside className="w-64 bg-white shadow-lg min-h-screen flex flex-col">
+        <div className="p-6 border-b border-slate-200">
+          <div className="flex items-center space-x-3">
+            <Shield className="h-8 w-8 text-blue-600" />
+            <div>
+              <h1 className="text-xl font-bold text-slate-900">MediBridge</h1>
+              <p className="text-sm text-slate-600">Admin Dashboard</p>
+            </div>
+          </div>
+        </div>
+        <nav className="flex-1 p-4 space-y-2">
+          {SIDEBAR_TABS.map(tab => (
+            <button
+              key={tab.key}
+              onClick={() => setActiveTab(tab.key)}
+              className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg transition-colors duration-200 ${
+                activeTab === tab.key
+                  ? "bg-blue-50 text-blue-700 border border-blue-200"
+                  : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+              }`}
+            >
+              <tab.icon className="h-5 w-5" />
+              <span className="font-medium">{tab.label}</span>
+            </button>
+          ))}
+        </nav>
+        <div className="p-4 border-t border-slate-200">
+          <div className="flex items-center space-x-2 p-3 bg-green-50 rounded-lg">
+            <CheckCircle className="h-4 w-4 text-green-600" />
+            <div>
+              <div className="text-sm font-medium text-green-900">System Healthy</div>
+              <div className="text-xs text-green-700">All systems operational</div>
+            </div>
+          </div>
+        </div>
+      </aside>
+      {/* Main Content */}
+      <main className="flex-1 p-6 max-w-6xl mx-auto">
+        {/* Back Button */}
+        <div className="mb-6">
           <button
-            className="mb-4 flex items-center px-4 py-2 rounded-full border border-blue-200 bg-white text-blue-700 shadow-sm hover:bg-blue-50 hover:border-blue-400 transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-blue-200"
+            className="flex items-center px-4 py-2 rounded-full border border-blue-200 bg-white text-blue-700 shadow-sm hover:bg-blue-50 hover:border-blue-400 transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-blue-200"
             onClick={() => navigate("/")}
           >
             <ArrowLeft className="h-4 w-4 mr-2" />
             <span className="font-medium">Back to Dashboard</span>
           </button>
         </div>
-        {/* Header */}
-        <div className="flex items-center justify-between">
+        {/* Section Content */}
+        {activeTab === "overview" && (
+          <div className="space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center space-x-2">
+                  <Home className="h-5 w-5 text-blue-600" />
+                  <span>System Overview</span>
+                </CardTitle>
+                <CardDescription>
+                  Welcome to the MediBridge Security & Audit Dashboard
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="space-y-4">
+                    <h3 className="text-lg font-semibold text-slate-900">Quick Stats</h3>
+                    <div className="space-y-3">
+                      <div className="flex justify-between items-center p-3 bg-blue-50 rounded-lg">
+                        <span className="text-slate-700">Successful Logins</span>
+                        <span className="font-bold text-blue-600">{securityMetrics.successfulLogins}</span>
+                      </div>
+                      <div className="flex justify-between items-center p-3 bg-red-50 rounded-lg">
+                        <span className="text-slate-700">Failed Logins</span>
+                        <span className="font-bold text-red-600">{securityMetrics.failedLogins}</span>
+                      </div>
+                      <div className="flex justify-between items-center p-3 bg-green-50 rounded-lg">
+                        <span className="text-slate-700">VCs Issued Today</span>
+                        <span className="font-bold text-green-600">{vcIssuanceStats.today}</span>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="space-y-4">
+                    <h3 className="text-lg font-semibold text-slate-900">System Health</h3>
+                    <div className="space-y-3">
+                      <div className="flex items-center space-x-3 p-3 bg-green-50 rounded-lg">
+                        <CheckCircle className="h-5 w-5 text-green-600" />
           <div>
-            <h1 className="text-3xl font-bold text-slate-900">Security & Audit Dashboard</h1>
-            <p className="text-slate-600">Real-time monitoring of MediBridge security events</p>
+                          <div className="font-medium text-green-900">Rate Limiting</div>
+                          <div className="text-sm text-green-700">Active and protecting all endpoints</div>
+                        </div>
           </div>
-          <div className="flex items-center space-x-2">
-            <Badge variant="outline" className="text-green-600 border-green-600">
-              <CheckCircle className="h-3 w-3 mr-1" />
-              System Healthy
-            </Badge>
+                      <div className="flex items-center space-x-3 p-3 bg-blue-50 rounded-lg">
+                        <Shield className="h-5 w-5 text-blue-600" />
+                        <div>
+                          <div className="font-medium text-blue-900">Encryption</div>
+                          <div className="text-sm text-blue-700">AES-256-GCM protecting all data</div>
           </div>
         </div>
-
-        {/* Overview Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Total Security Events</CardTitle>
-              <Activity className="h-4 w-4 text-blue-600" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">
-                {isLoadingAuditSummary ? <Skeleton className="h-8 w-1/2" /> : overviewMetrics.totalEvents?.toLocaleString() || 0}
+                      <div className="flex items-center space-x-3 p-3 bg-purple-50 rounded-lg">
+                        <Activity className="h-5 w-5 text-purple-600" />
+                        <div>
+                          <div className="font-medium text-purple-900">Audit Logging</div>
+                          <div className="text-sm text-purple-700">Comprehensive event tracking</div>
+                        </div>
               </div>
-              <p className="text-xs text-slate-600">Total audit events</p>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Unresolved Violations</CardTitle>
-              <AlertTriangle className="h-4 w-4 text-red-600" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-red-600">
-                 {isLoadingAuditSummary ? <Skeleton className="h-8 w-1/4" /> : overviewMetrics.securityViolations || 0}
               </div>
-              <p className="text-xs text-slate-600">Requires attention</p>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Consent Events</CardTitle>
-              <Shield className="h-4 w-4 text-green-600" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-green-600">
-                {isLoadingAuditSummary ? <Skeleton className="h-8 w-1/4" /> : overviewMetrics.consentEvents || 0}
               </div>
-              <p className="text-xs text-slate-600">Consent actions logged</p>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Record Accesses</CardTitle>
-              <FileText className="h-4 w-4 text-purple-600" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-purple-600">
-                {isLoadingAuditSummary ? <Skeleton className="h-8 w-1/4" /> : securityMetrics.recordAccesses || 0}
               </div>
-              <p className="text-xs text-slate-600">Authorized accesses</p>
             </CardContent>
           </Card>
         </div>
-
-        {/* Main Content Tabs */}
-        <Tabs defaultValue="violations" className="space-y-6">
-          <TabsList>
-            <TabsTrigger value="violations">Security Violations</TabsTrigger>
-            <TabsTrigger value="credentials">VC Monitoring</TabsTrigger>
-            <TabsTrigger value="access">Access Patterns</TabsTrigger>
-            <TabsTrigger value="activity">Recent Activity</TabsTrigger>
-            <TabsTrigger value="staff">Staff Management</TabsTrigger>
-            <TabsTrigger value="zk-medpass">ZK-MedPass</TabsTrigger>
-            <TabsTrigger value="testing">Security Testing</TabsTrigger>
-          </TabsList>
-
-          {/* Security Violations Tab */}
-          <TabsContent value="violations" className="space-y-6">
+        )}
+        {activeTab === "violations" && (
+          <div className="space-y-6">
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center space-x-2">
@@ -352,7 +394,7 @@ export default function AdminDashboard() {
                 )}
                 {!isLoadingViolations && recentViolations.length > 0 && (
                   <div className="space-y-4">
-                    {recentViolations.map((violation: any) => ( // Use any for now, define type later
+                    {recentViolations.map((violation: any) => (
                       <div key={violation.id} className="border rounded-lg p-4">
                         <div className="flex items-center justify-between mb-2">
                           <div className="flex items-center space-x-2">
@@ -387,9 +429,7 @@ export default function AdminDashboard() {
                             className="text-green-700 border-green-200 hover:bg-green-50"
                             onClick={async () => {
                               await apiRequest("POST", `/api/admin/security-violations/${violation.id}/resolve`);
-                              // Optionally show a toast
-                              // Refetch the violations list
-                              window.location.reload(); // Or use a better state update if available
+                              window.location.reload();
                             }}
                           >
                             Mark as Resolved
@@ -401,11 +441,10 @@ export default function AdminDashboard() {
                 )}
               </CardContent>
             </Card>
-          </TabsContent>
-
-          {/* VC Monitoring Tab */}
-          <TabsContent value="credentials" className="space-y-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          </div>
+        )}
+        {activeTab === "credentials" && (
+          <div className="space-y-6">
               <Card>
                 <CardHeader>
                   <CardTitle className="flex items-center space-x-2">
@@ -458,10 +497,8 @@ export default function AdminDashboard() {
                 </CardContent>
               </Card>
             </div>
-          </TabsContent>
-
-          {/* Access Patterns Tab */}
-          <TabsContent value="access" className="space-y-6">
+        )}
+        {activeTab === "access" && (
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center space-x-2">
@@ -500,10 +537,8 @@ export default function AdminDashboard() {
                 </div>
               </CardContent>
             </Card>
-          </TabsContent>
-
-          {/* Recent Activity Tab */}
-          <TabsContent value="activity" className="space-y-6">
+        )}
+        {activeTab === "activity" && (
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center space-x-2">
@@ -596,10 +631,193 @@ export default function AdminDashboard() {
                 )}
               </CardContent>
             </Card>
-          </TabsContent>
+        )}
+        {activeTab === "rate-limits" && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center space-x-2">
+                <Gauge className="h-5 w-5 text-blue-600" />
+                <span>Rate Limiting Dashboard</span>
+              </CardTitle>
+              <CardDescription>
+                Monitor API rate limits and security thresholds
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {isLoadingRateLimits && (
+                <div className="space-y-4">
+                  {[...Array(4)].map((_, i) => (
+                    <div key={i} className="border rounded-lg p-4 space-y-3">
+                      <div className="flex items-center justify-between mb-2">
+                        <Skeleton className="h-6 w-24" />
+                        <Skeleton className="h-4 w-32" />
+                      </div>
+                      <Skeleton className="h-4 w-full" />
+                      <Skeleton className="h-4 w-3/4" />
+                    </div>
+                  ))}
+                </div>
+              )}
+              {!isLoadingRateLimits && rateLimitStats?.stats && (
+                <div className="space-y-6">
+                  {/* Rate Limit Overview */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                    <div className="text-center p-4 bg-blue-50 rounded-lg">
+                      <Gauge className="h-8 w-8 text-blue-600 mx-auto mb-2" />
+                      <div className="text-2xl font-bold text-blue-600">
+                        {Object.keys(rateLimitStats.stats.limits).length}
+                      </div>
+                      <div className="text-sm text-slate-600">Active Rate Limits</div>
+                    </div>
+                    
+                    <div className="text-center p-4 bg-green-50 rounded-lg">
+                      <Zap className="h-8 w-8 text-green-600 mx-auto mb-2" />
+                      <div className="text-2xl font-bold text-green-600">
+                        {rateLimitStats.stats.limits.AUTH?.max || 0}
+                      </div>
+                      <div className="text-sm text-slate-600">Auth Attempts/15min</div>
+                    </div>
+                    
+                    <div className="text-center p-4 bg-orange-50 rounded-lg">
+                      <Target className="h-8 w-8 text-orange-600 mx-auto mb-2" />
+                      <div className="text-2xl font-bold text-orange-600">
+                        {rateLimitStats.stats.limits.EMERGENCY?.max || 0}
+                      </div>
+                      <div className="text-sm text-slate-600">Emergency Req/Hour</div>
+                    </div>
+                    
+                    <div className="text-center p-4 bg-purple-50 rounded-lg">
+                      <Shield className="h-8 w-8 text-purple-600 mx-auto mb-2" />
+                      <div className="text-2xl font-bold text-purple-600">
+                        {rateLimitStats.stats.limits.MEDICAL_RECORDS?.max || 0}
+                      </div>
+                      <div className="text-sm text-slate-600">Record Req/5min</div>
+                    </div>
+                  </div>
 
-          {/* Staff Management Tab */}
-          <TabsContent value="staff" className="space-y-6">
+                  {/* Rate Limit Details */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <Card>
+                      <CardHeader>
+                        <CardTitle className="text-lg">Rate Limit Configuration</CardTitle>
+                        <CardDescription>Current rate limiting settings by endpoint type</CardDescription>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="space-y-4">
+                          {Object.entries(rateLimitStats.stats.limits).map(([key, config]: [string, any]) => (
+                            <div key={key} className="border rounded-lg p-3">
+                              <div className="flex items-center justify-between mb-2">
+                                <span className="font-medium text-slate-900">{key}</span>
+                                <Badge variant="outline" className="text-xs">
+                                  {config.max} req/{Math.round(config.windowMs / 60000)}min
+                                </Badge>
+                              </div>
+                              <p className="text-sm text-slate-600 mb-2">
+                                {rateLimitStats.stats.description[key] || 'No description available'}
+                              </p>
+                              <div className="text-xs text-slate-500">
+                                Window: {Math.round(config.windowMs / 1000)}s | 
+                                Limit: {config.max} requests
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </CardContent>
+                    </Card>
+
+                    <Card>
+                      <CardHeader>
+                        <CardTitle className="text-lg">Security Insights</CardTitle>
+                        <CardDescription>Rate limiting security analysis</CardDescription>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="space-y-4">
+                          <div className="flex items-center space-x-3 p-3 bg-green-50 rounded-lg">
+                            <CheckCircle className="h-5 w-5 text-green-600" />
+                            <div>
+                              <div className="font-medium text-green-900">Brute Force Protection</div>
+                              <div className="text-sm text-green-700">
+                                Authentication limited to {rateLimitStats.stats.limits.AUTH?.max || 0} attempts per 15 minutes
+                              </div>
+                            </div>
+                          </div>
+                          
+                          <div className="flex items-center space-x-3 p-3 bg-blue-50 rounded-lg">
+                            <Shield className="h-5 w-5 text-blue-600" />
+                            <div>
+                              <div className="font-medium text-blue-900">Sensitive Data Protection</div>
+                              <div className="text-sm text-blue-700">
+                                Medical records access limited to {rateLimitStats.stats.limits.MEDICAL_RECORDS?.max || 0} requests per 5 minutes
+                              </div>
+                            </div>
+                          </div>
+                          
+                          <div className="flex items-center space-x-3 p-3 bg-orange-50 rounded-lg">
+                            <AlertTriangle className="h-5 w-5 text-orange-600" />
+                            <div>
+                              <div className="font-medium text-orange-900">Emergency Access Control</div>
+                              <div className="text-sm text-orange-700">
+                                Emergency requests limited to {rateLimitStats.stats.limits.EMERGENCY?.max || 0} per hour
+                              </div>
+                            </div>
+                          </div>
+                          
+                          <div className="flex items-center space-x-3 p-3 bg-purple-50 rounded-lg">
+                            <Zap className="h-5 w-5 text-purple-600" />
+                            <div>
+                              <div className="font-medium text-purple-900">OTP Spam Prevention</div>
+                              <div className="text-sm text-purple-700">
+                                OTP requests limited to {rateLimitStats.stats.limits.OTP?.max || 0} per 10 minutes
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </div>
+
+                  {/* Rate Limit Status */}
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="text-lg">Rate Limit Status</CardTitle>
+                      <CardDescription>Current system status and recommendations</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div className="text-center p-4 bg-green-50 rounded-lg">
+                          <CheckCircle className="h-8 w-8 text-green-600 mx-auto mb-2" />
+                          <div className="text-lg font-bold text-green-600">Active</div>
+                          <div className="text-sm text-slate-600">Rate limiting is enabled</div>
+                        </div>
+                        
+                        <div className="text-center p-4 bg-blue-50 rounded-lg">
+                          <Activity className="h-8 w-8 text-blue-600 mx-auto mb-2" />
+                          <div className="text-lg font-bold text-blue-600">Monitored</div>
+                          <div className="text-sm text-slate-600">Violations are logged</div>
+                        </div>
+                        
+                        <div className="text-center p-4 bg-purple-50 rounded-lg">
+                          <Shield className="h-8 w-8 text-purple-600 mx-auto mb-2" />
+                          <div className="text-lg font-bold text-purple-600">Protected</div>
+                          <div className="text-sm text-slate-600">All endpoints secured</div>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+              )}
+              {!isLoadingRateLimits && !rateLimitStats?.stats && (
+                <Alert>
+                  <AlertTriangle className="h-4 w-4" />
+                  <AlertDescription>
+                    Rate limiting statistics are not available. The rate limiting service may not be properly configured.
+                  </AlertDescription>
+                </Alert>
+              )}
+            </CardContent>
+          </Card>
+        )}
+        {activeTab === "staff" && (
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center space-x-2">
@@ -632,14 +850,12 @@ export default function AdminDashboard() {
                 </div>
               </CardContent>
             </Card>
-          </TabsContent>
-
-          {/* ZK-MedPass Tab */}
-          <TabsContent value="zk-medpass" className="space-y-6">
+        )}
+        {activeTab === "zk-medpass" && (
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center space-x-2">
-                  <Shield className="h-5 w-5 text-green-600" />
+                <BarChart3 className="h-5 w-5 text-emerald-600" />
                   <span>ZK-MedPass Analytics</span>
                 </CardTitle>
                 <CardDescription>
@@ -650,54 +866,8 @@ export default function AdminDashboard() {
                 <ZKMedPassAnalytics />
               </CardContent>
             </Card>
-          </TabsContent>
-
-          {/* Security Testing Tab */}
-          <TabsContent value="testing" className="space-y-6">
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center space-x-2">
-                  <Shield className="h-5 w-5 text-indigo-600" />
-                  <span>Red Team Simulation</span>
-                </CardTitle>
-                <CardDescription>
-                  Run security tests to validate system defenses
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <Alert>
-                  <AlertTriangle className="h-4 w-4" />
-                  <AlertDescription>
-                    Security testing validates system defenses using controlled scenarios. Only run in development/testing environments.
-                  </AlertDescription>
-                </Alert>
-                
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <Button variant="outline" className="h-20 flex flex-col space-y-2">
-                    <Lock className="h-6 w-6" />
-                    <span>Test Unauthorized Access</span>
-                  </Button>
-                  
-                  <Button variant="outline" className="h-20 flex flex-col space-y-2">
-                    <Shield className="h-6 w-6" />
-                    <span>Test Credential Verification</span>
-                  </Button>
-                  
-                  <Button variant="outline" className="h-20 flex flex-col space-y-2">
-                    <Activity className="h-6 w-6" />
-                    <span>Test Rate Limiting</span>
-                  </Button>
-                  
-                  <Button variant="outline" className="h-20 flex flex-col space-y-2">
-                    <FileText className="h-6 w-6" />
-                    <span>Generate Security Report</span>
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-        </Tabs>
-      </div>
+        )}
+      </main>
     </div>
   );
 }

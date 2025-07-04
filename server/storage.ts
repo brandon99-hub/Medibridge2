@@ -110,8 +110,8 @@ export interface IStorage {
   getPatientRecordsSummary(patientDID: string): Promise<any>;
   
   // Audit Summary Methods
-  countAuditEvents(filters?: { eventType?: string | string[]; outcome?: string; }): Promise<number>;
-  countSecurityViolations(filters?: { violationType?: string; resolved?: boolean; }): Promise<number>;
+  countAuditEvents(filters?: { eventType?: string | string[]; outcome?: string; hospital_id?: number }): Promise<number>;
+  countSecurityViolations(filters?: { violationType?: string; resolved?: boolean; hospital_id?: number }): Promise<number>;
   countConsentAuditRecords(filters?: { consentAction?: string; }): Promise<number>;
 
   // Emergency Consent Methods
@@ -119,7 +119,7 @@ export interface IStorage {
   getEmergencyConsentRecord(id: string): Promise<EmergencyConsentRecordSchema | undefined>;
 
   // Admin/Audit Data Retrieval
-  getSecurityViolations(options?: { limit?: number; offset?: number; resolved?: boolean; }): Promise<SecurityViolation[]>;
+  getSecurityViolations(options?: { limit?: number; offset?: number; resolved?: boolean; hospital_id?: number }): Promise<SecurityViolation[]>;
 
   // Utility: Find patient profile by email or phone
   findPatientProfileByEmailOrPhone(email?: string, phone?: string): Promise<any>;
@@ -152,10 +152,10 @@ export interface IStorage {
   createConsentAudit(audit: any): Promise<void>;
 
   // Store an audit event in the audit_events table
-  createAuditEvent(audit: any): Promise<void>;
+  createAuditEvent(audit: any, hospital_id?: number): Promise<void>;
 
   // Store a security violation in the security_violations table
-  createSecurityViolation(violation: any): Promise<void>;
+  createSecurityViolation(violation: any, hospital_id?: number): Promise<void>;
 
   // Fetch the N most recent audit events
   getRecentAuditEvents(limit?: number): Promise<any[]>;
@@ -218,7 +218,7 @@ export interface IStorage {
   updateUser(id: number, updates: Partial<User>): Promise<void>;
 
   // --- ADMIN DASHBOARD METHODS ---
-  getAuditSummary(): Promise<any>;
+  getAuditSummary(hospital_id?: number): Promise<any>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -720,8 +720,11 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Audit Summary Implementations
-  async countAuditEvents(filters?: { eventType?: string | string[]; outcome?: string; }): Promise<number> {
+  async countAuditEvents(filters?: { eventType?: string | string[]; outcome?: string; hospital_id?: number }): Promise<number> {
     let query = db.select({ count: sql<number>`count(*)` }).from(auditEvents);
+    if (filters && filters.hospital_id !== undefined) {
+      query = query.where(eq(auditEvents.hospital_id, filters.hospital_id));
+    }
 
     if (filters && Object.keys(filters).length > 0) {
       if (filters.eventType && filters.outcome) {
@@ -750,8 +753,11 @@ export class DatabaseStorage implements IStorage {
     return Number(result[0].count);
   }
 
-  async countSecurityViolations(filters?: { violationType?: string; resolved?: boolean; }): Promise<number> {
+  async countSecurityViolations(filters?: { violationType?: string; resolved?: boolean; hospital_id?: number }): Promise<number> {
     let query = db.select({ count: sql<number>`count(*)` }).from(securityViolations);
+    if (filters && filters.hospital_id !== undefined) {
+      query = query.where(eq(securityViolations.hospital_id, filters.hospital_id));
+    }
     
     if (filters?.violationType && filters?.resolved !== undefined) {
       const result = await query.where(and(eq(securityViolations.violationType, filters.violationType), eq(securityViolations.resolved, filters.resolved)));
@@ -802,22 +808,16 @@ export class DatabaseStorage implements IStorage {
     return record || undefined;
   }
 
-  async getSecurityViolations(options?: { limit?: number; offset?: number; resolved?: boolean; }): Promise<SecurityViolation[]> {
-    const { limit = 10, offset = 0, resolved } = options || {};
+  async getSecurityViolations(options?: { limit?: number; offset?: number; resolved?: boolean; hospital_id?: number }): Promise<SecurityViolation[]> {
+    const { limit = 10, offset = 0, resolved, hospital_id } = options || {};
+    let query = db.select().from(securityViolations);
     if (typeof resolved === "boolean") {
-      return await db.select()
-        .from(securityViolations)
-        .where(eq(securityViolations.resolved, resolved))
-        .orderBy(desc(securityViolations.createdAt))
-        .limit(limit)
-        .offset(offset);
-    } else {
-      return await db.select()
-        .from(securityViolations)
-        .orderBy(desc(securityViolations.createdAt))
-        .limit(limit)
-        .offset(offset);
+      query = query.where(eq(securityViolations.resolved, resolved));
     }
+    if (hospital_id !== undefined) {
+      query = query.where(eq(securityViolations.hospital_id, hospital_id));
+    }
+    return await query.orderBy(desc(securityViolations.createdAt)).limit(limit).offset(offset);
   }
 
   // Utility: Find patient profile by email or phone
@@ -908,13 +908,13 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Store an audit event in the audit_events table
-  async createAuditEvent(audit: any): Promise<void> {
-    await db.insert(auditEvents).values(audit);
+  async createAuditEvent(audit: any, hospital_id?: number): Promise<void> {
+    await db.insert(auditEvents).values({ ...audit, hospital_id }).returning();
   }
 
   // Store a security violation in the security_violations table
-  async createSecurityViolation(violation: any): Promise<void> {
-    await db.insert(securityViolations).values(violation);
+  async createSecurityViolation(violation: any, hospital_id?: number): Promise<void> {
+    await db.insert(securityViolations).values({ ...violation, hospital_id }).returning();
   }
 
   // Fetch the N most recent audit events
@@ -1222,8 +1222,8 @@ export class DatabaseStorage implements IStorage {
   }
 
   // --- ADMIN DASHBOARD METHODS ---
-  async getAuditSummary(): Promise<any> {
-    // Aggregate metrics for the admin dashboard
+  async getAuditSummary(hospital_id?: number): Promise<any> {
+    // Aggregate metrics for the admin dashboard, filtered by hospital_id
     const [
       totalEvents,
       unresolvedViolations,
@@ -1236,18 +1236,17 @@ export class DatabaseStorage implements IStorage {
       vcStats,
       consentStats
     ] = await Promise.all([
-      this.countAuditEvents(),
-      this.countSecurityViolations({ resolved: false }),
+      this.countAuditEvents({ hospital_id }),
+      this.countSecurityViolations({ resolved: false, hospital_id }),
       this.countConsentAuditRecords({ consentAction: "GRANTED" }),
-      this.countAuditEvents({ eventType: ["RECORD_ACCESSED", "RECORD_ACCESS", "RECORD_ACCESSED_VIA_VC", "FILECOIN_RECORD_ACCESS"], outcome: "SUCCESS" }),
-      this.countAuditEvents({ eventType: "LOGIN_SUCCESS", outcome: "SUCCESS" }),
-      this.countAuditEvents({ eventType: "LOGIN_FAILURE", outcome: "FAILURE" }),
-      this.countAuditEvents({ eventType: "UNAUTHORIZED_ACCESS", outcome: "FAILURE" }),
-      this.getRecentAuditEvents(10),
+      this.countAuditEvents({ eventType: ["RECORD_ACCESSED", "RECORD_ACCESS", "RECORD_ACCESSED_VIA_VC", "FILECOIN_RECORD_ACCESS"], outcome: "SUCCESS", hospital_id }),
+      this.countAuditEvents({ eventType: "LOGIN_SUCCESS", outcome: "SUCCESS", hospital_id }),
+      this.countAuditEvents({ eventType: "LOGIN_FAILURE", outcome: "FAILURE", hospital_id }),
+      this.countAuditEvents({ eventType: "UNAUTHORIZED_ACCESS", outcome: "FAILURE", hospital_id }),
+      this.getRecentAuditEvents(10), // Optionally filter by hospital_id if needed
       this.getVCIssuanceStats(),
       this.getConsentTrends()
     ]);
-
     return {
       totalEvents,
       securityViolations: unresolvedViolations,

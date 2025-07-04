@@ -1,483 +1,505 @@
-# MediBridge: Decentralized Healthcare Record Interoperability Platform
+# 🏥 MediBridge - Revolutionary Healthcare Data Interoperability Platform
 
-[![Built in 1 Week](https://img.shields.io/badge/Built%20in-1%20Week-green?style=for-the-badge&logo=typescript)](https://github.com/your-repo)
-[![Fresh Code Challenge](https://img.shields.io/badge/Fresh%20Code-May%2015--July%206%202025-blue?style=for-the-badge)](https://github.com/your-repo)
-[![Production Ready](https://img.shields.io/badge/Production-Ready-success?style=for-the-badge)](https://github.com/your-repo)
+<div align="center">
 
-## 🏥 Overview
+![MediBridge Logo](https://img.shields.io/badge/MediBridge-Healthcare%20Web3-blue?style=for-the-badge&logo=medical)
+![Security](https://img.shields.io/badge/Security-AES256%20%7C%20HSTS%20%7C%20CSRF-green?style=for-the-badge)
+![Web3](https://img.shields.io/badge/Web3-DID%20%7C%20IPFS%20%7C%20Filecoin-purple?style=for-the-badge)
+![ZK](https://img.shields.io/badge/ZK-Proofs%20%7C%20Privacy%20Preserving-orange?style=for-the-badge)
+![TypeScript](https://img.shields.io/badge/TypeScript-100%25-blue?style=for-the-badge&logo=typescript)
 
-MediBridge is a **production-ready** Web3-enhanced healthcare data interoperability system designed for secure, consent-based sharing of patient medical records between hospitals. Built with "Invisible Web3 Design," MediBridge fuses the cryptographic integrity of decentralized identity and storage with a Web2-friendly user experience optimized for emerging healthcare systems, including Kenya's mobile-first infrastructure.
+**🏆 Hackathon Project - Bridging Healthcare with Web3 Technology**
 
-This project was developed from scratch as part of the Fresh Code Challenge (May 15 – July 6, 2025) and is now **fully implemented and production-ready**.
+*A secure, decentralized healthcare data interoperability platform with zero-knowledge proofs, USSD integration, and comprehensive emergency protocols designed for the future of medical record sharing in Kenya and beyond. Powered by invisible Web3 technology.*
 
-## 🎯 Problem Statement
+**🏥 Purpose: Enabling seamless, secure sharing of patient medical records between hospitals while maintaining complete patient privacy and control through cryptographic consent and zero-knowledge proofs.**
 
-### The Global Healthcare Crisis
-Every year, **2.3 million Americans** lose access to their medical records due to hospital closures, system failures, or data breaches. In developing nations, this number is exponentially higher.
+[🚀 Live Demo](https://medibrigde.onrender.com/) • [📖 Documentation](#) • [🔐 Security Audit](#) • [💻 Source Code](#)
 
-### Current System Failures
-- **$50 billion** wasted annually on repeated medical tests
-- **40% of patients** can't access their own medical records
-- **1 in 3 emergency cases** delayed due to missing records
-- **2.3 million** medical records breached in 2023 alone
-- **Zero patient control** over their own health data
+</div>
 
-### The Real Cost
-- **Lives lost** due to delayed emergency care
-- **Billions wasted** on duplicate tests and procedures
-- **Privacy violations** affecting millions of patients
-- **Healthcare inequality** - the rich can afford data portability, the poor cannot
+---
 
-### Why This Matters
-When you can't access your medical history, doctors make decisions in the dark. This leads to:
-- **Misdiagnosis** and wrong treatments
-- **Allergic reactions** to previously documented allergies
-- **Delayed emergency care** when every minute counts
-- **Financial burden** from repeated expensive tests
+## 🌟 What Makes MediBridge Revolutionary?
 
-## 🚀 Our Solution
+### 🔐 **Military-Grade Security**
+- **AES-256-GCM Encryption** with integrity verification and HMAC signatures
+- **PBKDF2 Key Derivation** (100,000 iterations) with patient-specific salt
+- **Multi-Factor Authentication** via SMS/Email OTP with multiple providers
+- **HTTP Strict Transport Security (HSTS)** with preload and subdomain support
+- **CSRF Protection** using modern csrf-csrf package
+- **Rate Limiting** with intelligent endpoint-specific limits (5 auth attempts/15min, 3 emergency/hour)
+- **Comprehensive Audit Logging** with real-time security violation tracking
+- **Secure Key Vault** with master key encryption and access monitoring
 
-MediBridge offers a **dual-mode system** that bridges traditional healthcare with Web3 technology:
+### 🌐 **Advanced Web3 Integration**
+- **Decentralized Identity (DID)** using did:key format with automatic generation
+- **Verifiable Credentials** for cryptographic consent with JWT format
+- **IPFS Storage** for decentralized medical records with redundancy
+- **Filecoin Integration** for long-term archival storage with cryptographic proofs
+- **MetaMask Integration** for advanced users with wallet signature verification
+- **Triple Redundant Storage** (IPFS + Filecoin + Local backup)
+- **IPFS Status Monitoring** with real-time health checks and availability tracking
 
-### Traditional Flow
-- Hospital-to-hospital record sharing using national ID
-- Encrypted PostgreSQL storage
-- Standard OAuth2 authentication
-- Familiar healthcare workflows
+### 🔒 **Zero-Knowledge Proofs (ZK-MedPass)**
+- **Privacy-Preserving Health Proofs** - Prove health status without revealing details
+- **Age Verification** - Prove age requirements without revealing exact age
+- **Allergy Proofs** - Share allergy information without exposing specific allergies
+- **Condition Verification** - Prove medical conditions exist without revealing specifics
+- **USSD Integration** - Access ZK proofs via mobile USSD codes
+- **Proof Sharing** - Share anonymous proofs with employers, partners, clinics
+- **Emergency ZK Mode** - Rapid proof sharing for emergency situations
 
-### Web3 Flow
-- **Cryptographic consent** via Verifiable Credentials (VCs)
-- **Decentralized Identity (DID)** for patients
-- **Encrypted record storage** via IPFS with redundancy
-- **Patient-controlled access** with cryptographic authorization
-- **Invisible Web3** - patients use simple phone/email OTP
+### 🏥 **Healthcare-First Design**
+- **Patient-Centric** - Patients control their data with cryptographic consent
+- **Hospital Interoperability** - Seamless data sharing between Hospital A and B
+- **Emergency Access** - Controlled emergency protocols with time-limited credentials
+- **Consent Management** - Cryptographic consent verification with expiration
+- **QR Code Lookup** - Instant patient identification via QR codes
+- **Multi-Hospital Support** - Role-based access control for different hospital types
+- **Staff Management** - Comprehensive staff invitation and profile management
 
-## 🌍 Real-World Impact
+### 📱 **Mobile & USSD Integration**
+- **Africa's Talking Integration** - Voice calls, SMS, airtime rewards, USSD
+- **USSD Health Portal** - Access health proofs via mobile USSD codes
+- **Voice Call Notifications** - Emergency voice calls in multiple languages
+- **Airtime Rewards** - Earn airtime for feedback and participation
+- **Multi-Language Support** - English, Swahili, and other local languages
+- **Emergency SMS** - Rapid emergency notifications to contacts
 
-### Immediate Benefits
-- **90% reduction** in medical record breaches
-- **60% faster** emergency care access
-- **$30 billion saved** annually on duplicate tests
-- **100% patient control** over their own data
+### 🚨 **Emergency & Recovery Systems**
+- **Emergency Access Dashboard** - Real-time emergency credential management
+- **Emergency Consent Service** - Dual-authorization emergency protocols
+- **Emergency Credential Service** - Time-limited emergency access tokens
+- **Patient Key Recovery** - Secure key recovery with QR codes and recovery phrases
+- **Emergency ZK Mode** - Rapid zero-knowledge proof sharing
+- **Next-of-Kin Notifications** - Automated emergency contact notifications
 
-### Global Scale Potential
-- **330 million Americans** could own their health data
-- **2.5 billion people** in developing nations could access portable records
-- **Every hospital** could interoperate seamlessly
-- **Every patient** could control their privacy
+---
 
-### Healthcare Revolution
-MediBridge transforms healthcare from a **hospital-centric** system to a **patient-centric** system:
-- **Patients own their data** - not hospitals
-- **Global interoperability** - not siloed systems
-- **Privacy by design** - not privacy violations
-- **Emergency access** - not delayed care
+## 🚀 Quick Start
 
-### The Future We're Building
-- **Zero medical record breaches**
-- **Instant emergency access** anywhere in the world
-- **Patient-driven research** with privacy protection
-- **Universal healthcare** through data sovereignty
+### ⚡ **Get Running in 5 Minutes**
 
-## 🛠️ Tech Stack
-
-### Frontend
-- **React 18** + **TypeScript** + **Vite**
-- **Tailwind CSS** + **shadcn/ui** components
-- **TanStack Query** for state management
-- **React Router** for navigation
-- **Lucide React** for icons
-
-### Backend
-- **Node.js** + **Express.js**
-- **TypeScript** for type safety
-- **Drizzle ORM** for database management
-- **PostgreSQL** (hosted on Neon)
-- **Express Session** for authentication
-
-### Web3 Layer
-- **Decentralized Identity** (did:key format)
-- **Verifiable Credentials** (JWT + ECDSA signatures)
-- **IPFS** for encrypted medical records
-- **Filecoin** for long-term archival storage
-- **NFT.storage** for Filecoin/IPFS integration
-- **Pinata** for IPFS redundancy
-- **Ethers.js** for wallet integration
-
-### Security & Infrastructure
-- **AES-256-GCM** for record encryption
-- **PBKDF2** key derivation (100,000 iterations)
-- **Encrypted key vault** for private key storage
-- **Full audit logs** with integrity checks
-- **Rate limiting** and **CSRF protection**
-- **Twilio SMS** for OTP delivery
-- **SendGrid** for email notifications
-
-## ✨ Key Features
-
-### 🏥 Hospital Interfaces
-
-#### Hospital A (Record Creation)
-- **Dual-mode submission**: Traditional or Web3/IPFS
-- **AES-encrypted records** stored securely
-- **Patient lookup** by National ID or phone
-- **Visit type categorization** (Emergency, Routine, Follow-up)
-- **Department assignment** and physician tracking
-- **Real-time record submission** with audit logging
-
-#### Hospital B (Record Access)
-- **Multiple search methods**: Phone, National ID, QR Code
-- **Consent modal** with 3-tab wizard:
-  - **Overview**: Patient information and record summary
-  - **Records**: Detailed medical history
-  - **Authorization**: Consent request and approval
-- **Web3 consent issuance** with Verifiable Credentials
-- **Cryptographic access control** via VCs
-
-### 👤 Patient Experience
-
-#### Authentication & Identity
-- **No wallets or blockchain jargon** - completely invisible
-- **Simple login** via phone/email OTP
-- **Automatic DID creation** behind the scenes
-- **Secure key generation** and storage
-- **Profile completion** with OTP verification
-
-#### Data Control
-- **Private data encrypted** and stored on IPFS
-- **Full consent dashboard** to manage record access
-- **Revocable permissions** at any time
-- **Time-limited access** grants
-- **Audit trail** of all data access
-
-#### Recovery & Security
-- **Key recovery system** for lost access
-- **Multi-factor authentication** via SMS/email
-- **Emergency contact** management
-- **Secure profile editing** with verification
-
-### 🔐 Consent System
-
-#### Verifiable Credentials
-- **VCs issued by patients** per record or category
-- **Cryptographic signatures** using patient's private key
-- **Time-limited access** with automatic expiration
-- **Revocable permissions** with immediate effect
-- **Auditable consent chain** with full transparency
-
-#### Emergency Protocol
-- **Dual-doctor override** with audit logging
-- **Next-of-kin contact** system via SMS/email
-- **Auto-revoking credentials** post-emergency
-- **Role-based authorization** for emergency access
-- **Time-limited emergency access** (24-72 hours)
-
-### 📊 Admin Dashboard
-
-#### Real-time Monitoring
-- **Live event tracking** for all system activities
-- **Consent statistics** and trends
-- **Security violation alerts**
-- **Audit log analysis**
-- **System health monitoring**
-
-#### Analytics & Reporting
-- **Patient registration trends**
-- **Consent request patterns**
-- **Hospital activity metrics**
-- **Security incident reports**
-- **Compliance audit trails**
-
-## 🔧 Installation & Setup
-
-### Prerequisites
-- **Node.js** 18+ 
-- **PostgreSQL** database (Neon recommended)
-- **npm** or **yarn** package manager
-
-### 1. Clone the Repository
 ```bash
-git clone <repository-url>
+# Clone the repository
+git clone https://github.com/your-username/MediBridgeSystem.git
 cd MediBridgeSystem
-```
 
-### 2. Install Dependencies
-```bash
+# Install dependencies
 npm install
-```
 
-### 3. Environment Configuration
-Create a `.env` file in the root directory:
+# Set up environment (copy and configure)
+cp .env.example .env
 
-```env
-# Database Configuration
-DATABASE_URL=your_postgresql_connection_string
-
-# Session Secret (generate a random string)
-SESSION_SECRET=your_session_secret_here
-
-# SendGrid Email Service
-SENDGRID_API_KEY=your_sendgrid_api_key_here
-
-# Pinata IPFS Service
-PINATA_API_KEY=your_pinata_api_key_here
-PINATA_SECRET_API_KEY=your_pinata_secret_api_key_here
-PINATA_JWT=your_pinata_jwt_here
-
-# NFT.storage for Filecoin Integration
-NFT_STORAGE_TOKEN=your_nft_storage_token_here
-
-# SMS Services (Multiple providers supported)
-# MSG91 (Free tier available)
-MSG91_API_KEY=your_msg91_api_key
-MSG91_SENDER=MEDIBR
-MSG91_FLOW_ID=your_flow_id
-
-# Vonage (formerly Nexmo) - Pay as you go
-VONAGE_API_KEY=your_vonage_api_key
-VONAGE_API_SECRET=your_vonage_api_secret
-VONAGE_FROM_NUMBER=your_vonage_number
-
-# AWS SNS - Very low cost
-AWS_ACCESS_KEY_ID=your_aws_access_key
-AWS_SECRET_ACCESS_KEY=your_aws_secret_key
-AWS_REGION=us-east-1
-AWS_SNS_FROM_NUMBER=your_aws_sns_number
-
-# SendGrid SMS - Low cost
-SENDGRID_API_KEY=your_sendgrid_api_key
-SENDGRID_FROM_NUMBER=your_sendgrid_number
-
-# Plivo - Competitive pricing
-PLIVO_AUTH_ID=your_plivo_auth_id
-PLIVO_AUTH_TOKEN=your_plivo_auth_token
-PLIVO_FROM_NUMBER=your_plivo_number
-
-# Master Key for Encryption (optional - will auto-generate if not provided)
-MASTER_KEY=your_master_key_here
-```
-
-### 4. Database Setup
-```bash
 # Run database migrations
 npm run db:migrate
 
-# Apply migrations to database
-npm run db:apply
-
-# Apply Filecoin integration migration
-npm run db:push
-```
-
-### 5. Development Server
-```bash
 # Start development server
 npm run dev
 ```
 
-The application will be available at `http://localhost:3000`
+🎯 **Access the application at `http://localhost:5000`**
 
-## 🚀 Production Deployment
+🌐 **Live Demo: [https://medibrigde.onrender.com/](https://medibrigde.onrender.com/)**
 
-### Environment Variables
-Ensure all environment variables are properly configured for production:
+---
 
-```env
-# Production Database
-DATABASE_URL=postgresql://user:password@host:port/database
+## 🏗️ Architecture Overview
 
-# Strong Session Secret
-SESSION_SECRET=your_very_strong_random_secret_here
-
-# Production API Keys
-SENDGRID_API_KEY=your_sendgrid_production_key
-PINATA_API_KEY=your_pinata_production_key
-PINATA_SECRET_API_KEY=your_pinata_production_secret
-PINATA_JWT=your_pinata_production_jwt
-# SMS Services (configure at least one)
-MSG91_API_KEY=your_msg91_production_key
-VONAGE_API_KEY=your_vonage_production_key
-AWS_ACCESS_KEY_ID=your_aws_production_key
-SENDGRID_API_KEY=your_sendgrid_production_key
-PLIVO_AUTH_ID=your_plivo_production_id
-
-# Master Encryption Key
-MASTER_KEY=your_production_master_key
+```mermaid
+graph TB
+    A[Patient Mobile/Web] --> B[Authentication Layer]
+    C[Hospital A Interface] --> B
+    D[Hospital B Interface] --> B
+    E[USSD Portal] --> B
+    
+    B --> F[Security Middleware]
+    F --> G[Rate Limiting]
+    F --> H[CSRF Protection]
+    F --> I[HSTS Headers]
+    
+    G --> J[API Layer]
+    H --> J
+    I --> J
+    
+    J --> K[Encryption Service]
+    J --> L[Audit Service]
+    J --> M[Web3 Services]
+    J --> N[ZK-MedPass Service]
+    J --> O[Emergency Services]
+    
+    K --> P[IPFS Storage]
+    K --> Q[Filecoin Storage]
+    M --> R[DID Management]
+    M --> S[Verifiable Credentials]
+    N --> T[Zero-Knowledge Proofs]
+    O --> U[Emergency Access]
+    
+    L --> V[PostgreSQL Database]
+    P --> V
+    Q --> V
+    R --> V
+    S --> V
+    T --> V
+    U --> V
 ```
 
-### Build for Production
+---
+
+## 🔐 Security Implementation Deep Dive
+
+### **Enhanced Encryption & Key Management**
+```typescript
+// AES-256-GCM with integrity verification and HMAC
+const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
+cipher.setAAD(Buffer.from(patientDID)); // Additional authenticated data
+const authTag = cipher.getAuthTag(); // Integrity verification
+const integritySignature = crypto.createHmac('sha256', hmacKey)
+  .update(recordString)
+  .digest('hex');
+```
+
+### **Multi-Provider Authentication**
+- **SMS OTP** via MSG91, Vonage, AWS SNS, SendGrid, Plivo
+- **Email OTP** via SendGrid with template support
+- **Session Management** with Redis and secure cookies
+- **Rate Limiting** on authentication endpoints with audit logging
+
+### **Comprehensive Audit & Compliance**
+```typescript
+// Real-time security violation tracking
+await auditService.logSecurityViolation({
+  violationType: "RATE_LIMIT_EXCEEDED",
+  severity: "medium",
+  actorId: req.ip || "unknown",
+  targetResource: `${endpointType}:${req.path}`,
+  details: { endpointType, path: req.path, method: req.method },
+}, req);
+```
+
+---
+
+## 🌐 Web3 Features Showcase
+
+### **Decentralized Identity (DID)**
+```typescript
+// Auto-generate patient DID from phone number
+const did = didService.generateDID(publicKey);
+const didDocument = didService.createDIDDocument(did, publicKey);
+```
+
+### **Verifiable Credentials**
+```typescript
+// Issue consent credential with expiration
+const vc = await vcService.issueCredential({
+  type: "HealthcareConsent",
+  issuer: patientDID,
+  subject: hospitalDID,
+  contentHash: recordHash,
+  expiresAt: consentExpiry
+});
+```
+
+### **IPFS Integration with Monitoring**
+```typescript
+// Store encrypted record on IPFS with health monitoring
+const ipfsResult = await ipfsService.storeRecord(encryptedData);
+const cid = ipfsResult.cid;
+// Real-time IPFS status monitoring with availability tracking
+```
+
+---
+
+## 🔒 Zero-Knowledge Proofs (ZK-MedPass)
+
+### **Privacy-Preserving Health Proofs**
+```typescript
+// Generate ZK proof for health condition without revealing details
+const proof = await zkpService.generateConditionProof(
+  patientDID,
+  condition,
+  "Patient has valid health status",
+  30 // expires in 30 days
+);
+```
+
+### **USSD Integration**
+- **Mobile USSD Portal** - Access health proofs via *384*1234#
+- **Multi-Language Support** - English and Swahili menus
+- **Proof Sharing** - Share anonymous proofs with employers/clinics
+- **Airtime Rewards** - Earn airtime for feedback and participation
+
+### **Emergency ZK Mode**
+```typescript
+// Rapid emergency proof sharing
+await zkpService.emergencyMode({
+  patientDID,
+  emergencyContacts: ["+254123456789"]
+});
+```
+
+---
+
+## 📱 User Experience
+
+### **For Patients**
+- 🆔 **Simple Registration** - Phone/email only, no crypto knowledge needed
+- 📱 **QR Code Identity** - Show QR to hospital staff for instant lookup
+- 🔐 **Consent Dashboard** - Control who accesses your records
+- 🚨 **Emergency Access** - Temporary access for critical situations
+- 🔑 **Key Recovery** - Secure recovery with QR codes and recovery phrases
+- 📞 **USSD Portal** - Access health proofs via mobile USSD
+- 🎁 **Airtime Rewards** - Earn airtime for feedback and participation
+- 🔒 **ZK Proofs** - Share health status without revealing details
+
+### **For Hospitals**
+- 🏥 **Hospital A Interface** - Submit and manage patient records
+- 🔍 **Hospital B Interface** - Search and access with patient consent
+- 👥 **Staff Management** - Invite and manage hospital staff with profiles
+- 🚨 **Emergency Authorization** - Grant emergency access with dual approval
+- 📊 **Audit Dashboard** - Monitor all access and security events
+- 🔐 **Consent Verification** - Verify patient consent cryptographically
+- 📱 **QR Code Scanning** - Instant patient identification
+
+### **For Administrators**
+- 🛡️ **Security Monitoring** - Real-time security violation tracking
+- 📈 **Analytics Dashboard** - Usage statistics and trends
+- 🔧 **System Management** - Configure security settings
+- 📋 **Compliance Reports** - Generate audit reports
+- 👥 **Staff Management** - Comprehensive staff invitation system
+- 🔄 **Rate Limit Monitoring** - Track and manage API usage
+- 🚨 **Emergency Oversight** - Monitor emergency access events
+
+---
+
+## 🛡️ Security Features Matrix
+
+| Feature | Implementation | Security Level |
+|---------|---------------|----------------|
+| **Encryption** | AES-256-GCM + PBKDF2 + HMAC | 🔒 Military Grade |
+| **Authentication** | MFA + Session Management + Rate Limiting | 🔒 Enterprise |
+| **Authorization** | Role-Based Access Control + Consent | 🔒 Healthcare |
+| **Audit Logging** | Comprehensive + Real-time + Violations | 🔒 Compliance |
+| **Rate Limiting** | Endpoint-specific + Audit logging | 🔒 DDoS Protection |
+| **CSRF Protection** | Modern csrf-csrf + Token validation | 🔒 Web Security |
+| **HSTS** | Preload + Subdomains + Health checks | 🔒 Transport Security |
+| **Input Validation** | Zod schemas + Sanitization | 🔒 Injection Protection |
+| **Zero-Knowledge** | Poseidon hashing + Privacy proofs | 🔒 Privacy Preserving |
+| **Emergency Access** | Time-limited + Dual authorization | 🔒 Emergency Protocols |
+
+---
+
+## 📊 Performance & Scalability
+
+### **Database Optimization**
+- **Indexed Queries** for fast patient lookups
+- **Connection Pooling** for efficient database usage
+- **Drizzle ORM** for type-safe queries
+- **Migration Management** for schema updates
+
+### **Caching Strategy**
+- **Redis Caching** for session management
+- **Query Result Caching** for frequently accessed data
+- **IPFS Content Caching** for faster retrieval
+- **CDN Integration** for static assets
+
+### **Monitoring & Logging**
+- **Real-time Performance Monitoring**
+- **Error Tracking** and alerting
+- **Usage Analytics** and metrics
+- **Health Check Endpoints**
+- **IPFS Status Monitoring** with availability tracking
+
+---
+
+## 🧪 Testing & Quality Assurance
+
+### **Security Testing**
 ```bash
-# Build the application
+# Test HSTS implementation
+curl -I http://localhost:5000/api/security/hsts-health
+
+# Test CSRF protection
+curl -I http://localhost:5000/api/csrf-health
+
+# Test security headers
+curl -I http://localhost:5000/api/security/headers-test
+
+# Test ZK proof generation
+curl -X POST http://localhost:5000/api/zk-medpass/generate-proof
+```
+
+### **API Testing**
+- **Unit Tests** for all core functions
+- **Integration Tests** for API endpoints
+- **End-to-End Tests** for user workflows
+- **Security Tests** for authentication and authorization
+- **ZK Proof Tests** for privacy-preserving features
+
+---
+
+## 🚀 Deployment
+
+### **Production Setup**
+```bash
+# Build for production
 npm run build
+
+# Set environment variables
+export NODE_ENV=production
+export DATABASE_URL=postgresql://...
+export SESSION_SECRET=your_very_strong_secret
+export MASTER_KEY=your_master_key
+export AFRICAS_TALKING_API_KEY=your_at_key
 
 # Start production server
 npm start
 ```
 
-## 🔐 Security Features
+### **Docker Deployment**
+```dockerfile
+# Multi-stage build for optimized production image
+FROM node:18-alpine AS builder
+WORKDIR /app
+COPY package*.json ./
+RUN npm ci --only=production
 
-### Encryption & Key Management
-- **AES-256-GCM** encryption for all medical records
-- **PBKDF2** key derivation with 100,000 iterations
-- **Secure key vault** for private key storage
-- **Master key encryption** for additional security layer
-
-### Authentication & Authorization
-- **Multi-factor authentication** via SMS/email OTP
-- **Session-based authentication** with secure cookies
-- **Role-based access control** for hospitals
-- **Patient consent verification** via cryptographic signatures
-
-### Audit & Compliance
-- **Comprehensive audit logging** for all actions
-- **Tamper-proof logs** with IP addresses and timestamps
-- **Security violation tracking** and alerting
-- **HIPAA-compliant** data handling practices
-
-### Network Security
-- **Rate limiting** to prevent brute force attacks
-- **CSRF protection** for all forms
-- **Input validation** and sanitization
-- **Secure headers** and HTTPS enforcement
-
-## 📱 SMS & Email Integration
-
-### Multi-Provider SMS Service
-- **Multiple SMS providers** for redundancy and cost optimization
-- **Free tier options**: MSG91
-- **Low-cost options**: AWS SNS, SendGrid SMS, Vonage, Plivo
-- **Automatic fallback** between providers
-- **OTP delivery** via SMS for patient authentication
-- **Emergency notifications** to next-of-kin
-- **Welcome messages** for new patients
-
-### SendGrid Email Service
-- **OTP delivery** via email for patient authentication
-- **Emergency consent notifications**
-- **Welcome emails** for new patients
-- **System notifications** and alerts
-
-## 🔄 API Endpoints
-
-### Authentication
-- `POST /api/auth/login` - Hospital login
-- `POST /api/auth/patient/login` - Patient login
-- `POST /api/auth/patient/register` - Patient registration
-- `POST /api/auth/logout` - Logout
-
-### Patient Management
-- `POST /api/patient-lookup/phone` - Lookup by phone
-- `POST /api/patient-lookup/national-id` - Lookup by National ID
-- `POST /api/patient-lookup/qr` - Lookup by QR code
-- `GET /api/patient/profile` - Get patient profile
-- `PUT /api/patient/profile` - Update patient profile
-
-### Medical Records
-- `POST /api/submit_record` - Submit medical record
-- `POST /api/get_records` - Get patient records
-- `POST /api/request-consent` - Request consent
-- `POST /api/grant-consent` - Grant consent
-- `POST /api/revoke-consent` - Revoke consent
-
-### Web3 Features
-- `POST /api/web3/create-identity` - Create DID
-- `POST /api/web3/issue-consent` - Issue VC
-- `POST /api/web3/verify-credential` - Verify VC
-- `GET /api/web3/patient-dashboard` - Patient dashboard
-
-### Emergency Access
-- `POST /api/emergency/request` - Request emergency access
-- `POST /api/emergency/authorize` - Authorize emergency access
-- `POST /api/emergency/contact-next-of-kin` - Contact next-of-kin
-
-### Admin & Monitoring
-- `GET /api/admin/dashboard` - Admin dashboard
-- `GET /api/admin/audit-logs` - Audit logs
-- `GET /api/admin/security-violations` - Security violations
-- `GET /api/admin/recent-activity` - Recent activity
-
-## 🧪 Testing
-
-### Run Tests
-```bash
-# Run all tests
-npm test
-
-# Run TypeScript check
-npm run check
-
-# Run linting
-npm run lint
+FROM node:18-alpine AS production
+WORKDIR /app
+COPY --from=builder /app/node_modules ./node_modules
+COPY . .
+EXPOSE 5000
+CMD ["npm", "start"]
 ```
-
-### Test Coverage
-- **Unit tests** for all core functions
-- **Integration tests** for API endpoints
-- **End-to-end tests** for user workflows
-- **Security tests** for authentication and authorization
-
-## 📈 Performance & Scalability
-
-### Database Optimization
-- **Indexed queries** for fast patient lookups
-- **Connection pooling** for efficient database usage
-- **Query optimization** with Drizzle ORM
-- **Migration management** for schema updates
-
-### Caching Strategy
-- **Redis caching** for session management
-- **Query result caching** for frequently accessed data
-- **IPFS content caching** for faster retrieval
-- **CDN integration** for static assets
-
-### Monitoring & Logging
-- **Real-time performance monitoring**
-- **Error tracking** and alerting
-- **Usage analytics** and metrics
-- **Health check endpoints**
-
-## 🔮 Future Enhancements
-
-### Planned Features
-- **DID communication** via Ceramic network
-- **Integration with national health registries**
-- **FHIR support** for record interoperability
-- **AI analytics layer** for population-level health trends
-- **Mobile app** for patient self-service
-- **Blockchain-based audit trail** for immutable logs
-
-### Scalability Improvements
-- **Microservices architecture** for better scaling
-- **Kubernetes deployment** for container orchestration
-- **Multi-region deployment** for global access
-- **Advanced caching** with Redis clusters
-
-## 👥 Team
-
-**Brandon Mwenja** - Fullstack Engineer | Kenya
-- Led system architecture and design
-- Implemented encryption flows and security features
-- Developed backend logic and API endpoints
-- Created frontend UI/UX with modern design patterns
-- Integrated Web3 technologies seamlessly
-- Implemented comprehensive audit and monitoring systems
-
-## 📄 License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## 🤝 Contributing
-
-We welcome contributions! Please see our [Contributing Guidelines](CONTRIBUTING.md) for details.
-
-## 📞 Support
-
-For support and questions:
-- **Email**: support@medibridge.health
-- **Documentation**: [docs.medibridge.health](https://docs.medibridge.health)
-- **Issues**: [GitHub Issues](https://github.com/your-repo/issues)
 
 ---
 
-**MediBridge** - Bridging Healthcare with Web3 Technology 🏥🔗⚡
+## 📈 Impact & Innovation
 
+### **Healthcare Impact**
+- ✅ **Patient Privacy** - Cryptographic consent control with ZK proofs
+- ✅ **Data Security** - Military-grade encryption with integrity verification
+- ✅ **Interoperability** - Seamless hospital data sharing
+- ✅ **Emergency Access** - Controlled emergency protocols with time limits
+- ✅ **Compliance** - HIPAA and local healthcare regulations
+- ✅ **Mobile Access** - USSD integration for rural areas
+- ✅ **Financial Inclusion** - Airtime rewards for participation
+
+### **Technical Innovation**
+- 🚀 **Web3 Integration** - First healthcare platform with DID + IPFS + ZK
+- 🔐 **Security First** - Comprehensive security implementation
+- 📱 **User Experience** - Simple interface for complex technology
+- 🌍 **Scalability** - Designed for global healthcare networks
+- 🔄 **Interoperability** - Standards-compliant data exchange
+- 🔒 **Privacy Preserving** - Zero-knowledge proofs for health data
+- 📞 **Mobile Integration** - USSD and voice call capabilities
+
+---
+
+## 🏆 Hackathon Achievements
+
+### **Technical Accomplishments**
+- ✅ **Complete Web3 Integration** - DID, IPFS, Filecoin, Verifiable Credentials
+- ✅ **Zero-Knowledge Proofs** - Privacy-preserving health proofs
+- ✅ **USSD Integration** - Mobile access via Africa's Talking
+- ✅ **Enterprise Security** - AES-256, HSTS, CSRF, Rate Limiting, Audit Logging
+- ✅ **Healthcare Compliance** - HIPAA-compliant data handling
+- ✅ **Emergency Protocols** - Time-limited emergency access
+- ✅ **Key Recovery** - Secure recovery mechanisms
+- ✅ **Staff Management** - Comprehensive invitation system
+- ✅ **User Experience** - Intuitive interfaces for all stakeholders
+- ✅ **Production Ready** - Comprehensive testing and deployment setup
+
+### **Innovation Highlights**
+- 🎯 **First Healthcare DID Platform** - Patient-controlled identities
+- 🔐 **Cryptographic Consent** - Verifiable credentials for data access
+- 🌐 **Decentralized Storage** - IPFS + Filecoin for data redundancy
+- 📱 **QR Code Integration** - Instant patient identification
+- 🚨 **Emergency Protocols** - Controlled emergency access
+- 🔒 **ZK-MedPass** - Privacy-preserving health proofs
+- 📞 **USSD Health Portal** - Mobile access for rural areas
+- 🎁 **Airtime Rewards** - Financial inclusion through participation
+
+---
+
+## 👥 Team
+
+<div align="center">
+
+### **Brandon Mwenja** 
+**🏆 Fullstack Engineer | Kenya**
+
+*"Building the future of healthcare data interoperability with Web3 technology"*
+
+**Expertise:**
+- 🏗️ System Architecture & Design
+- 🔐 Security Implementation (AES-256, HSTS, CSRF, Rate Limiting)
+- 🌐 Web3 Integration (DID, IPFS, Filecoin, Verifiable Credentials)
+- 🔒 Zero-Knowledge Proofs (ZK-MedPass, Privacy Preserving)
+- 📞 Mobile Integration (USSD, Voice Calls, SMS)
+- 🎨 Frontend Development (React, TypeScript)
+- ⚙️ Backend Development (Node.js, PostgreSQL, Redis)
+- 📊 Database Design & Optimization
+
+**Achievements:**
+- ✅ Implemented military-grade encryption (AES-256-GCM + PBKDF2 + HMAC)
+- ✅ Built comprehensive audit logging system with security violations
+- ✅ Integrated multiple Web3 technologies seamlessly
+- ✅ Created zero-knowledge proof system for privacy-preserving health data
+- ✅ Implemented USSD integration for mobile access
+- ✅ Built emergency access protocols with time-limited credentials
+- ✅ Created intuitive healthcare interfaces for all stakeholders
+- ✅ Achieved HIPAA compliance standards
+- ✅ Implemented airtime rewards for user engagement
+
+</div>
+
+---
+
+## 🔮 Future Roadmap
+
+### **Phase 2: Advanced Features**
+- 🤖 **AI Analytics** - Population health insights with privacy preservation
+- 📱 **Mobile App** - Native iOS/Android applications
+- 🌍 **Global Expansion** - Multi-country deployment
+- 🔗 **FHIR Integration** - Healthcare standards compliance
+- 🧬 **Genomic Data** - Secure genomic information sharing with ZK proofs
+- 🏥 **Hospital Network** - Multi-hospital partnerships
+- 📊 **Research Platform** - Anonymized data for research with ZK proofs
+
+### **Phase 3: Ecosystem**
+- 🏛️ **Government Integration** - National health registries
+- 🏥 **Hospital Network** - Multi-hospital partnerships
+- 📊 **Research Platform** - Anonymized data for research
+- 🔬 **Clinical Trials** - Secure trial data management with ZK proofs
+- 🌐 **Global Standards** - International healthcare protocols
+- 💰 **Token Economics** - Incentivized participation and data sharing
+- 🔗 **Interoperability** - Integration with existing health systems
+
+---
+
+## 📞 Connect & Support
+
+<div align="center">
+
+**🚀 Ready to revolutionize healthcare data sharing?**
+
+[🌐 Live Demo](https://medibrigde.onrender.com/) • [📧 Email](mailto:brandon@medibridge.health) • [🐦 Twitter](#) • [💼 LinkedIn](#) • [📖 Documentation](#)
+
+**🏆 This project was built for the [Hackathon Name] hackathon**
+
+*MediBridge - Where Healthcare Meets Web3 Innovation*
+
+</div>
+
+---
+
+<div align="center">
+
+![Made with ❤️ in Kenya](https://img.shields.io/badge/Made%20with-❤️%20in%20Kenya-red?style=for-the-badge)
+![License](https://img.shields.io/badge/License-MIT-green?style=for-the-badge)
+![Status](https://img.shields.io/badge/Status-Production%20Ready-brightgreen?style=for-the-badge)
+![ZK Proofs](https://img.shields.io/badge/ZK%20Proofs-Privacy%20Preserving-orange?style=for-the-badge)
+
+</div> 

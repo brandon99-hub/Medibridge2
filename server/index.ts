@@ -1,11 +1,68 @@
 import 'dotenv/config';
 import express, { type Request, Response, NextFunction } from "express";
+import helmet from "helmet";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
+import { applyRateLimiting } from "./rate-limiting-service";
+import { csrfProtection, csrfTokenEndpoint, csrfHealthCheck } from "./csrf-protection-service";
+import { auditService } from "./audit-service";
 
 const app = express();
-app.use(express.json());
-app.use(express.urlencoded({ extended: false }));
+
+// Security middleware - apply before other middleware
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'", "'unsafe-inline'"], // Allow inline scripts for development
+      styleSrc: ["'self'", "'unsafe-inline'"], // Allow inline styles
+      imgSrc: ["'self'", "data:", "https:"],
+      connectSrc: ["'self'", "https:"],
+      fontSrc: ["'self'", "https:"],
+      objectSrc: ["'none'"],
+      mediaSrc: ["'self'"],
+      frameSrc: ["'none'"],
+    },
+  },
+  crossOriginEmbedderPolicy: false, // Disable for development
+  hsts: {
+    maxAge: 31536000, // 1 year in seconds
+    includeSubDomains: true,
+    preload: true, // Enable HSTS preload for maximum security
+  },
+}));
+
+// Body parsing middleware
+app.use(express.json({ limit: '10mb' })); // Limit request body size
+app.use(express.urlencoded({ extended: false, limit: '10mb' }));
+
+// Apply rate limiting to all API routes
+applyRateLimiting(app);
+
+// Apply CSRF protection to all API routes
+app.use('/api', csrfProtection);
+
+// Custom HSTS middleware for enhanced security monitoring
+app.use((req, res, next) => {
+  // Only apply HSTS in production
+  if (process.env.NODE_ENV === 'production') {
+    // Set HSTS header with healthcare-appropriate settings
+    res.setHeader(
+      'Strict-Transport-Security',
+      'max-age=31536000; includeSubDomains; preload'
+    );
+    
+    // Log HSTS header application for security monitoring
+    if (req.path.startsWith('/api')) {
+      auditService.logHstsEvent("ENABLED", "SUCCESS", req, {
+        path: req.path,
+        method: req.method,
+        userAgent: req.get('User-Agent'),
+      });
+    }
+  }
+  next();
+});
 
 app.use((req, res, next) => {
   const start = Date.now();
@@ -38,6 +95,73 @@ app.use((req, res, next) => {
 });
 
 (async () => {
+  // Health check endpoint (excluded from rate limiting)
+  app.get('/health', (req, res) => {
+    res.json({
+      status: 'healthy',
+      timestamp: new Date().toISOString(),
+      uptime: process.uptime(),
+      environment: process.env.NODE_ENV || 'development',
+    });
+  });
+
+  // Rate limit statistics endpoint (for monitoring)
+  app.get('/api/rate-limits/stats', (req, res) => {
+    const { getRateLimitStats } = require('./rate-limiting-service');
+    res.json({
+      success: true,
+      stats: getRateLimitStats(),
+      timestamp: new Date().toISOString(),
+    });
+  });
+
+  // CSRF token endpoint
+  app.get('/api/csrf-token', csrfTokenEndpoint);
+
+  // CSRF health check endpoint
+  app.get('/api/csrf-health', csrfHealthCheck);
+
+  // HSTS health check endpoint
+  app.get('/api/security/hsts-health', (req, res) => {
+    const isProduction = process.env.NODE_ENV === 'production';
+    const hstsHeader = req.headers['strict-transport-security'];
+    
+    // Log HSTS health check
+    auditService.logHstsEvent("HEALTH_CHECK", "SUCCESS", req, {
+      isProduction,
+      hstsHeader: hstsHeader || 'not-set',
+    });
+    
+    res.json({
+      status: isProduction ? 'enabled' : 'development',
+      hstsHeader: hstsHeader || 'not-set',
+      environment: process.env.NODE_ENV || 'development',
+      timestamp: new Date().toISOString(),
+      maxAge: isProduction ? '31536000 (1 year)' : 'disabled',
+      includeSubDomains: isProduction,
+      preload: isProduction,
+      securityLevel: isProduction ? 'maximum' : 'development',
+    });
+  });
+
+  // Security headers test endpoint
+  app.get('/api/security/headers-test', (req, res) => {
+    const securityHeaders = {
+      hsts: res.getHeader('Strict-Transport-Security'),
+      csp: res.getHeader('Content-Security-Policy'),
+      xFrameOptions: res.getHeader('X-Frame-Options'),
+      xContentTypeOptions: res.getHeader('X-Content-Type-Options'),
+      referrerPolicy: res.getHeader('Referrer-Policy'),
+    };
+    
+    res.json({
+      success: true,
+      securityHeaders,
+      environment: process.env.NODE_ENV || 'development',
+      timestamp: new Date().toISOString(),
+    });
+  });
+
   const server = await registerRoutes(app);
 
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {

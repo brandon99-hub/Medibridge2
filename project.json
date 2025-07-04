@@ -1,0 +1,26 @@
+{
+  "name": "MediBridge",
+  "tagline": "Web3-powered healthcare record interoperability with invisible UX.",
+  "description": "MediBridge enables secure, consent-based sharing of patient medical records between hospitals using both traditional and Web3 flows. It features decentralized identity (DID), verifiable credentials, encrypted IPFS/Filecoin storage, and a user-friendly interface for both patients and hospital staff. Built with React, Node.js, Express, PostgreSQL, Ethers.js, and Drizzle ORM.",
+  "team": [
+    {
+      "name": "Brandon Mwenja",
+      "email": "brandmwenja@gmail.com"
+    }
+  ],
+  "demo_url": "https://medibrigde.onrender.com/",
+  "video_url": "https://youtube.com/watch?v=your-demo-video",
+  "technologies": [
+    "React",
+    "TypeScript",
+    "Node.js",
+    "Express.js",
+    "PostgreSQL",
+    "Drizzle ORM",
+    "Ethers.js",
+    "IPFS",
+    "Filecoin",
+    "Passport.js",
+    "Tailwind CSS"
+  ]
+} 

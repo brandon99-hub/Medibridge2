@@ -186,6 +186,34 @@ export class AuditService {
       severity: outcome === "FAILURE" ? "error" : "info",
     });
   }
+
+  /**
+   * Log HSTS security events
+   */
+  async logHstsEvent(
+    action: "ENABLED" | "VIOLATION" | "HEALTH_CHECK",
+    outcome: "SUCCESS" | "FAILURE",
+    req?: Request,
+    metadata?: any
+  ): Promise<void> {
+    await this.logEvent({
+      eventType: "HSTS_SECURITY",
+      actorType: "SYSTEM",
+      actorId: "hsts_middleware",
+      targetType: "SECURITY_HEADER",
+      targetId: "strict_transport_security",
+      action,
+      outcome,
+      metadata: {
+        environment: process.env.NODE_ENV || 'development',
+        maxAge: '31536000',
+        includeSubDomains: true,
+        preload: true,
+        ...metadata,
+      },
+      severity: action === "VIOLATION" ? "warning" : "info",
+    }, req);
+  }
 }
 
 export const auditService = AuditService.getInstance();
