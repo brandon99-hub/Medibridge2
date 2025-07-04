@@ -15,7 +15,7 @@ const csrfConfig = {
   cookieOptions: {
     httpOnly: true,
     sameSite: "strict" as const,
-    secure: process.env.NODE_ENV === "production",
+    secure: process.env.NODE_ENV === "production" ? true : false,
     maxAge: 24 * 60 * 60 * 1000, // 24 hours
   },
   size: 32, // Token size in bytes
@@ -30,10 +30,20 @@ const csrfConfig = {
 const { doubleCsrfProtection } = doubleCsrf(csrfConfig);
 
 /**
- * CSRF Protection Middleware
- * Validates CSRF tokens for all state-changing operations
+ * Selective CSRF Protection Middleware
+ * Only applies CSRF protection to state-changing operations (POST, PUT, DELETE, PATCH)
  */
-export const csrfProtection = doubleCsrfProtection;
+export const csrfProtection = (req: Request, res: Response, next: NextFunction) => {
+  // Only apply CSRF protection to state-changing methods
+  const stateChangingMethods = ['POST', 'PUT', 'DELETE', 'PATCH'];
+  
+  if (stateChangingMethods.includes(req.method)) {
+    return doubleCsrfProtection(req, res, next);
+  } else {
+    // For GET, HEAD, OPTIONS requests, just pass through
+    next();
+  }
+};
 
 /**
  * CSRF Token Endpoint

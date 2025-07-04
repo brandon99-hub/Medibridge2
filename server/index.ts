@@ -1,13 +1,18 @@
 import 'dotenv/config';
 import express, { type Request, Response, NextFunction } from "express";
 import helmet from "helmet";
+import cookieParser from "cookie-parser";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 import { applyRateLimiting } from "./rate-limiting-service";
 import { csrfProtection, csrfTokenEndpoint, csrfHealthCheck } from "./csrf-protection-service";
 import { auditService } from "./audit-service";
+import { setupAuth } from "./auth";
 
 const app = express();
+
+// Add cookie-parser middleware before anything that reads cookies
+app.use(cookieParser());
 
 // Security middleware - apply before other middleware
 app.use(helmet({
@@ -38,9 +43,6 @@ app.use(express.urlencoded({ extended: false, limit: '10mb' }));
 
 // Apply rate limiting to all API routes
 applyRateLimiting(app);
-
-// Apply CSRF protection to all API routes
-app.use('/api', csrfProtection);
 
 // Custom HSTS middleware for enhanced security monitoring
 app.use((req, res, next) => {
@@ -95,6 +97,15 @@ app.use((req, res, next) => {
 });
 
 (async () => {
+  // Setup authentication and session middleware BEFORE CSRF and routes
+  await setupAuth(app);
+
+  // Now apply CSRF protection to all API routes
+  app.use('/api', csrfProtection);
+
+  // Register all routes (which may also apply CSRF as needed)
+  const server = await registerRoutes(app);
+
   // Health check endpoint (excluded from rate limiting)
   app.get('/health', (req, res) => {
     res.json({
@@ -161,8 +172,6 @@ app.use((req, res, next) => {
       timestamp: new Date().toISOString(),
     });
   });
-
-  const server = await registerRoutes(app);
 
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
     const status = err.status || err.statusCode || 500;

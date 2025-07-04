@@ -7,6 +7,7 @@ import {
 import { insertUserSchema, User as SelectUser, InsertUser } from "@shared/schema";
 import { getQueryFn, apiRequest, queryClient } from "../lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { useCsrf } from "@/hooks/use-csrf";
 
 type AuthContextType = {
   user: SelectUser | null;
@@ -22,6 +23,7 @@ type LoginData = Pick<InsertUser, "username" | "password">;
 export const AuthContext = createContext<AuthContextType | null>(null);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const { toast } = useToast();
+  const { apiRequestWithCsrf } = useCsrf();
   const {
     data: user,
     error,
@@ -33,8 +35,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const loginMutation = useMutation({
     mutationFn: async (credentials: LoginData) => {
-      const res = await apiRequest("POST", "/api/login", credentials);
-      return await res.json();
+      const res = await apiRequestWithCsrf("POST", "/api/login", credentials);
+      let data;
+      try {
+        data = await res.clone().json();
+      } catch (err) {
+        // If response is not JSON, fallback to text
+        data = { message: await res.clone().text() };
+      }
+      if (!res.ok) {
+        // If CSRF error, show a clear message
+        if (res.status === 403 && data && data.message && data.message.toLowerCase().includes('csrf')) {
+          throw new Error("Invalid or missing CSRF token. Please refresh the page and try again.");
+        }
+        throw new Error(data.message || "Login failed");
+      }
+      return data;
     },
     onSuccess: (user: SelectUser) => {
       queryClient.setQueryData(["/api/user"], user);
@@ -54,8 +70,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const registerMutation = useMutation({
     mutationFn: async (credentials: InsertUser & { hospitalName: string; hospitalType: string }) => {
-      const res = await apiRequest("POST", "/api/register", credentials);
-      return await res.json();
+      const res = await apiRequestWithCsrf("POST", "/api/register", credentials);
+      let data;
+      try {
+        data = await res.clone().json();
+      } catch (err) {
+        data = { message: await res.clone().text() };
+      }
+      if (!res.ok) {
+        if (res.status === 403 && data && data.message && data.message.toLowerCase().includes('csrf')) {
+          throw new Error("Invalid or missing CSRF token. Please refresh the page and try again.");
+        }
+        throw new Error(data.message || "Registration failed");
+      }
+      return data;
     },
     onSuccess: (user: SelectUser) => {
       queryClient.setQueryData(["/api/user"], user);

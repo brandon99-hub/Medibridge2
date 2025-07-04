@@ -69,7 +69,7 @@ export async function setupAuth(app: Express) {
     saveUninitialized: false,
     store: redisStore, // Will use memory store if Redis is not available
     cookie: {
-      secure: process.env.NODE_ENV === 'production',
+      secure: process.env.NODE_ENV === 'production' ? true : false,
       httpOnly: true,
       maxAge: 3600000, // 1 hour
     },

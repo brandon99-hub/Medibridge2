@@ -1,6 +1,7 @@
 import type { Express } from "express";
 import { z } from "zod";
 import { enhancedStorageService } from "./enhanced-storage-service";
+import { filecoinService } from "./filecoin-service";
 import { storage } from "./storage";
 import { auditService } from "./audit-service";
 import { requireAdminAuth } from "./admin-auth-middleware";
@@ -193,6 +194,33 @@ export function registerFilecoinRoutes(app: Express): void {
 
     } catch (error: any) {
       return res.status(500).json({ error: `Failed to get storage health: ${error.message}` });
+    }
+  });
+
+  // Get Filecoin CID status
+  app.get("/api/filecoin/status", async (req, res) => {
+    try {
+      const { cid } = req.query;
+      
+      if (!cid || typeof cid !== 'string') {
+        return res.status(400).json({ error: "CID is required" });
+      }
+
+      // Get status from Filecoin service
+      const status = await filecoinService.getDealStatus(cid);
+      
+      res.json({
+        message: "Filecoin status retrieved",
+        status: status.status,
+        provider: status.provider,
+        dealId: cid, // For nft.storage, the CID serves as the deal ID
+        cost: 0, // nft.storage is free up to 5GB
+        duration: null, // Not available via nft.storage
+        lastChecked: status.lastChecked
+      });
+
+    } catch (error: any) {
+      return res.status(500).json({ error: `Failed to get Filecoin status: ${error.message}` });
     }
   });
 

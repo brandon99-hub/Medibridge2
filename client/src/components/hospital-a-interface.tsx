@@ -13,6 +13,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { FileText, Send, CheckCircle, Shield, Globe, Key } from "lucide-react";
+import FilecoinStatusIndicator from "./filecoin-status-indicator";
 
 interface RecordFormData {
   patientName: string;
@@ -631,6 +632,19 @@ export default function HospitalAInterface() {
               </tbody>
             </table>
           </div>
+
+          {/* Filecoin Storage Confirmation */}
+          {submitWeb3RecordMutation.data?.storage?.filecoinCid && (
+            <div className="mt-6">
+              <FilecoinStatusIndicator
+                filecoinCid={submitWeb3RecordMutation.data.storage.filecoinCid}
+                ipfsCid={submitWeb3RecordMutation.data.storage.ipfsCid}
+                showDetails
+                showVerification
+              />
+            </div>
+          )}
+
           <Button 
             onClick={() => generateZKProofMutation.mutate()} 
             className="bg-green-600 hover:bg-green-700 w-full mt-4"

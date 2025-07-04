@@ -25,6 +25,7 @@ export function useCsrf() {
       
       if (data.success && data.csrfToken) {
         setCsrfToken(data.csrfToken);
+        console.debug('[CSRF] Token fetched:', data.csrfToken);
       } else {
         throw new Error('Failed to get CSRF token');
       }
@@ -54,6 +55,10 @@ export function useCsrf() {
 
   // Enhanced API request with CSRF token
   const apiRequestWithCsrf = async (method: string, url: string, data?: any) => {
+    // Always ensure we have a CSRF token before making a state-changing request
+    if (!csrfToken && method !== 'GET') {
+      await fetchCsrfToken();
+    }
     const csrfHeaders = getCsrfHeaders();
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
@@ -61,6 +66,7 @@ export function useCsrf() {
 
     if (csrfHeaders['x-csrf-token']) {
       headers['x-csrf-token'] = csrfHeaders['x-csrf-token'];
+      console.debug('[CSRF] Sending token in header:', csrfHeaders['x-csrf-token']);
     }
 
     const options: RequestInit = {
@@ -69,14 +75,15 @@ export function useCsrf() {
     };
 
     if (data && method !== 'GET') {
-      options.body = JSON.stringify({
+      const bodyWithToken = {
         ...data,
-        csrfToken, // Include token in body as well
-      });
+        csrfToken: csrfToken || (csrfHeaders['x-csrf-token'] ?? undefined),
+      };
+      options.body = JSON.stringify(bodyWithToken);
+      console.debug('[CSRF] Sending token in body:', bodyWithToken.csrfToken);
     }
 
     const response = await fetch(url, options);
-    
     // If CSRF token is invalid, refresh and retry once
     if (response.status === 403) {
       const errorData = await response.json();
@@ -86,7 +93,6 @@ export function useCsrf() {
         return apiRequestWithCsrf(method, url, data);
       }
     }
-
     return response;
   };
 
