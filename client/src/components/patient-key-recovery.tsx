@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { useCsrf } from "@/hooks/use-csrf";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -28,6 +29,7 @@ interface PatientKeyRecoveryProps {
 
 export default function PatientKeyRecovery({ patientDID, isOpen, onClose }: PatientKeyRecoveryProps) {
   const { toast } = useToast();
+  const { apiRequestWithCsrf } = useCsrf();
   const [activeTab, setActiveTab] = useState("overview");
   const [showRecoveryPhrase, setShowRecoveryPhrase] = useState(false);
   const [confirmationInput, setConfirmationInput] = useState("");
@@ -53,7 +55,8 @@ export default function PatientKeyRecovery({ patientDID, isOpen, onClose }: Pati
 
   const generateQRMutation = useMutation({
     mutationFn: async () => {
-      const response = await apiRequest("POST", "/api/patient/export-key-qr", {
+      console.debug('[CSRF] Using apiRequestWithCsrf for /api/patient/export-key-qr');
+      const response = await apiRequestWithCsrf("POST", "/api/patient/export-key-qr", {
         patientDID,
       });
       return response.json();
@@ -75,7 +78,8 @@ export default function PatientKeyRecovery({ patientDID, isOpen, onClose }: Pati
 
   const generateRecoveryPhraseMutation = useMutation({
     mutationFn: async () => {
-      const response = await apiRequest("POST", "/api/patient/generate-recovery-phrase", {
+      console.debug('[CSRF] Using apiRequestWithCsrf for /api/patient/generate-recovery-phrase');
+      const response = await apiRequestWithCsrf("POST", "/api/patient/generate-recovery-phrase", {
         patientDID,
       });
       return response.json();

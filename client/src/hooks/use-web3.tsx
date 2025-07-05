@@ -4,6 +4,7 @@ import { apiRequest, getQueryFn } from "../lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import detectEthereumProvider from "@metamask/detect-provider";
 import { ethers } from "ethers"; // Moved ethers import here
+import { useCsrf } from "@/hooks/use-csrf";
 
 // Helper to get signer - Moved to top level of module
 const getSigner = async () => {
@@ -57,6 +58,7 @@ export const Web3Context = createContext<Web3ContextType | null>(null);
 export function Web3Provider({ children }: { children: ReactNode }) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { apiRequestWithCsrf } = useCsrf();
   
   const [walletAddress, setWalletAddress] = useState<string | null>(null);
   const [patientIdentity, setPatientIdentity] = useState<PatientIdentity | null>(null);
@@ -148,7 +150,7 @@ export function Web3Provider({ children }: { children: ReactNode }) {
 
   const generatePatientIdentityMutation = useMutation({
     mutationFn: async (walletAddress?: string) => {
-      const response = await apiRequest("POST", "/api/web3/generate-patient-identity", {
+      const response = await apiRequestWithCsrf("POST", "/api/web3/generate-patient-identity", {
         walletAddress,
       });
       return await response.json();
@@ -172,13 +174,13 @@ export function Web3Provider({ children }: { children: ReactNode }) {
 
   const submitRecordMutation = useMutation({
     mutationFn: async (recordData: any) => {
-      const response = await apiRequest("POST", "/api/web3/submit-record", recordData);
+      const response = await apiRequestWithCsrf("POST", "/api/web3/submit-record", recordData);
       return await response.json();
     },
     onSuccess: (data) => {
       toast({
-        title: "Record Stored on IPFS",
-        description: `IPFS Hash: ${data.ipfsHash.substring(0, 20)}...`,
+        title: "Record Stored with Triple Redundancy",
+        description: `IPFS: ${data.storage?.ipfsCid?.substring(0, 20)}... | Filecoin: ${data.storage?.filecoinCid?.substring(0, 20)}...`,
       });
       queryClient.invalidateQueries({ queryKey: ["/api/web3/patient-dashboard"] });
     },
@@ -193,7 +195,7 @@ export function Web3Provider({ children }: { children: ReactNode }) {
 
   const requestAccessMutation = useMutation({
     mutationFn: async (patientDID: string) => {
-      const response = await apiRequest("POST", "/api/web3/request-access", {
+      const response = await apiRequestWithCsrf("POST", "/api/web3/request-access", {
         patientDID,
       });
       return await response.json();
@@ -215,7 +217,7 @@ export function Web3Provider({ children }: { children: ReactNode }) {
       consentType: string;
       patientSignature: string; // Signature will be added before calling this
     }) => {
-      const response = await apiRequest("POST", "/api/web3/grant-consent", consentData);
+      const response = await apiRequestWithCsrf("POST", "/api/web3/grant-consent", consentData);
       return await response.json();
     },
     onSuccess: () => {
@@ -235,7 +237,7 @@ export function Web3Provider({ children }: { children: ReactNode }) {
 
   const revokeConsentMutation = useMutation({
     mutationFn: async ({ patientDID, requesterId, patientSignature }: { patientDID: string; requesterId: string; patientSignature: string }) => {
-      const response = await apiRequest("POST", "/api/web3/revoke-consent", {
+      const response = await apiRequestWithCsrf("POST", "/api/web3/revoke-consent", {
         patientDID,
         requesterId,
         patientSignature: patientSignature,
@@ -262,7 +264,7 @@ export function Web3Provider({ children }: { children: ReactNode }) {
   };
 
   const submitRecordToIPFS = async (recordData: any) => {
-    await submitRecordMutation.mutateAsync(recordData);
+    return await submitRecordMutation.mutateAsync(recordData);
   };
 
   const requestRecordAccess = async (patientDID: string) => {
@@ -353,6 +355,7 @@ export function Web3Provider({ children }: { children: ReactNode }) {
 }
 
 export function useWeb3() {
+  const { apiRequestWithCsrf } = useCsrf();
   const context = useContext(Web3Context);
   if (!context) {
     throw new Error("useWeb3 must be used within a Web3Provider");

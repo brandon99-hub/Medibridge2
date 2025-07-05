@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { useCsrf } from "@/hooks/use-csrf";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -69,6 +70,7 @@ interface EmergencyAccessResponse {
 
 export default function EmergencyAccessDashboard() {
   const { toast } = useToast();
+  const { apiRequestWithCsrf } = useCsrf();
   const [, setLocation] = useLocation();
   
   const [timeLeft, setTimeLeft] = useState<number>(0);
@@ -93,7 +95,7 @@ export default function EmergencyAccessDashboard() {
   // Access records with emergency credential
   const accessRecordsMutation = useMutation({
     mutationFn: async (emergencyData: EmergencyAccessData) => {
-      const response = await apiRequest("POST", "/api/emergency/access-records", {
+      const response = await apiRequestWithCsrf("POST", "/api/emergency/access-records", {
         temporaryCredential: emergencyData.temporaryCredential,
         patientId: emergencyData.patientId,
       });

@@ -213,9 +213,9 @@ export function registerFilecoinRoutes(app: Express): void {
         message: "Filecoin status retrieved",
         status: status.status,
         provider: status.provider,
-        dealId: cid, // For nft.storage, the CID serves as the deal ID
-        cost: 0, // nft.storage is free up to 5GB
-        duration: null, // Not available via nft.storage
+        dealId: cid, // For Pinata, the CID serves as the deal ID
+        cost: 0, // Pinata free tier available
+        duration: null, // Not available via Pinata API
         lastChecked: status.lastChecked
       });
 

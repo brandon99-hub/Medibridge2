@@ -23,7 +23,7 @@ type LoginData = Pick<InsertUser, "username" | "password">;
 export const AuthContext = createContext<AuthContextType | null>(null);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const { toast } = useToast();
-  const { apiRequestWithCsrf } = useCsrf();
+  const { apiRequestWithCsrf, refreshToken } = useCsrf();
   const {
     data: user,
     error,
@@ -52,8 +52,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
       return data;
     },
-    onSuccess: (user: SelectUser) => {
+    onSuccess: async (user: SelectUser) => {
       queryClient.setQueryData(["/api/user"], user);
+      await refreshToken();
       toast({
         title: "Login Successful",
         description: `Welcome back, ${user.hospitalName}!`,
@@ -85,8 +86,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
       return data;
     },
-    onSuccess: (user: SelectUser) => {
+    onSuccess: async (user: SelectUser) => {
       queryClient.setQueryData(["/api/user"], user);
+      await refreshToken();
       toast({
         title: "Hospital Registered",
         description: `Welcome to MediBridge! Your hospital has been registered successfully.`,
@@ -103,7 +105,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logoutMutation = useMutation({
     mutationFn: async () => {
-      await apiRequest("POST", "/api/logout");
+      console.debug('[CSRF] Using apiRequestWithCsrf for /api/logout');
+      await apiRequestWithCsrf("POST", "/api/logout");
     },
     onSuccess: () => {
       queryClient.setQueryData(["/api/user"], null);

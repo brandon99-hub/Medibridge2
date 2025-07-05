@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { useCsrf } from "@/hooks/use-csrf";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -50,7 +51,9 @@ const initialNextOfKinState: NextOfKinFormState = {
 };
 
 export default function EmergencyConsentForm() {
-  const { user } = useAuth(); // Get authenticated hospital user
+  const { toast } = useToast();
+  const { apiRequestWithCsrf } = useCsrf();
+  const { user } = useAuth();
   const [, setLocation] = useLocation();
   const [formData, setFormData] = useState<EmergencyConsentFormState>({
     patientId: "",
@@ -64,11 +67,10 @@ export default function EmergencyConsentForm() {
     requestedDurationHours: 1, // Default to 1 hour
   });
   const [showNextOfKin, setShowNextOfKin] = useState(false);
-  const { toast } = useToast();
 
   const emergencyConsentMutation = useMutation({
     mutationFn: async (data: any) => { // Define proper type for 'data' based on EmergencyConsentRequest
-      const response = await apiRequest("POST", "/api/emergency/grant-consent", data);
+      const response = await apiRequestWithCsrf("POST", "/api/emergency/grant-consent", data);
       if (!response.ok) {
         const errorData = await response.json();
         throw new Error(errorData.message || "Failed to grant emergency consent");

@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { useCsrf } from "@/hooks/use-csrf";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -23,6 +24,7 @@ export default function PatientProfileCompletion({
   patientDID 
 }: PatientProfileCompletionProps) {
   const { toast } = useToast();
+  const { apiRequestWithCsrf } = useCsrf();
   const [formData, setFormData] = useState({
     nationalId: "",
     fullName: "",
@@ -40,7 +42,8 @@ export default function PatientProfileCompletion({
 
   const completeProfileMutation = useMutation({
     mutationFn: async () => {
-      const response = await apiRequest("POST", "/api/patient/complete-profile", formData);
+      console.debug('[CSRF] Using apiRequestWithCsrf for /api/patient/complete-profile');
+      const response = await apiRequestWithCsrf("POST", "/api/patient/complete-profile", formData);
       return response.json();
     },
     onSuccess: (data) => {

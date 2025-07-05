@@ -201,9 +201,11 @@ export interface IStorage {
 
   // ZKP Methods
   createZKPProof(proof: InsertZKPProof): Promise<ZKPProof>;
-  getZKPProofById(id: number): Promise<ZKPProof | undefined>;
+  getZKPProof(id: number): Promise<ZKPProof | undefined>;
   getZKPProofsByPatientDID(patientDID: string): Promise<ZKPProof[]>;
-  updateZKPProofVerificationCount(id: number): Promise<void>;
+  getPatientZKPProofs(patientDID: string): Promise<ZKPProof[]>;
+  updateZKPProofVerificationCount(id: number, count: number): Promise<void>;
+  revokeZKPProof(id: number, patientDID: string): Promise<boolean>;
   deactivateZKPProof(id: number): Promise<void>;
   createZKPVerification(verification: InsertZKPVerification): Promise<ZKPVerification>;
   getZKPVerificationsByProofId(proofId: number): Promise<ZKPVerification[]>;
@@ -1136,7 +1138,7 @@ export class DatabaseStorage implements IStorage {
     return result;
   }
 
-  // ZK-MedPass Analytics Methods
+  // ZKP Analytics Methods
   async getTotalZKPProofs(): Promise<number> {
     const result = await db.select({ count: sql<number>`count(*)` }).from(zkpProofs);
     return result[0]?.count || 0;
@@ -1185,7 +1187,7 @@ export class DatabaseStorage implements IStorage {
     });
   }
 
-  async getZKPProofById(id: number): Promise<ZKPProof | undefined> {
+  async getZKPProof(id: number): Promise<ZKPProof | undefined> {
     const [result] = await db.select().from(zkpProofs).where(eq(zkpProofs.id, id));
     return result;
   }
@@ -1194,13 +1196,29 @@ export class DatabaseStorage implements IStorage {
     return await db.select().from(zkpProofs).where(eq(zkpProofs.patientDID, patientDID));
   }
 
-  async updateZKPProofVerificationCount(id: number): Promise<void> {
+  async getPatientZKPProofs(patientDID: string): Promise<ZKPProof[]> {
+    return await db.select().from(zkpProofs).where(eq(zkpProofs.patientDID, patientDID));
+  }
+
+  async updateZKPProofVerificationCount(id: number, count: number): Promise<void> {
     await db.update(zkpProofs)
       .set({ 
-        verificationCount: sql`${zkpProofs.verificationCount} + 1`,
+        verificationCount: count,
         updatedAt: new Date()
       })
       .where(eq(zkpProofs.id, id));
+  }
+
+  async revokeZKPProof(id: number, patientDID: string): Promise<boolean> {
+    const result = await db.update(zkpProofs)
+      .set({ 
+        isActive: false,
+        updatedAt: new Date()
+      })
+      .where(and(eq(zkpProofs.id, id), eq(zkpProofs.patientDID, patientDID)))
+      .returning();
+    
+    return result.length > 0;
   }
 
   async deactivateZKPProof(id: number): Promise<void> {

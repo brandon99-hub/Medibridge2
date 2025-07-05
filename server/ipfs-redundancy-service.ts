@@ -1,24 +1,28 @@
 import { auditService } from "./audit-service";
-import { NFTStorage, File } from "nft.storage";
 import PinataClient from '@pinata/sdk';
+import { create } from 'ipfs-http-client';
+import { FilecoinService } from './filecoin-service';
 
-const nftStorageToken = process.env.NFT_STORAGE_TOKEN;
 const pinataApiKey = process.env.PINATA_API_KEY;
 const pinataSecretApiKey = process.env.PINATA_SECRET_API_KEY;
+const pinataJWT = process.env.PINATA_JWT;
 
-const nftClient = nftStorageToken ? new NFTStorage({ token: nftStorageToken }) : undefined;
-const pinata = (pinataApiKey && pinataSecretApiKey) ? new PinataClient(pinataApiKey, pinataSecretApiKey) : undefined;
+const pinata = pinataJWT
+  ? new PinataClient({ pinataJWTKey: pinataJWT })
+  : (pinataApiKey && pinataSecretApiKey) ? new PinataClient(pinataApiKey, pinataSecretApiKey) : undefined;
+
+// TODO: If storage fails, test your Pinata credentials with a minimal script outside the app to confirm they work.
 
 /**
  * IPFS Redundancy Service
  * Addresses Q4: Multi-location pinning and failover handling
  * Ensures high availability with redundant storage
+ * Now uses Pinata as primary storage provider
  */
 export class IPFSRedundancyService {
   private static instance: IPFSRedundancyService;
-  private primaryGateway = "nft.storage";
+  private primaryGateway = "pinata";
   private secondaryGateways = [
-    "pinata",
     "https://ipfs.infura.io",
     "https://cloudflare-ipfs.com",
   ];
@@ -33,7 +37,7 @@ export class IPFSRedundancyService {
 
   /**
    * Store content with multi-location pinning
-   * Files are pinned on both nft.storage and secondary nodes for high availability
+   * Files are pinned on Pinata and secondary nodes for high availability
    */
   async storeWithRedundancy(
     content: string,
@@ -44,12 +48,23 @@ export class IPFSRedundancyService {
     let primaryCID: string | null = null;
 
     try {
-      // Primary storage: nft.storage
-      if (!nftClient) throw new Error('NFT_STORAGE_TOKEN not set');
-      const file = new File([Buffer.from(content, 'utf8')], metadata.filename || 'record.enc');
-      primaryCID = await nftClient.storeBlob(file);
+      // Primary storage: Pinata
+      if (!pinata) throw new Error('Pinata credentials not set');
+      const pinataResult = await pinata.pinJSONToIPFS({ 
+        pinataContent: content,
+        pinataMetadata: {
+          name: metadata.filename || 'medical_record.json',
+          keyvalues: {
+            patientDID,
+            recordType: metadata.recordType || 'medical_record',
+            storedAt: new Date().toISOString(),
+            ...metadata
+          }
+        }
+      });
+      primaryCID = pinataResult.IpfsHash;
       results.push({
-        gateway: "nft.storage",
+        gateway: "pinata",
         success: true,
         cid: primaryCID,
         pinned: true,
@@ -62,28 +77,9 @@ export class IPFSRedundancyService {
         targetId: primaryCID,
         action: "STORE",
         outcome: "SUCCESS",
-        metadata: { patientDID, size: content.length },
+        metadata: { patientDID, size: content.length, provider: 'pinata' },
         severity: "info",
       });
-
-      // Secondary storage: Pinata (if available)
-      if (pinata) {
-        try {
-          const pinataResult = await pinata.pinJSONToIPFS({ data: content });
-          results.push({
-            gateway: "pinata",
-            success: true,
-            cid: pinataResult.IpfsHash,
-            pinned: true,
-          });
-        } catch (error: any) {
-          results.push({
-            gateway: "pinata",
-            success: false,
-            error: error.message,
-          });
-        }
-      }
 
       // Optionally, add logic for Infura/Cloudflare/local node if you want real pinning there
       // For now, just log the attempt
@@ -108,6 +104,7 @@ export class IPFSRedundancyService {
           redundancyLevel,
           successfulNodes: totalSuccessful,
           totalNodes: results.length,
+          provider: 'pinata'
         },
         severity: redundancyLevel === 'HIGH' ? 'info' : 'warning',
       });
@@ -120,10 +117,11 @@ export class IPFSRedundancyService {
       };
 
     } catch (error: any) {
+      console.error('[PINATA ERROR]', error && (error.response?.data || error.message || error));
       await auditService.logSecurityViolation({
         violationType: "IPFS_STORAGE_FAILURE",
         severity: "high",
-        details: { error: error.message, patientDID, results },
+        details: { error: error.message, patientDID, results, pinataError: error && (error.response?.data || error.message || error) },
       });
       throw error;
     }
@@ -135,8 +133,8 @@ export class IPFSRedundancyService {
    */
   async retrieveWithFailover(cid: string): Promise<string> {
     const gateways = [
-      `https://ipfs.io/ipfs/${cid}`,
       `https://gateway.pinata.cloud/ipfs/${cid}`,
+      `https://ipfs.io/ipfs/${cid}`,
       `https://cloudflare-ipfs.com/ipfs/${cid}`,
       this.localGateway ? `${this.localGateway}/ipfs/${cid}` : null
     ].filter((g): g is string => typeof g === 'string');
@@ -214,11 +212,8 @@ export class IPFSRedundancyService {
       // Make a real HTTP HEAD request to check availability
       let url = gateway;
       if (!gateway.startsWith('http')) {
-        // If gateway is a label (e.g., 'nft.storage', 'pinata'), map to a real URL
+        // If gateway is a label (e.g., 'pinata'), map to a real URL
         switch (gateway) {
-          case 'nft.storage':
-            url = `https://ipfs.io/ipfs/${cid}`;
-            break;
           case 'pinata':
             url = `https://gateway.pinata.cloud/ipfs/${cid}`;
             break;

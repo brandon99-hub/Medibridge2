@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { useCsrf } from "@/hooks/use-csrf";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -22,6 +23,7 @@ interface PatientLoginModalProps {
 
 export default function PatientLoginModal({ isOpen, onClose, onSuccess }: PatientLoginModalProps) {
   const { toast } = useToast();
+  const { apiRequestWithCsrf } = useCsrf();
   const [step, setStep] = useState<'contact' | 'otp'>('contact');
   const [verificationMethod, setVerificationMethod] = useState<'phone' | 'email'>('phone');
   const [contact, setContact] = useState('');
@@ -35,7 +37,8 @@ export default function PatientLoginModal({ isOpen, onClose, onSuccess }: Patien
 
   const requestOtpMutation = useMutation({
     mutationFn: async ({ contact, method }: { contact: string; method: 'phone' | 'email' }) => {
-      const response = await apiRequest("POST", "/api/patient/request-otp", {
+      console.debug('[CSRF] Using apiRequestWithCsrf for /api/patient/request-otp');
+      const response = await apiRequestWithCsrf("POST", "/api/patient/request-otp", {
         contact,
         method,
       });
@@ -59,7 +62,8 @@ export default function PatientLoginModal({ isOpen, onClose, onSuccess }: Patien
 
   const verifyOtpMutation = useMutation({
     mutationFn: async () => {
-      const response = await apiRequest("POST", "/api/patient/verify-otp", {
+      console.debug('[CSRF] Using apiRequestWithCsrf for /api/patient/verify-otp');
+      const response = await apiRequestWithCsrf("POST", "/api/patient/verify-otp", {
         phoneNumber: contact,
         otpCode,
       });
@@ -161,7 +165,8 @@ export default function PatientLoginModal({ isOpen, onClose, onSuccess }: Patien
     e.preventDefault();
     setLoginLoading(true);
     try {
-      const response = await apiRequest("POST", "/api/patient/login", loginForm);
+      console.debug('[CSRF] Using apiRequestWithCsrf for /api/patient/login');
+      const response = await apiRequestWithCsrf("POST", "/api/patient/login", loginForm);
       const data = await response.json();
       if (response.ok && data.success) {
         toast({ title: "Login Successful", description: "Welcome back!" });
@@ -180,7 +185,8 @@ export default function PatientLoginModal({ isOpen, onClose, onSuccess }: Patien
 
   const handleLogout = async () => {
     try {
-      await apiRequest("POST", "/api/patient/logout", {});
+      console.debug('[CSRF] Using apiRequestWithCsrf for /api/patient/logout');
+      await apiRequestWithCsrf("POST", "/api/patient/logout", {});
       setCurrentPatient(null);
       // Reset modal state to OTP page
       setMode('signup');

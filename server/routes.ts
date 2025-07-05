@@ -7,7 +7,7 @@ import { registerWeb3Routes } from "./web3-routes";
 import { registerSimplifiedPatientRoutes } from "./simplified-patient-routes";
 import { registerSecurityTestingRoutes } from "./security-testing-routes";
 import { registerFilecoinRoutes } from "./filecoin-routes";
-import { registerZKMedPassRoutes } from "./zk-medpass-routes";
+
 import staffManagementRoutes from "./staff-management-routes";
 import { patientLookupService } from "./patient-lookup-service";
 import { emergencyConsentService } from "./emergency-consent-service"; // Import EmergencyConsentService
@@ -20,6 +20,7 @@ import { ipfsRedundancyService } from "./ipfs-redundancy-service";
 import { smsService } from "./sms-service";
 import { redisService } from "./redis-service";
 import { requireAdminAuth } from "./admin-auth-middleware";
+import zkpRoutes from "./zkp-routes";
 
 // Zod schema for AuthorizedPersonnel
 const authorizedPersonnelSchema = z.object({
@@ -65,8 +66,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Setup Filecoin routes
   registerFilecoinRoutes(app);
 
-  // Setup ZK-MedPass routes
-  registerZKMedPassRoutes(app);
+  // Setup ZKP routes
+  app.use('/api/zkp', zkpRoutes);
 
   // Setup Staff Management routes
   app.use('/api/staff', staffManagementRoutes);

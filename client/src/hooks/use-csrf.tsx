@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
-import { apiRequest } from '@/lib/queryClient';
+import React from 'react';
+import { apiRequest } from '../lib/queryClient';
 
 /**
  * CSRF Token Management Hook
@@ -20,14 +21,49 @@ export function useCsrf() {
       setIsLoading(true);
       setError(null);
       
-      const response = await apiRequest('GET', '/api/csrf-token');
+      // Use fetch directly with credentials to ensure cookies are handled properly
+      const response = await fetch('/api/csrf-token', {
+        method: 'GET',
+        credentials: 'include',
+      });
       const data = await response.json();
       
+      // Try to get token from response body first
       if (data.success && data.csrfToken) {
         setCsrfToken(data.csrfToken);
-      } else {
-        throw new Error('Failed to get CSRF token');
+        return;
       }
+      
+      // If not in response body, try to get from cookie
+      const cookies = document.cookie.split(';');
+      const csrfCookie = cookies.find(cookie => cookie.trim().startsWith('csrftoken='));
+      
+      if (csrfCookie) {
+        const token = csrfCookie.split('=')[1];
+        if (token) {
+          setCsrfToken(token);
+          return;
+        }
+      }
+      
+      // If still no token, check if the request was successful and try to parse from response
+      if (data.success) {
+        // The backend might have set the cookie but not returned it in body
+        // Try to get it from the response headers or wait a moment and check cookies again
+        setTimeout(() => {
+          const cookiesAfterDelay = document.cookie.split(';');
+          const csrfCookieAfterDelay = cookiesAfterDelay.find(cookie => cookie.trim().startsWith('csrftoken='));
+          if (csrfCookieAfterDelay) {
+            const tokenAfterDelay = csrfCookieAfterDelay.split('=')[1];
+            if (tokenAfterDelay) {
+              setCsrfToken(tokenAfterDelay);
+            }
+          }
+        }, 100);
+        return;
+      }
+      
+      throw new Error('Failed to get CSRF token');
     } catch (err: any) {
       console.error('CSRF token fetch error:', err);
       setError(err.message || 'Failed to fetch CSRF token');
@@ -54,21 +90,24 @@ export function useCsrf() {
 
   // Enhanced API request with CSRF token
   const apiRequestWithCsrf = async (method: string, url: string, data?: any) => {
-    const headers = {
+    console.debug(`[CSRF] Making ${method} request to ${url} with token: ${csrfToken ? 'present' : 'missing'}`);
+    
+    const headers: Record<string, string> = {
       'Content-Type': 'application/json',
-      ...getCsrfHeaders(),
     };
+    
+    if (csrfToken) {
+      headers['x-csrf-token'] = csrfToken;
+    }
 
     const options: RequestInit = {
       method,
       headers,
+      credentials: 'include', // Include cookies in the request
     };
 
     if (data && method !== 'GET') {
-      options.body = JSON.stringify({
-        ...data,
-        csrfToken, // Include token in body as well
-      });
+      options.body = JSON.stringify(data); // Don't include csrfToken in body
     }
 
     const response = await fetch(url, options);
@@ -77,6 +116,7 @@ export function useCsrf() {
     if (response.status === 403) {
       const errorData = await response.json();
       if (errorData.code === 'CSRF_VIOLATION') {
+        console.debug('[CSRF] Token invalid, refreshing and retrying...');
         await refreshToken();
         // Retry the request with new token
         return apiRequestWithCsrf(method, url, data);

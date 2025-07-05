@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { useCsrf } from "@/hooks/use-csrf";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -35,6 +36,7 @@ interface ConsentModalProps {
 
 export default function ConsentModal({ data, onClose, onConsent }: ConsentModalProps) {
   const { toast } = useToast();
+  const { apiRequestWithCsrf } = useCsrf();
   const queryClient = useQueryClient();
   const [consentGrantedBy, setConsentGrantedBy] = useState("");
   const [agreed, setAgreed] = useState(false);
@@ -42,7 +44,7 @@ export default function ConsentModal({ data, onClose, onConsent }: ConsentModalP
 
   const consentMutation = useMutation({
     mutationFn: async (consentData: { nationalId: string; consentGrantedBy: string; consentType: string }) => {
-      const response = await apiRequest("POST", "/api/consent", consentData);
+      const response = await apiRequestWithCsrf("POST", "/api/consent", consentData);
       return await response.json();
     },
     onSuccess: (result) => {

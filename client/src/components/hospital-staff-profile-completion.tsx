@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { useCsrf } from "@/hooks/use-csrf";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -55,6 +56,7 @@ export default function HospitalStaffProfileCompletion({
   existingAdminLicense = ""
 }: HospitalStaffProfileCompletionProps) {
   const { toast } = useToast();
+  const { apiRequestWithCsrf } = useCsrf();
   const queryClient = useQueryClient();
   const [staffList, setStaffList] = useState(
     isEdit && existingStaff.length > 0 
@@ -110,7 +112,7 @@ export default function HospitalStaffProfileCompletion({
       setSubmitting(true);
       try {
         const endpoint = isEdit ? "/api/hospital/update-staff-profile" : "/api/hospital/complete-staff-profile";
-        const response = await apiRequest("POST", endpoint, {
+        const response = await apiRequestWithCsrf("POST", endpoint, {
           hospitalId,
           adminLicense,
           staff: staffList

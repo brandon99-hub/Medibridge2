@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { useCsrf } from "@/hooks/use-csrf";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -101,6 +102,7 @@ export default function EnhancedStaffManagement({
   hospitalId
 }: EnhancedStaffManagementProps) {
   const { toast } = useToast();
+  const { apiRequestWithCsrf } = useCsrf();
   const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState("overview");
   const [showInviteForm, setShowInviteForm] = useState(false);
@@ -128,7 +130,7 @@ export default function EnhancedStaffManagement({
   // Create invitation mutation
   const createInvitationMutation = useMutation({
     mutationFn: async (invitationData: typeof inviteForm) => {
-      const response = await apiRequest("POST", "/api/staff/invite", invitationData);
+      const response = await apiRequestWithCsrf("POST", "/api/staff/invite", invitationData);
       return response.json();
     },
     onSuccess: () => {
@@ -152,7 +154,7 @@ export default function EnhancedStaffManagement({
   // Cancel invitation mutation
   const cancelInvitationMutation = useMutation({
     mutationFn: async (invitationId: number) => {
-      const response = await apiRequest("DELETE", `/api/staff/invitation/${invitationId}`);
+      const response = await apiRequestWithCsrf("DELETE", `/api/staff/invitation/${invitationId}`);
       return response.json();
     },
     onSuccess: () => {
@@ -174,7 +176,7 @@ export default function EnhancedStaffManagement({
   // Deactivate/Reactivate staff mutation
   const toggleStaffStatusMutation = useMutation({
     mutationFn: async ({ staffId, action }: { staffId: string; action: 'deactivate' | 'reactivate' }) => {
-      const response = await apiRequest("POST", `/api/staff/${staffId}/${action}`);
+      const response = await apiRequestWithCsrf("POST", `/api/staff/${staffId}/${action}`);
       return response.json();
     },
     onSuccess: (_, { action }) => {

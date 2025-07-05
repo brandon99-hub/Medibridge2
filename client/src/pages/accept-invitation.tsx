@@ -3,6 +3,7 @@ import { useLocation } from "wouter";
 import { useMutation } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { useCsrf } from "@/hooks/use-csrf";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -40,9 +41,10 @@ interface InvitationData {
 }
 
 export default function AcceptInvitation(): JSX.Element {
+  const { toast } = useToast();
+  const { apiRequestWithCsrf } = useCsrf();
   const [, navigate] = useLocation();
   const searchParams = new URLSearchParams(window.location.search);
-  const { toast } = useToast();
   const [showPassword, setShowPassword] = useState(false);
   const [invitationData, setInvitationData] = useState<InvitationData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -87,7 +89,8 @@ export default function AcceptInvitation(): JSX.Element {
   // Accept invitation mutation
   const acceptInvitationMutation = useMutation({
     mutationFn: async (data: { invitationToken: string; newPassword: string; name: string }) => {
-      const response = await apiRequest("POST", "/api/staff/accept-invitation", data);
+      console.debug('[CSRF] Using apiRequestWithCsrf for /api/staff/accept-invitation');
+      const response = await apiRequestWithCsrf("POST", "/api/staff/accept-invitation", data);
       return response.json();
     },
     onSuccess: (data) => {

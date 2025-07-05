@@ -10,7 +10,10 @@
     "build:server-only": "esbuild server/index.ts --platform=node --packages=external --bundle --format=esm --outdir=dist",
     "start": "NODE_ENV=production node dist/index.js",
     "check": "tsc",
-    "db:push": "drizzle-kit push"
+    "db:push": "drizzle-kit push",
+    "zk:compile": "circom circuits/medical-condition.circom --r1cs --wasm --sym --c",
+    "zk:setup": "snarkjs groth16 setup circuits/medical-condition.r1cs circuits/pot14_final.ptau circuits/medical-condition_0000.zkey",
+    "zk:export-verification-key": "snarkjs zkey export verificationkey circuits/medical-condition_0000.zkey circuits/verification_key.json"
   },
   "dependencies": {
     "@ethersproject/abi": "^5.8.0",
@@ -60,6 +63,8 @@
     "autoprefixer": "^10.4.20",
     "aws-sdk": "^2.1691.0",
     "bip39": "^3.1.0",
+    "circom2": "^0.2.22",
+    "circomlib": "^2.0.5",
     "circomlibjs": "^0.1.7",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
@@ -81,6 +86,7 @@
     "express": "^4.21.2",
     "express-rate-limit": "^7.5.1",
     "express-session": "^1.18.1",
+    "form-data": "^4.0.3",
     "framer-motion": "^11.13.1",
     "helmet": "^8.1.0",
     "input-otp": "^1.4.2",
@@ -93,7 +99,6 @@
     "multiformats": "^13.3.7",
     "nanoid": "^5.1.5",
     "next-themes": "^0.4.6",
-    "nft.storage": "^7.2.0",
     "node-fetch": "^3.3.2",
     "nodemailer": "^7.0.3",
     "passport": "^0.7.0",

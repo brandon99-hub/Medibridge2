@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { useCsrf } from "@/hooks/use-csrf";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -35,7 +36,8 @@ interface PatientRecord {
 
 export default function PatientPortal() {
   const { toast } = useToast();
-  const [, setLocation] = useLocation();
+  const { apiRequestWithCsrf } = useCsrf();
+  const [location, setLocation] = useLocation();
   const [showLogin, setShowLogin] = useState(false);
   const [patient, setPatient] = useState<any>(null);
   const [showProfileCompletion, setShowProfileCompletion] = useState(false);
@@ -76,7 +78,8 @@ export default function PatientPortal() {
 
   const logoutMutation = useMutation({
     mutationFn: async () => {
-      const response = await apiRequest("POST", "/api/patient/logout");
+      console.debug('[CSRF] Using apiRequestWithCsrf for /api/patient/logout');
+      const response = await apiRequestWithCsrf("POST", "/api/patient/logout");
       return response.json();
     },
     onSuccess: () => {
@@ -92,11 +95,9 @@ export default function PatientPortal() {
 
   const consentResponseMutation = useMutation({
     mutationFn: async ({ requestId, action }: { requestId: number; action: 'approve' | 'deny' }) => {
-      // Determine consent type based on patient capabilities and request context
-      // If patient has a DID and is using web3 features, use 'web3', otherwise 'traditional'
       const consentType = patient?.patientDID ? 'web3' : 'traditional';
-      
-      const response = await apiRequest("POST", "/api/patient/respond-to-consent", {
+      console.debug('[CSRF] Using apiRequestWithCsrf for /api/patient/respond-to-consent');
+      const response = await apiRequestWithCsrf("POST", "/api/patient/respond-to-consent", {
         requestId,
         action,
         reason: action === 'approve' ? 'Patient approved consent' : 'Patient denied consent',

@@ -10,16 +10,16 @@ const africasTalkingUsername = process.env.AFRICAS_TALKING_USERNAME;
 
 const MENUS = {
   main: {
-    en: `CON Welcome to ZK-MedPass\n1. Prove Health Status\n2. Emergency Proof\n3. Renew My Proof\n4. Give Feedback (Get Airtime)\n5. Help & Language`,
-    sw: `CON Karibu ZK-MedPass\n1. Thibitisha Hali ya Afya\n2. Uthibitisho wa Dharura\n3. Fanya Upya Uthibitisho\n4. Toa Maoni (Pata Airtime)\n5. Msaada & Lugha`
+    en: `CON Welcome to MediBridge\n1. Prove Health Status\n2. Emergency Proof\n3. My Proofs\n4. Give Feedback (Get Airtime)\n5. Help & Language`,
+    sw: `CON Karibu MediBridge\n1. Thibitisha Hali ya Afya\n2. Uthibitisho wa Dharura\n3. Uthibitisho Wangu\n4. Toa Maoni (Pata Airtime)\n5. Msaada & Lugha`
   },
   language: {
     en: `CON Choose your preferred language:\n1. English\n2. Kiswahili`,
     sw: `CON Chagua lugha unayopendelea:\n1. Kiingereza\n2. Kiswahili`
   },
   languageSaved: {
-    en: `CON Language preference saved.\n\nWelcome to ZK-MedPass\n1. Prove Health Status\n2. Emergency Proof\n3. Renew My Proof\n4. Give Feedback (Get Airtime)\n5. Help & Language`,
-    sw: `CON Lugha imehifadhiwa.\n\nKaribu ZK-MedPass\n1. Thibitisha Hali ya Afya\n2. Uthibitisho wa Dharura\n3. Fanya Upya Uthibitisho\n4. Toa Maoni (Pata Airtime)\n5. Msaada & Lugha`
+    en: `CON Language preference saved.\n\nWelcome to MediBridge\n1. Prove Health Status\n2. Emergency Proof\n3. Renew My Proof\n4. Give Feedback (Get Airtime)\n5. Help & Language`,
+    sw: `CON Lugha imehifadhiwa.\n\nKaribu MediBridge\n1. Thibitisha Hali ya Afya\n2. Uthibitisho wa Dharura\n3. Fanya Upya Uthibitisho\n4. Toa Maoni (Pata Airtime)\n5. Msaada & Lugha`
   },
   // Prove Health Status menus
   proofType: {
@@ -70,8 +70,8 @@ const MENUS = {
   },
   // Give Feedback
   satisfaction: {
-    en: `CON Help us improve!\nHow satisfied are you with ZK-MedPass?\n1. Very Satisfied\n2. Satisfied\n3. Neutral\n4. Unsatisfied`,
-    sw: `CON Tusaidie kuboresha!\nUnafurahia ZK-MedPass kiasi gani?\n1. Nimefurahia Sana\n2. Nimefurahia\n3. Sina Uamuzi\n4. Sijafurahia`
+    en: `CON Help us improve!\nHow satisfied are you with MediBridge?\n1. Very Satisfied\n2. Satisfied\n3. Neutral\n4. Unsatisfied`,
+    sw: `CON Tusaidie kuboresha!\nUnafurahia MediBridge kiasi gani?\n1. Nimefurahia Sana\n2. Nimefurahia\n3. Sina Uamuzi\n4. Sijafurahia`
   },
   recommend: {
     en: `CON Would you recommend us to others?\n1. Yes\n2. No`,
@@ -251,31 +251,60 @@ export class AfricasTalkingService {
             : `END Huduma ya dharura haipatikani kwa sasa. Wasiliana na msaada.`;
         }
 
-      case '3': // Renew My Proof
+      case '3': // My Proofs (NEW)
+        // Step 1: Show list of recent visits (by date or type)
         if (step === 1) {
-          return MENUS.renewPrompt[lang];
-        }
-        if (step === 2) {
-          if (input[1] === '1') { // Yes, visited clinic
-            return MENUS.clinicCode[lang];
-          } else { // No, remind later
-            return MENUS.remindLater[lang];
-          }
-        }
-        if (step === 3) {
-          return MENUS.visitDate[lang];
-        }
-        if (step === 4) {
-          const clinicCode = input[2];
-          const visitDate = input[3];
-          
-          const renewalSuccess = await renewHealthProof(sessionId, phoneNumber, clinicCode, visitDate);
-          if (renewalSuccess) {
-            return MENUS.proofRenewed[lang];
-          } else {
+          // Fetch recent visits/codes for this phone number
+          const visits = await getRecentVisitsByPhone(phoneNumber, 5); // returns [{date, code, summary}]
+          if (!visits.length) {
             return lang === 'en'
-              ? `END Unable to renew proof. Please check clinic code and date.`
-              : `END Haiwezi kufanya upya uthibitisho. Angalia msimbo wa kliniki na tarehe.`;
+              ? 'END No proofs found for your number.'
+              : 'END Hakuna uthibitisho uliopatikana kwa nambari yako.';
+          }
+          let menu = lang === 'en' ? 'CON Your Recent Visits:\n' : 'CON Ziara Zako za Hivi Karibuni:\n';
+          visits.forEach((v, i) => {
+            menu += `${i + 1}. ${v.date} - ${v.summary}\n`;
+          });
+          menu += `${visits.length + 1}. Back`;
+          return menu;
+        }
+        // Step 2: Show proofs for selected visit
+        if (step === 2) {
+          const visitIdx = parseInt(input[1], 10) - 1;
+          const visits = await getRecentVisitsByPhone(phoneNumber, 5);
+          if (visitIdx < 0 || visitIdx >= visits.length) {
+            return MENUS.main[lang];
+          }
+          const visit = visits[visitIdx];
+          let proofMenu = lang === 'en'
+            ? `CON Proofs for visit on ${visit.date}:\n`
+            : `CON Uthibitisho wa ziara tarehe ${visit.date}:\n`;
+          visit.proofs.forEach((p, i) => {
+            proofMenu += `- ${p.type}: ${p.statement}\n`;
+          });
+          proofMenu += `\nCode: ${visit.code}\n1. Resend Code via SMS\n2. Back`;
+          return proofMenu;
+        }
+        // Step 3: Resend code or go back
+        if (step === 3) {
+          const visitIdx = parseInt(input[1], 10) - 1;
+          const visits = await getRecentVisitsByPhone(phoneNumber, 5);
+          if (visitIdx < 0 || visitIdx >= visits.length) {
+            return MENUS.main[lang];
+          }
+          const visit = visits[visitIdx];
+          if (input[2] === '1') {
+            // Resend code via SMS
+            await smsService.sendOTPSMS({
+              to: phoneNumber,
+              otpCode: `MediBridge: Your code for your visit on ${visit.date} is ${visit.code}. Use this code to share your medical proofs.`,
+              expiresInMinutes: 43200
+            });
+            return lang === 'en'
+              ? 'END Code resent via SMS.'
+              : 'END Msimbo umetumwa tena kwa SMS.';
+          } else {
+            return MENUS.main[lang];
           }
         }
         break;
@@ -449,7 +478,7 @@ async function shareHealthProof(sessionId: string, proofType: string, recipient:
     // const zkProof = await zkpService.generateProof(proofType, phoneNumber);
     
     // TODO: Send SMS/voice to recipient
-    const recipientMessage = `ZK-MedPass: Health verification received. Patient ${phoneNumber} has shared their ${proofType} proof.`;
+    const recipientMessage = `MediBridge: Health verification received. Patient ${phoneNumber} has shared their ${proofType} proof.`;
     // await africasTalkingService.sendSMS(recipientPhone, recipientMessage);
     
     // TODO: Send airtime reward to user
@@ -560,4 +589,21 @@ async function handleFeedback(sessionId: string, phoneNumber: string, satisfacti
 function hashPhone(phoneNumber: string): string {
   // Simple hash for demo - use proper crypto in production
   return Buffer.from(phoneNumber).toString('base64').substring(0, 16);
+}
+
+// Helper: Fetch recent visits by phone number
+async function getRecentVisitsByPhone(phoneNumber: string, limit: number) {
+  // This should fetch from your real storage/db in production
+  // For demo, use demoProofStore
+  const visits = Object.entries(demoProofStore)
+    .filter(([code, v]) => v && v.patientName && v.proofs && v.expiresAt && v.phoneNumber === phoneNumber)
+    .sort((a, b) => b[1].expiresAt - a[1].expiresAt)
+    .slice(0, limit)
+    .map(([code, v]) => ({
+      code,
+      date: new Date(v.expiresAt - 30 * 24 * 60 * 60 * 1000).toLocaleDateString(),
+      summary: v.proofs.map(p => p.type).join(', '),
+      proofs: v.proofs
+    }));
+  return visits;
 } 

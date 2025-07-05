@@ -1,6 +1,8 @@
 import { useState, useEffect } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
+import { useCsrf } from "@/hooks/use-csrf";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -32,11 +34,11 @@ import { useLocation } from "wouter";
 import { ArrowLeft } from "lucide-react";
 import EnhancedStaffManagement from "@/components/enhanced-staff-management";
 
-// ZK-MedPass Analytics Component
-function ZKMedPassAnalytics() {
+// ZKP Analytics Component
+function ZKPAnalytics() {
   const { data: analytics, isLoading } = useQuery<any>({
-    queryKey: ['/api/zk-medpass/analytics'],
-    queryFn: async () => apiRequest("GET", "/api/zk-medpass/analytics").then(res => res.json()),
+    queryKey: ['/api/zkp/analytics'],
+    queryFn: async () => apiRequest("GET", "/api/zkp/analytics").then(res => res.json()),
     refetchInterval: 30000, // Refresh every 30 seconds
   });
 
@@ -141,35 +143,7 @@ function ZKMedPassAnalytics() {
       </Card>
 
       {/* Quick Actions */}
-      <Card>
-        <CardHeader>
-          <CardTitle>ZK-MedPass Quick Actions</CardTitle>
-          <CardDescription>Manage ZK-MedPass system</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <Button variant="outline" className="h-20 flex flex-col space-y-2">
-              <Shield className="h-6 w-6" />
-              <span>View Proof Logs</span>
-            </Button>
-            
-            <Button variant="outline" className="h-20 flex flex-col space-y-2">
-              <Activity className="h-6 w-6" />
-              <span>USSD Session Stats</span>
-            </Button>
-            
-            <Button variant="outline" className="h-20 flex flex-col space-y-2">
-              <TrendingUp className="h-6 w-6" />
-              <span>Export Analytics</span>
-            </Button>
-            
-            <Button variant="outline" className="h-20 flex flex-col space-y-2">
-              <Globe className="h-6 w-6" />
-              <span>Africa's Talking Status</span>
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
+      // (REMOVED ZK-MedPass Quick Actions card)
     </div>
   );
 }
@@ -182,13 +156,15 @@ const SIDEBAR_TABS = [
   { key: "activity", label: "Recent Activity", icon: Activity },
   { key: "rate-limits", label: "Rate Limits", icon: Gauge },
   { key: "staff", label: "Staff Management", icon: UserPlus },
-  { key: "zk-medpass", label: "ZK-MedPass", icon: BarChart3 },
+  { key: "zkp", label: "ZKP System", icon: BarChart3 },
 ];
 
 export default function AdminDashboard() {
   const [activeTab, setActiveTab] = useState("overview");
   const [showStaffModal, setShowStaffModal] = useState(false);
   const [, navigate] = useLocation();
+  const { toast } = useToast();
+  const { apiRequestWithCsrf } = useCsrf();
 
   // Fetch security audit summary
   const { data: auditSummary, isLoading: isLoadingAuditSummary } = useQuery<any>({
@@ -428,7 +404,7 @@ export default function AdminDashboard() {
                             variant="outline"
                             className="text-green-700 border-green-200 hover:bg-green-50"
                             onClick={async () => {
-                              await apiRequest("POST", `/api/admin/security-violations/${violation.id}/resolve`);
+                              await apiRequestWithCsrf("POST", `/api/admin/security-violations/${violation.id}/resolve`);
                               window.location.reload();
                             }}
                           >
@@ -851,21 +827,21 @@ export default function AdminDashboard() {
               </CardContent>
             </Card>
         )}
-        {activeTab === "zk-medpass" && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center space-x-2">
+        {activeTab === "zkp" && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center space-x-2">
                 <BarChart3 className="h-5 w-5 text-emerald-600" />
-                  <span>ZK-MedPass Analytics</span>
-                </CardTitle>
-                <CardDescription>
-                  Privacy-respecting analytics for ZK proof usage and health verification
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <ZKMedPassAnalytics />
-              </CardContent>
-            </Card>
+                <span>ZKP System Analytics</span>
+              </CardTitle>
+              <CardDescription>
+                Privacy-respecting analytics for ZK proof usage and health verification
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <ZKPAnalytics />
+            </CardContent>
+          </Card>
         )}
       </main>
     </div>

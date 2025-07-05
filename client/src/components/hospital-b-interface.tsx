@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useMutation } from "@tanstack/react-query";
-import { apiRequest } from "@/lib/queryClient";
+import { useCsrf } from "@/hooks/use-csrf";
 import { useToast } from "@/hooks/use-toast";
 import { useWeb3 } from "@/hooks/use-web3";
 import { useAuth } from "@/hooks/use-auth";
@@ -65,9 +65,11 @@ export default function HospitalBInterface({ onShowConsentModal }: HospitalBInte
   const [authenticatedPatient, setAuthenticatedPatient] = useState<any>(null);
   const [web3ConsentData, setWeb3ConsentData] = useState<any>(null);
 
+  const { apiRequestWithCsrf } = useCsrf();
+
   const searchMutation = useMutation({
     mutationFn: async (data: { nationalId: string }) => {
-      const response = await apiRequest("POST", "/api/get_records", data);
+      const response = await apiRequestWithCsrf("POST", "/api/get_records", data);
       return await response.json();
     },
     onSuccess: (data: PatientData) => {
@@ -89,7 +91,7 @@ export default function HospitalBInterface({ onShowConsentModal }: HospitalBInte
 
   const requestConsentMutation = useMutation({
     mutationFn: async (data: { nationalId: string; reason?: string }) => {
-      const response = await apiRequest("POST", "/api/request-consent", data);
+      const response = await apiRequestWithCsrf("POST", "/api/request-consent", data);
       return await response.json();
     },
     onSuccess: (data) => {
@@ -112,7 +114,7 @@ export default function HospitalBInterface({ onShowConsentModal }: HospitalBInte
 
   const revokeConsentMutation = useMutation({
     mutationFn: async (data: { nationalId: string }) => {
-      const response = await apiRequest("POST", "/api/revoke-consent", data);
+      const response = await apiRequestWithCsrf("POST", "/api/revoke-consent", data);
       return await response.json();
     },
     onSuccess: () => {
@@ -139,7 +141,7 @@ export default function HospitalBInterface({ onShowConsentModal }: HospitalBInte
         throw new Error("Patient not authenticated or no records found");
       }
       
-      const response = await apiRequest("POST", "/api/issue-consent/", {
+      const response = await apiRequestWithCsrf("POST", "/api/issue-consent/", {
         patientId: authenticatedPatient.phoneNumber,
         hospitalId: user?.hospital_id || 2, // fallback to 2 if not available
         recordId: patientData.records[0]?.id,
@@ -170,7 +172,7 @@ export default function HospitalBInterface({ onShowConsentModal }: HospitalBInte
         throw new Error("No verifiable credential available");
       }
       
-      const response = await apiRequest("POST", "/api/get-record/", {
+      const response = await apiRequestWithCsrf("POST", "/api/get-record/", {
         verifiableCredential: web3ConsentData.verifiableCredential,
         hospitalDID: "did:medbridge:hospital:brandon",
       });
@@ -194,7 +196,7 @@ export default function HospitalBInterface({ onShowConsentModal }: HospitalBInte
 
   const web3SearchMutation = useMutation({
     mutationFn: async (phoneNumber: string) => {
-      const response = await apiRequest("POST", "/api/patient-lookup/phone", {
+      const response = await apiRequestWithCsrf("POST", "/api/patient-lookup/phone", {
         phoneNumber: phoneNumber
       });
       return await response.json();
@@ -231,7 +233,7 @@ export default function HospitalBInterface({ onShowConsentModal }: HospitalBInte
   const fetchWeb3RecordsMutation = useMutation({
     mutationFn: async (patientDID: string) => {
       try {
-        const response = await apiRequest("POST", "/api/web3/get-records", {
+        const response = await apiRequestWithCsrf("POST", "/api/web3/get-records", {
           patientDID: patientDID
         });
         if (!response.ok) {

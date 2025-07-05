@@ -2,6 +2,7 @@ import type { Express, Request } from "express"; // Added Request
 import { storage } from "./storage";
 import { didService, vcService, ipfsService, consentService, WalletService } from "./web3-services";
 import { secureKeyVault } from "./secure-key-vault"; // Import SecureKeyVault
+import { enhancedStorageService } from "./enhanced-storage-service"; // Import EnhancedStorageService
 import { z } from "zod";
 import CryptoJS from "crypto-js";
 import Hex from "crypto-js/enc-hex.js";
@@ -87,39 +88,36 @@ export function registerWeb3Routes(app: Express): void {
         }
         // Re-fetch updated profile
         patientProfile = await storage.getPatientProfileByDID(patientProfile.patientDID);
+        
+        // Ensure private key exists for existing patients (for ZKP compatibility)
+        try {
+          await secureKeyVault.retrievePatientKey(patientProfile.patientDID);
+          console.log('[DEBUG] Patient key found for existing patient:', patientProfile.patientDID);
+        } catch (error) {
+          console.log('[DEBUG] Patient key not found, generating for existing patient:', patientProfile.patientDID);
+          // Generate and store private key for existing patient
+          const wallet = WalletService.generateWallet();
+          const privateKey = wallet.privateKey;
+          const patientSalt = `patient_${recordData.phoneNumber}_${Date.now()}`;
+          await secureKeyVault.storePatientKey(patientProfile.patientDID, privateKey, patientSalt);
+          
+          // Note: Patient identity wallet address update not implemented - not critical for ZKP
+        }
       } else {
         // Check by nationalId
         patientProfile = await storage.getPatientProfileByNationalId(recordData.nationalId);
         if (!patientProfile) {
-          // Auto-generate DID for patient using phone number
-          const publicKey = `pub_${recordData.phoneNumber}_${Date.now()}`;
-          const did = didService.generateDID(publicKey);
-          const didDocument = didService.createDIDDocument(did, publicKey);
-
-          // Create patient identity and profile
-          await storage.createPatientIdentity({
-            did,
-            phoneNumber: recordData.phoneNumber,
-            walletAddress: null,
-            publicKey,
-            didDocument,
+          return res.status(400).json({ 
+            error: "Patient not found. Patient must be registered in the system before medical records can be submitted.",
+            requiresRegistration: true,
+            message: "Please ensure the patient has completed registration via phone/email before submitting medical records."
           });
-          const newProfile = {
-            patientDID: did,
-            nationalId: recordData.nationalId,
-            phoneNumber: recordData.phoneNumber.includes('@') ? "" : recordData.phoneNumber,
-            email: recordData.phoneNumber.includes('@') ? recordData.phoneNumber : null,
-            fullName: recordData.patientName,
-            isProfileComplete: false
-          };
-          console.log('[DEBUG] Creating patient profile (web3):', newProfile);
-          patientProfile = await storage.createPatientProfile(newProfile);
         }
       }
 
       const patientDID = patientProfile.patientDID;
 
-      // Prepare medical record for IPFS storage
+      // Prepare medical record for storage
       const medicalRecord = {
         patientDID,
         patientName: recordData.patientName,
@@ -133,28 +131,19 @@ export function registerWeb3Routes(app: Express): void {
         submittedAt: new Date().toISOString(),
       };
 
-      // Store encrypted record on IPFS
-      const plaintextEncryptionKey = CryptoJS.lib.WordArray.random(256/8).toString(Hex); // Generate as hex
-      const ipfsHash = await ipfsService.storeContent(medicalRecord, plaintextEncryptionKey);
-      await ipfsService.pinContent(ipfsHash);
+      // Store with triple redundancy (IPFS + Filecoin + Local)
+      const storageResult = await enhancedStorageService.storeWithTripleRedundancy(
+        medicalRecord,
+        { 
+          recordType: 'medical_record',
+          accessPattern: 'frequent',
+          hospitalId: user.id,
+          hospitalName: user.hospitalName
+        },
+        patientDID
+      );
 
-      // Encrypt the plaintextEncryptionKey using SecureKeyVault
-      const encryptedDekString = await secureKeyVault.encryptDataKey(plaintextEncryptionKey);
-
-      // Store IPFS content reference
-      const ipfsContentRecord = await storage.createIpfsContent({
-        contentHash: ipfsHash,
-        patientDID,
-        contentType: "medical_record",
-        encryptionMethod: "AES-256-GCM",
-        size: JSON.stringify(medicalRecord).length,
-        accessControlList: {
-          owner: patientDID,
-          authorizedHospitals: [user.hospitalName]
-        }
-      });
-
-      // Store traditional record with IPFS reference
+      // Store traditional record with storage references
       const recordToSave = {
         patientName: recordData.patientName,
         nationalId: recordData.nationalId,
@@ -173,16 +162,58 @@ export function registerWeb3Routes(app: Express): void {
       const patientRecord = await storage.createPatientRecord(recordToSave);
       console.log('[DEBUG] Web3 record created with ID:', patientRecord.id, 'recordType:', patientRecord.recordType);
 
-      // Update the record with ipfsHash and encryptionKey
-      await storage.updateRecordIPFS(patientRecord.id, ipfsHash, encryptedDekString);
+      // Update the record with storage metadata
+      await storage.updateRecordFilecoin(
+        patientRecord.id,
+        storageResult.filecoinCid,
+        storageResult.storageCost,
+        {
+          ipfsCid: storageResult.ipfsCid,
+          localPath: storageResult.localPath,
+          redundancyLevel: storageResult.redundancyLevel,
+          encryptionMethod: 'AES-256-GCM',
+          accessPattern: 'frequent',
+          storedAt: storageResult.metadata.storedAt
+        }
+      );
+
+      // Create storage location records
+      await storage.createStorageLocation({
+        contentHash: storageResult.ipfsCid,
+        storageType: 'ipfs',
+        locationId: storageResult.ipfsCid,
+        status: 'active'
+      });
+
+      await storage.createStorageLocation({
+        contentHash: storageResult.filecoinCid,
+        storageType: 'filecoin',
+        locationId: storageResult.filecoinCid,
+        status: 'active'
+      });
+
+      if (storageResult.localPath) {
+        await storage.createStorageLocation({
+          contentHash: storageResult.ipfsCid,
+          storageType: 'local',
+          locationId: storageResult.localPath,
+          status: 'active'
+        });
+      }
 
       res.status(201).json({
         success: true,
-        message: "Medical record stored on IPFS with patient phone lookup",
+        message: "Medical record stored with triple redundancy (IPFS + Filecoin + Local)",
         recordId: patientRecord.id,
-        ipfsHash,
         patientDID,
-        phoneNumber: recordData.phoneNumber
+        phoneNumber: recordData.phoneNumber,
+        storage: {
+          ipfsCid: storageResult.ipfsCid,
+          filecoinCid: storageResult.filecoinCid,
+          localPath: storageResult.localPath,
+          redundancyLevel: storageResult.redundancyLevel,
+          cost: storageResult.storageCost
+        }
       });
     } catch (error: any) {
       return res.status(400).json({ error: `Failed to submit medical record: ${error.message}` });

@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { toast } from "@/hooks/use-toast";
 import { useWeb3 } from "@/hooks/use-web3";
 import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
@@ -11,9 +12,11 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { FileText, Send, CheckCircle, Shield, Globe, Key } from "lucide-react";
+import { FileText, Send, CheckCircle, Shield, Globe, Key, Info } from "lucide-react";
 import FilecoinStatusIndicator from "./filecoin-status-indicator";
+import { useCsrf } from "@/hooks/use-csrf";
 
 interface RecordFormData {
   patientName: string;
@@ -30,11 +33,44 @@ interface Web3RecordFormData extends RecordFormData {
   phoneNumber: string;
 }
 
+// Utility: Split combined prescription & treatment text
+function splitPrescriptionAndTreatment(text: string) {
+  const lower = text.toLowerCase();
+  const prescIdx = lower.indexOf('prescription');
+  const treatIdx = lower.indexOf('treatment');
+
+  if (prescIdx !== -1 && treatIdx !== -1) {
+    // Both found, prescription comes first
+    if (prescIdx < treatIdx) {
+      const prescText = text.slice(prescIdx + 'prescription'.length, treatIdx).replace(/^[:\-\s]*/, '').trim();
+      const treatText = text.slice(treatIdx + 'treatment'.length).replace(/^[:\-\s]*/, '').trim();
+      return { prescription: prescText, treatment: treatText };
+    } else {
+      // Treatment comes first (rare)
+      const treatText = text.slice(treatIdx + 'treatment'.length, prescIdx).replace(/^[:\-\s]*/, '').trim();
+      const prescText = text.slice(prescIdx + 'prescription'.length).replace(/^[:\-\s]*/, '').trim();
+      return { prescription: prescText, treatment: treatText };
+    }
+  } else if (prescIdx !== -1) {
+    // Only prescription found
+    const prescText = text.slice(prescIdx + 'prescription'.length).replace(/^[:\-\s]*/, '').trim();
+    return { prescription: prescText, treatment: '' };
+  } else if (treatIdx !== -1) {
+    // Only treatment found
+    const treatText = text.slice(treatIdx + 'treatment'.length).replace(/^[:\-\s]*/, '').trim();
+    return { prescription: '', treatment: treatText };
+  } else {
+    // Neither found, treat all as prescription
+    return { prescription: text.trim(), treatment: '' };
+  }
+}
+
 export default function HospitalAInterface() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { submitRecordToIPFS } = useWeb3();
   const { user } = useAuth();
+  const { apiRequestWithCsrf } = useCsrf();
   
   const [formData, setFormData] = useState<RecordFormData>({
     patientName: "",
@@ -67,15 +103,13 @@ export default function HospitalAInterface() {
 
   const [submittedWeb3, setSubmittedWeb3] = useState(false);
 
-  const [claimType, setClaimType] = useState('hiv');
-  const [claimValue, setClaimValue] = useState('negative');
-  const [claimDate, setClaimDate] = useState('');
-
   const [patientDID, setPatientDID] = useState<string>("");
+
+
 
   const submitRecordMutation = useMutation({
     mutationFn: async (data: RecordFormData) => {
-      const response = await apiRequest("POST", "/api/submit_record", data);
+      const response = await apiRequestWithCsrf("POST", "/api/submit_record", data);
       return await response.json();
     },
     onSuccess: () => {
@@ -106,67 +140,92 @@ export default function HospitalAInterface() {
 
   const submitWeb3RecordMutation = useMutation({
     mutationFn: async (data: Web3RecordFormData) => {
-      const response = await submitRecordToIPFS({ ...data, hospital_id: user?.hospital_id });
+      const { prescription, treatment } = splitPrescriptionAndTreatment(data.prescription);
+      const enhancedFormData = {
+        ...data,
+        prescription,
+        treatment,
+        hospital_id: user?.hospital_id || 1,
+      };
+      const response = await submitRecordToIPFS({ ...enhancedFormData, hospital_id: user?.hospital_id });
       return response;
     },
     onSuccess: (data: any) => {
-      setWeb3FormData({
-        patientName: "",
-        nationalId: "",
-        phoneNumber: "",
-        visitDate: "",
-        visitType: "",
-        diagnosis: "",
-        prescription: "",
-        physician: "",
-        department: "",
-      });
       setWeb3ConsentChecked(false);
-      setClaimType(
-        web3FormData.diagnosis.toLowerCase().includes("hiv") ? "hiv" :
-        web3FormData.diagnosis.toLowerCase().includes("covid") ? "vaccination" :
-        web3FormData.diagnosis.toLowerCase().includes("allergy") ? "allergy" :
-        "insurance"
-      );
-      setClaimValue(web3FormData.diagnosis || "");
-      setClaimDate(web3FormData.visitDate || "");
       setSubmittedWeb3(true);
       if (data && data.patientDID) {
         setPatientDID(data.patientDID);
+        console.log('[DEBUG] Patient DID set:', data.patientDID);
       } else {
-        setPatientDID("did:medbridge:patient:MOCKDID1234567890");
+        console.error('[DEBUG] No patientDID in response:', data);
+        toast({
+          title: "Warning",
+          description: "Patient DID not received from server. ZKP generation may not work.",
+          variant: "destructive",
+        });
+        setPatientDID(""); // Don't set a mock DID, let the UI handle it
       }
     },
-    onError: (error: Error) => {
-      toast({
-        title: "Web3 Submission Failed",
-        description: error.message,
-        variant: "destructive",
-      });
+    onError: (error: any) => {
+      // Check if this is a registration requirement error
+      if (error?.response?.data?.requiresRegistration) {
+        toast({
+          title: "Patient Registration Required",
+          description: "This patient must be registered in the system before medical records can be submitted. Please ask the patient to register via phone/email first.",
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: "Web3 Submission Failed",
+          description: error.message || "Failed to submit medical record",
+          variant: "destructive",
+        });
+      }
       setSubmittedWeb3(false);
     },
   });
 
-  const generateZKProofMutation = useMutation({
+  // ENHANCED: Generate ZK proofs from form data mutation
+  const generateZKProofsFromFormMutation = useMutation({
     mutationFn: async () => {
-      const isoClaimDate = claimDate ? new Date(claimDate).toISOString() : undefined;
-      const response = await apiRequest("POST", "/api/zk-medpass/generate-proof", {
+      console.log('[DEBUG] Generating ZK proofs with patientDID:', patientDID);
+      console.log('[DEBUG] Form data:', web3FormData);
+      
+      if (!patientDID) {
+        throw new Error("Patient DID is required for ZKP generation");
+      }
+      
+      // Split prescription & treatment for ZKP proof generation
+      const { prescription, treatment } = splitPrescriptionAndTreatment(web3FormData.prescription);
+      const enhancedFormData = {
+        ...web3FormData,
+        prescription,
+        treatment,
+        hospital_id: user?.hospital_id || 1,
+      };
+      
+      const response = await apiRequestWithCsrf("POST", "/api/zkp/generate-proofs-from-form", {
         patientDID: patientDID,
-        claimType,
-        claimValue,
-        claimDate: isoClaimDate,
+        formData: enhancedFormData,
       });
       return await response.json();
     },
     onSuccess: (data) => {
-      setZkProofResult({ code: data.proofId?.toString() || "", message: data.message, full: data });
+      setZkProofResult({ 
+        code: data.verificationCodes?.join(', ') || "", 
+        message: data.message, 
+        full: data 
+      });
       setShowProofModal(true);
     },
     onError: (error: any) => {
-      setZkProofResult({ code: "", message: error.message || "Failed to generate proof" });
+      setZkProofResult({ code: "", message: error.message || "Failed to generate proofs" });
       setShowProofModal(true);
     },
   });
+
+  // OLD: Keep for backward compatibility
+
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -414,6 +473,13 @@ export default function HospitalAInterface() {
                     <Globe className="h-5 w-5 text-purple-600" />
                     <span>Web3 Patient Record (IPFS + Phone)</span>
                   </CardTitle>
+                  <div className="flex items-center space-x-2 p-3 bg-amber-50 rounded-lg border border-amber-200">
+                    <Info className="h-4 w-4 text-amber-600" />
+                    <p className="text-sm text-amber-800">
+                      <strong>Important:</strong> Patient must be registered in the system before submitting medical records. 
+                      Ask patient to register via phone/email first.
+                    </p>
+                  </div>
                 </CardHeader>
                 <CardContent>
                   <form onSubmit={handleWeb3Submit} className="space-y-6">
@@ -450,7 +516,7 @@ export default function HospitalAInterface() {
                         required
                       />
                       <p className="text-xs text-slate-500 mt-1">
-                        Patient's phone number (system auto-generates DID for Web3 record ownership)
+                        Patient's phone number (patient must be registered in the system first)
                       </p>
                     </div>
                     
@@ -623,9 +689,9 @@ export default function HospitalAInterface() {
                 </tr>
               </thead>
               <tbody>
-                <tr><td className="px-4 py-2">Claim Type</td><td className="px-4 py-2">{claimType}</td></tr>
-                <tr><td className="px-4 py-2">Claim Value</td><td className="px-4 py-2">{claimValue}</td></tr>
-                <tr><td className="px-4 py-2">Claim/Test Date</td><td className="px-4 py-2">{claimDate}</td></tr>
+                <tr><td className="px-4 py-2">Patient Name</td><td className="px-4 py-2">{web3FormData.patientName}</td></tr>
+                <tr><td className="px-4 py-2">National ID</td><td className="px-4 py-2">{web3FormData.nationalId}</td></tr>
+                <tr><td className="px-4 py-2">Phone Number</td><td className="px-4 py-2">{web3FormData.phoneNumber}</td></tr>
                 <tr><td className="px-4 py-2">Diagnosis</td><td className="px-4 py-2">{web3FormData.diagnosis}</td></tr>
                 <tr><td className="px-4 py-2">Visit Type</td><td className="px-4 py-2">{web3FormData.visitType}</td></tr>
                 <tr><td className="px-4 py-2">Physician</td><td className="px-4 py-2">{web3FormData.physician}</td></tr>
@@ -646,33 +712,86 @@ export default function HospitalAInterface() {
           )}
 
           <Button 
-            onClick={() => generateZKProofMutation.mutate()} 
+            onClick={() => generateZKProofsFromFormMutation.mutate()} 
             className="bg-green-600 hover:bg-green-700 w-full mt-4"
-            disabled={generateZKProofMutation.isPending || !patientDID}
+            disabled={generateZKProofsFromFormMutation.isPending || !patientDID}
           >
-            {generateZKProofMutation.isPending ? "Generating..." : !patientDID ? "Waiting for Patient DID..." : "Generate ZK Proof"}
+            {generateZKProofsFromFormMutation.isPending ? "Generating Smart ZK Proofs..." : !patientDID ? "Waiting for Patient DID..." : "Generate Smart ZK Proofs from Medical Data"}
           </Button>
         </div>
       )}
 
       {showProofModal && zkProofResult && (
         <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 z-50">
-          <div className="bg-white rounded-lg shadow-lg p-8 max-w-2xl w-full">
-            <h2 className="text-xl font-bold mb-4">ZK Proof Result (Demo Mock)</h2>
-            <p className="mb-2 text-slate-700">This is a <span className="font-semibold">mock ZK-SNARK proof</span> generated for demo purposes. The structure and data are identical to a real proof, so the verifier and all flows work as in production.</p>
-            <div className="mb-4">
-              <div className="mb-2"><span className="font-semibold">Proof ID:</span> <span className="font-mono">{zkProofResult.code}</span></div>
-              <div className="mb-2"><span className="font-semibold">Message:</span> {zkProofResult.message}</div>
-              {zkProofResult.full && (
-                <>
-                  <div className="mb-2"><span className="font-semibold">Proof Object:</span></div>
-                  <pre className="bg-slate-100 rounded p-2 text-xs overflow-x-auto max-h-64">
-                    {JSON.stringify(zkProofResult.full, null, 2)}
-                  </pre>
-                </>
-              )}
+          <div className="bg-white rounded-lg shadow-lg p-8 max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+            <h2 className="text-2xl font-bold mb-4">Smart ZK Proofs Generated from Medical Data</h2>
+            <p className="mb-4 text-slate-700">ZK proofs generated from actual diagnosis, prescription, and treatment data. These proofs can be shared with employers, schools, or other entities without revealing specific medical details.</p>
+            
+            <div className="mb-6 p-4 bg-blue-50 rounded-lg">
+              <h3 className="font-semibold mb-2 text-blue-900">Based on Medical Data:</h3>
+              <div className="grid grid-cols-2 gap-4 text-sm">
+                <div><strong>Diagnosis:</strong> {web3FormData.diagnosis}</div>
+                <div><strong>Prescription:</strong> {web3FormData.prescription}</div>
+                <div><strong>Visit Type:</strong> {web3FormData.visitType}</div>
+                <div><strong>Department:</strong> {web3FormData.department}</div>
+              </div>
             </div>
-            <Button onClick={() => setShowProofModal(false)} className="w-full">Close</Button>
+
+            <div className="mb-4">
+              <div className="mb-2"><span className="font-semibold">Verification Codes:</span> <span className="font-mono text-lg">{zkProofResult.code}</span></div>
+              <div className="mb-2"><span className="font-semibold">Message:</span> {zkProofResult.message}</div>
+            </div>
+
+            {zkProofResult.full && zkProofResult.full.proofs && (
+              <div className="mb-6">
+                <h3 className="font-semibold mb-3">Generated Proofs:</h3>
+                <div className="space-y-3">
+                  {zkProofResult.full.proofs.map((proof: any, index: number) => (
+                    <div key={index} className="p-3 bg-green-50 border border-green-200 rounded-lg">
+                      <div className="flex justify-between items-start">
+                        <div>
+                          <div className="font-medium text-green-900">{proof.statement}</div>
+                          <div className="text-sm text-green-700">Type: {proof.type}</div>
+                        </div>
+                        <Badge variant="outline" className="text-green-600">
+                          {proof.verificationCode}
+                        </Badge>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {zkProofResult.full && zkProofResult.full.analysis && (
+              <div className="mb-6">
+                <h3 className="font-semibold mb-3">Medical Analysis:</h3>
+                <div className="grid grid-cols-2 gap-4 text-sm">
+                  <div><strong>Requires Treatment:</strong> {zkProofResult.full.analysis.requiresTreatment ? 'Yes' : 'No'}</div>
+                  <div><strong>Requires Rest:</strong> {zkProofResult.full.analysis.requiresRest ? 'Yes' : 'No'}</div>
+                  <div><strong>Requires Medication:</strong> {zkProofResult.full.analysis.requiresMedication ? 'Yes' : 'No'}</div>
+                  <div><strong>Contagious:</strong> {zkProofResult.full.analysis.isContagious ? 'Yes' : 'No'}</div>
+                  <div><strong>Severity:</strong> <span className="capitalize">{zkProofResult.full.analysis.severity}</span></div>
+                  <div><strong>Work Impact:</strong> <span className="capitalize">{zkProofResult.full.analysis.workImpact}</span></div>
+                </div>
+              </div>
+            )}
+
+            <div className="flex justify-end space-x-4">
+              <Button variant="outline" onClick={() => setShowProofModal(false)}>
+                Close
+              </Button>
+              <Button onClick={() => {
+                // Copy verification codes to clipboard
+                navigator.clipboard.writeText(zkProofResult.code);
+                toast({
+                  title: "Codes Copied",
+                  description: "Verification codes copied to clipboard",
+                });
+              }}>
+                Copy Codes
+              </Button>
+            </div>
           </div>
         </div>
       )}

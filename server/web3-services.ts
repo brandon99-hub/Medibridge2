@@ -9,7 +9,6 @@ import { createJWT, verifyJWT, ES256KSigner } from 'did-jwt';
 import { getResolver as getKeyResolver } from 'key-did-resolver';
 import { secureKeyVault } from "./secure-key-vault"; // Import SecureKeyVault
 
-
 // Pinata Configuration
 const pinataApiKey = process.env.PINATA_API_KEY;
 const pinataSecretApiKey = process.env.PINATA_SECRET_API_KEY;

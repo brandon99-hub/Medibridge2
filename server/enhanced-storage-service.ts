@@ -93,7 +93,7 @@ export class EnhancedStorageService {
         ipfsCid: ipfsResult.cid,
         filecoinCid: filecoinResult.cid,
         localPath,
-        storageCost: 0, // NFT.storage is free up to 5GB
+        storageCost: 0, // Pinata free tier available
         redundancyLevel: 'TRIPLE',
         encryptionKey,
         metadata: {
