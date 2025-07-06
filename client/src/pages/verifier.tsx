@@ -8,7 +8,7 @@ export default function VerifierPage() {
 
   const handleVerify = async () => {
     setResult("Verifying...");
-    const resp = await fetch("/api/zk-medpass/verify-code", {
+    const resp = await fetch("/api/zkp/verify-code", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ code }),
@@ -19,7 +19,7 @@ export default function VerifierPage() {
         `✅ Proof is VALID\nPatient: ${data.patientName}\nClaim: ${data.claimType} = ${data.claimValue}\nDate: ${data.claimDate}`
       );
     } else {
-      setResult("❌ Invalid code or proof");
+      setResult(`❌ ${data.message || 'Invalid code or proof'}`);
     }
   };
 

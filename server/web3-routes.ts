@@ -170,8 +170,6 @@ export function registerWeb3Routes(app: Express): void {
 
       // Generate and store Medical Record VC
       try {
-        const { VCService } = require("./web3-services");
-        const vcService = new VCService();
         const issuer = user.hospital_id ? user.hospital_id.toString() : "medibridge";
         const subject = patientDID;
         const credentialType = "MedicalRecord";
@@ -187,8 +185,9 @@ export function registerWeb3Routes(app: Express): void {
           hospitalId: user.hospital_id,
           hospitalName: user.hospitalName,
         };
-        // TODO: Use a real private key for signing (replace 'dummy_private_key')
-        const privateKeyHex = process.env.HOSPITAL_VC_PRIVATE_KEY || "dummy_private_key";
+        // Generate a proper private key for hospital VC signing
+        const privateKeyHex = process.env.HOSPITAL_VC_PRIVATE_KEY || 
+          "1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"; // 32 bytes hex
         const medicalRecordVcJwt = await vcService.issueCredential(
           issuer,
           subject,

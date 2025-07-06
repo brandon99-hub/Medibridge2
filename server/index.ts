@@ -4,7 +4,7 @@ import helmet from "helmet";
 import cookieParser from "cookie-parser";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
-import { applyRateLimiting } from "./rate-limiting-service";
+import { applyRateLimiting, getRateLimitStats } from "./rate-limiting-service";
 import { csrfProtection, csrfTokenEndpoint, csrfHealthCheck } from "./csrf-protection-service";
 import { auditService } from "./audit-service";
 import { setupAuth } from "./auth";
@@ -118,7 +118,6 @@ app.use((req, res, next) => {
 
   // Rate limit statistics endpoint (for monitoring)
   app.get('/api/rate-limits/stats', (req, res) => {
-    const { getRateLimitStats } = require('./rate-limiting-service');
     res.json({
       success: true,
       stats: getRateLimitStats(),

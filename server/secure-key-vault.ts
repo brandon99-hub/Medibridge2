@@ -1,4 +1,5 @@
 import crypto from "crypto";
+import bip39 from 'bip39';
 import { auditService } from "./audit-service";
 
 /**
@@ -158,7 +159,6 @@ export class SecureKeyVault {
    */
   generateRecoveryPhrase(): string {
     // Use bip39 for secure, standard-compliant mnemonic generation
-    const bip39 = require('bip39');
     return bip39.generateMnemonic(128); // 12 words (128 bits entropy)
   }
 

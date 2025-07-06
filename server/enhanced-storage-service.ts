@@ -4,6 +4,8 @@ import { ipfsRedundancyService } from "./ipfs-redundancy-service";
 import { auditService } from "./audit-service";
 import { storage } from "./storage";
 import CryptoJS from "crypto-js";
+import { promises as fs } from 'fs';
+import path from 'path';
 
 export interface StorageResult {
   ipfsCid: string;
@@ -272,9 +274,6 @@ export class EnhancedStorageService {
    * Store content locally on hospital server
    */
   private async storeLocally(content: Buffer, cid: string): Promise<string> {
-    const fs = require('fs').promises;
-    const path = require('path');
-    
     const localStorageDir = process.env.LOCAL_STORAGE_DIR || './local_storage';
     const filePath = path.join(localStorageDir, `${cid}.enc`);
     
@@ -294,8 +293,6 @@ export class EnhancedStorageService {
    * Retrieve content from local storage
    */
   private async retrieveLocally(filePath: string): Promise<string> {
-    const fs = require('fs').promises;
-    
     try {
       const content = await fs.readFile(filePath);
       return content.toString('utf8');
@@ -423,7 +420,6 @@ export class EnhancedStorageService {
 
   private async checkLocalHealth(): Promise<'healthy' | 'degraded' | 'critical'> {
     try {
-      const fs = require('fs').promises;
       const localStorageDir = process.env.LOCAL_STORAGE_DIR || './local_storage';
       await fs.access(localStorageDir);
       return 'healthy';

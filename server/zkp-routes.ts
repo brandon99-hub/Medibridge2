@@ -7,6 +7,7 @@ import { auditService } from './audit-service';
 import { smsService } from './sms-service';
 import { storage } from './storage';
 import { z } from 'zod';
+import crypto from 'crypto';
 
 const router = express.Router();
 
@@ -34,11 +35,47 @@ router.post('/ussd', async (req, res) => {
       return res.status(400).json({ error: "Missing required USSD parameters" });
     }
 
-    // Simple USSD menu for proof access
+    // USSD menu logic
     let response = "";
-    
+    const menuParts = (text || '').split('*');
     if (!text || text === "") {
       response = "CON Welcome to MediBridge\n1. Access my medical proofs\n2. Share proof with hospital\n3. Check proof status\n4. Emergency access";
+    } else if (menuParts[0] === "1" && menuParts.length === 2 && menuParts[1].length === 6) {
+      // User entered a 6-digit code after selecting option 1
+      const code = menuParts[1];
+      const codeHash = crypto.createHash('sha256').update(code).digest('hex');
+      const codeRecord = await storage.getProofCodeByHash(codeHash);
+      const now = new Date();
+      if (!codeRecord) {
+        response = "END Code not found or expired.";
+      } else if (codeRecord.used) {
+        response = "END Code already used.";
+      } else if (codeRecord.expiresAt < now) {
+        response = "END Code expired.";
+      } else if (codeRecord.attempts >= 5) {
+        response = "END Too many attempts. Try again later.";
+      } else {
+        const proof = await storage.getZKPProof(codeRecord.proofId);
+        if (!proof) {
+          response = "END Proof not found.";
+        } else {
+          const zkpServiceInstance = await zkpService;
+          const result = await zkpServiceInstance.verifyProof(
+            proof.id,
+            0,
+            '',
+            'ussd-code-verification',
+            false
+          );
+          await storage.incrementProofCodeAttempts(codeRecord.id);
+          if (result.isValid) {
+            await storage.markProofCodeUsed(codeRecord.id);
+            response = `END ✅ Proof is VALID.\n${proof.publicStatement || ''}`;
+          } else {
+            response = "END ❌ Invalid proof.";
+          }
+        }
+      }
     } else if (text === "1") {
       response = "CON Enter your verification code:";
     } else if (text === "2") {
@@ -296,6 +333,19 @@ router.post('/generate-proofs-from-form', async (req, res) => {
     console.log('[ZKP] Proofs generated:', proofs);
 
     const visitCode = Math.floor(100000 + Math.random() * 900000).toString();
+    const codeHash = crypto.createHash('sha256').update(visitCode).digest('hex');
+    const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // 30 days
+    
+    // Debug: Check proof structure
+    console.log('[ZKP] Creating proof codes for visitCode:', visitCode);
+    for (const proof of proofs) {
+      console.log('[ZKP] Processing proof:', { proofId: proof.proofId, type: proof.type, statement: proof.statement });
+      if (!proof.proofId) {
+        console.error('[ZKP] Error: proof.proofId is null/undefined for proof:', proof);
+        throw new Error('Proof ID is missing from generated proof');
+      }
+      await storage.createProofCode({ codeHash, proofId: proof.proofId, expiresAt });
+    }
 
     if (formData.phoneNumber) {
       console.log('[ZKP] Sending SMS to:', formData.phoneNumber, 'with visitCode:', visitCode);
@@ -440,7 +490,8 @@ router.post('/generate-proof', zkpRateLimiter, requirePatientAuth, async (req, r
       patientDID,
       doctorDID,
       hospitalDID,
-      visitDate: parseInt(visitDate)
+      visitDate: parseInt(visitDate),
+      hospital_id: 0
     };
 
     const zkpServiceInstance = await zkpService;
@@ -510,7 +561,8 @@ router.post('/generate-selective-proof', zkpRateLimiter, requirePatientAuth, asy
       patientDID,
       doctorDID: doctorDID || '',
       hospitalDID: hospitalDID || '',
-      visitDate: parseInt(visitDate)
+      visitDate: parseInt(visitDate),
+      hospital_id: 0
     };
 
     const zkpServiceInstance = await zkpService;
@@ -532,206 +584,6 @@ router.post('/generate-selective-proof', zkpRateLimiter, requirePatientAuth, asy
     res.status(500).json({
       success: false,
       error: error.message || 'Failed to generate selective ZK proof'
-    });
-  }
-});
-
-/**
- * Verify ZK proof
- * POST /api/zkp/verify-proof
- */
-router.post('/verify-proof', zkpRateLimiter, async (req, res) => {
-  try {
-    const {
-      proofId,
-      verifiedBy,
-      hospitalId,
-      verificationContext,
-      emergencyAccess = false,
-      requestedDisclosure
-    } = req.body;
-
-    // Validate required fields
-    if (!proofId || !verifiedBy || !hospitalId || !verificationContext) {
-      return res.status(400).json({
-        success: false,
-        error: 'Missing required verification fields'
-      });
-    }
-
-    const zkpServiceInstance = await zkpService;
-    const result = await zkpServiceInstance.verifyProof(
-      proofId,
-      verifiedBy,
-      hospitalId,
-      verificationContext,
-      emergencyAccess,
-      requestedDisclosure
-    );
-
-    res.json({
-      success: true,
-      isValid: result.isValid,
-      verificationId: result.verificationId,
-      error: result.error,
-      message: result.isValid ? 'ZK proof verified successfully' : 'ZK proof verification failed'
-    });
-
-  } catch (error: any) {
-    console.error('ZKP verification error:', error);
-    res.status(500).json({
-      success: false,
-      error: error.message || 'Failed to verify ZK proof'
-    });
-  }
-});
-
-/**
- * Batch verify multiple ZK proofs
- * POST /api/zkp/batch-verify
- */
-router.post('/batch-verify', zkpRateLimiter, async (req, res) => {
-  try {
-    const {
-      proofIds,
-      verifiedBy,
-      hospitalId,
-      verificationContext
-    } = req.body;
-
-    // Validate required fields
-    if (!proofIds || !Array.isArray(proofIds) || proofIds.length === 0) {
-      return res.status(400).json({
-        success: false,
-        error: 'Invalid or empty proof IDs array'
-      });
-    }
-
-    if (!verifiedBy || !hospitalId || !verificationContext) {
-      return res.status(400).json({
-        success: false,
-        error: 'Missing required verification fields'
-      });
-    }
-
-    // Limit batch size for performance
-    if (proofIds.length > 50) {
-      return res.status(400).json({
-        success: false,
-        error: 'Batch size too large. Maximum 50 proofs per batch.'
-      });
-    }
-
-    const zkpServiceInstance = await zkpService;
-    const results = await zkpServiceInstance.batchVerifyProofs(
-      proofIds,
-      verifiedBy,
-      hospitalId,
-      verificationContext
-    );
-
-    const validCount = results.filter((r: any) => r.result.isValid).length;
-    const invalidCount = results.length - validCount;
-
-    res.json({
-      success: true,
-      results,
-      summary: {
-        total: results.length,
-        valid: validCount,
-        invalid: invalidCount
-      },
-      message: `Batch verification completed: ${validCount} valid, ${invalidCount} invalid`
-    });
-
-  } catch (error: any) {
-    console.error('Batch ZKP verification error:', error);
-    res.status(500).json({
-      success: false,
-      error: error.message || 'Failed to batch verify ZK proofs'
-    });
-  }
-});
-
-/**
- * Get patient's ZK proofs
- * GET /api/zkp/patient-proofs/:patientDID
- */
-router.get('/patient-proofs/:patientDID', zkpRateLimiter, requirePatientAuth, async (req, res) => {
-  try {
-    const { patientDID } = req.params;
-
-    // Validate patient authorization
-    if (req.session?.patientDID !== patientDID) {
-      return res.status(403).json({
-        success: false,
-        error: 'Unauthorized: Can only access your own proofs'
-      });
-    }
-
-    const zkpServiceInstance = await zkpService;
-    const proofs = await zkpServiceInstance.getPatientProofs(patientDID);
-
-    res.json({
-      success: true,
-      proofs,
-      count: proofs.length,
-      message: `Found ${proofs.length} ZK proofs for patient`
-    });
-
-  } catch (error: any) {
-    console.error('Get patient proofs error:', error);
-    res.status(500).json({
-      success: false,
-      error: error.message || 'Failed to retrieve patient proofs'
-    });
-  }
-});
-
-/**
- * Revoke ZK proof
- * DELETE /api/zkp/revoke-proof/:proofId
- */
-router.delete('/revoke-proof/:proofId', zkpRateLimiter, requirePatientAuth, async (req, res) => {
-  try {
-    const { proofId } = req.params;
-    const { patientDID } = req.body;
-
-    if (!patientDID) {
-      return res.status(400).json({
-        success: false,
-        error: 'Patient DID is required'
-      });
-    }
-
-    // Validate patient authorization
-    if (req.session?.patientDID !== patientDID) {
-      return res.status(403).json({
-        success: false,
-        error: 'Unauthorized: Can only revoke your own proofs'
-      });
-    }
-
-    const zkpServiceInstance = await zkpService;
-    const success = await zkpServiceInstance.revokeProof(parseInt(proofId), patientDID);
-
-    if (success) {
-      res.json({
-        success: true,
-        message: 'ZK proof revoked successfully'
-      });
-    } else {
-      res.status(404).json({
-        success: false,
-        error: 'Proof not found or already revoked'
-      });
-    }
-
-  } catch (error: any) {
-    console.error('Revoke proof error:', error);
-    res.status(500).json({
-      success: false,
-      error: error.message || 'Failed to revoke ZK proof'
     });
   }
 });
@@ -822,6 +674,79 @@ router.post('/clear-cache', zkpRateLimiter, requireAdminAuth, async (req, res) =
       success: false,
       error: error.message || 'Failed to clear ZKP cache'
     });
+  }
+});
+
+/**
+ * Verify ZK proof by 6-digit code
+ * POST /api/zkp/verify-code
+ */
+router.post('/verify-code', async (req, res) => {
+  try {
+    const { code } = req.body;
+    if (!code || typeof code !== 'string' || code.length !== 6) {
+      return res.status(400).json({ valid: false, message: 'Invalid code format' });
+    }
+    const codeHash = crypto.createHash('sha256').update(code).digest('hex');
+    const codeRecord = await storage.getProofCodeByHash(codeHash);
+    const now = new Date();
+    if (!codeRecord) {
+      return res.status(404).json({ valid: false, message: 'Code not found or expired' });
+    }
+    if (codeRecord.used) {
+      return res.status(400).json({ valid: false, message: 'Code already used' });
+    }
+    if (codeRecord.expiresAt < now) {
+      return res.status(400).json({ valid: false, message: 'Code expired' });
+    }
+    if (codeRecord.attempts >= 5) {
+      return res.status(429).json({ valid: false, message: 'Too many attempts' });
+    }
+    // Fetch the proof
+    const proof = await storage.getZKPProof(codeRecord.proofId);
+    if (!proof) {
+      return res.status(404).json({ valid: false, message: 'Proof not found' });
+    }
+    // Verify the proof
+    const zkpServiceInstance = await zkpService;
+    const result = await zkpServiceInstance.verifyProof(
+      proof.id,
+      0, // verifiedBy (not tracked here)
+      '', // hospitalId
+      'code-verification',
+      false
+    );
+    await storage.incrementProofCodeAttempts(codeRecord.id);
+    // Mark as used if valid
+    if (result.isValid) {
+      await storage.markProofCodeUsed(codeRecord.id);
+    }
+    // Audit log
+    await auditService.logEvent({
+      eventType: 'ZKP_CODE_VERIFICATION',
+      actorType: 'ANONYMOUS',
+      actorId: '',
+      targetType: 'ZKP_PROOF',
+      targetId: proof.id.toString(),
+      action: 'VERIFY_BY_CODE',
+      outcome: result.isValid ? 'SUCCESS' : 'FAILURE',
+      metadata: { codeHash, attempts: codeRecord.attempts + 1 },
+      severity: result.isValid ? 'info' : 'warning',
+    });
+    if (result.isValid) {
+      return res.json({
+        valid: true,
+        patientName: proof.publicStatement || '',
+        claimType: proof.proofType || '',
+        claimValue: proof.publicStatement || '',
+        claimDate: proof.verifiedAt || '',
+        message: 'Proof is valid',
+      });
+    } else {
+      return res.status(400).json({ valid: false, message: 'Invalid proof' });
+    }
+  } catch (error: any) {
+    return res.status(500).json({ valid: false, message: error.message || 'Verification failed' });
   }
 });
 

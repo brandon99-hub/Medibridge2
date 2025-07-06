@@ -1,4 +1,4 @@
-import { users, patientRecords, consentRecords, type User, type InsertUser, type PatientRecord, type InsertPatientRecord, type InsertConsentRecord, type ConsentRecord, patientProfiles, filecoinDeals, storageLocations, storageCosts, storageHealthMetrics, type InsertFilecoinDeal, type FilecoinDeal, type InsertStorageLocation, type StorageLocation, type InsertStorageCost, type StorageCost, type InsertStorageHealthMetric, type StorageHealthMetric, zkpProofs, zkpVerifications, type InsertZKPProof, type ZKPProof, type InsertZKPVerification, type ZKPVerification, hospitalStaff, patientEmergencyContacts, hospitalStaffInvitations, type HospitalStaff, type InsertHospitalStaff, type PatientEmergencyContact, type InsertPatientEmergencyContact, type HospitalStaffInvitation, type InsertHospitalStaffInvitation, feedback } from "@shared/schema";
+import { users, patientRecords, consentRecords, type User, type InsertUser, type PatientRecord, type InsertPatientRecord, type InsertConsentRecord, type ConsentRecord, patientProfiles, filecoinDeals, storageLocations, storageCosts, storageHealthMetrics, type InsertFilecoinDeal, type FilecoinDeal, type InsertStorageLocation, type StorageLocation, type InsertStorageCost, type StorageCost, type InsertStorageHealthMetric, type StorageHealthMetric, zkpProofs, zkpVerifications, type InsertZKPProof, type ZKPProof, type InsertZKPVerification, type ZKPVerification, hospitalStaff, patientEmergencyContacts, hospitalStaffInvitations, type HospitalStaff, type InsertHospitalStaff, type PatientEmergencyContact, type InsertPatientEmergencyContact, type HospitalStaffInvitation, type InsertHospitalStaffInvitation, feedback, proofCodes } from "@shared/schema";
 import { 
   patientIdentities, 
   verifiableCredentials, 
@@ -223,6 +223,12 @@ export interface IStorage {
 
   // --- ADMIN DASHBOARD METHODS ---
   getAuditSummary(hospital_id?: number): Promise<any>;
+
+  // New methods
+  createProofCode(data: { codeHash: string, proofId: number, expiresAt: Date }): Promise<void>;
+  getProofCodeByHash(codeHash: string): Promise<any>;
+  markProofCodeUsed(id: number): Promise<void>;
+  incrementProofCodeAttempts(id: number): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1414,6 +1420,27 @@ export class DatabaseStorage implements IStorage {
     await db.update(users)
       .set(updates)
       .where(eq(users.id, id));
+  }
+
+  // New methods
+  async createProofCode(data: { codeHash: string, proofId: number, expiresAt: Date }): Promise<void> {
+    await db.insert(proofCodes).values({
+      codeHash: data.codeHash,
+      proofId: data.proofId,
+      expiresAt: data.expiresAt,
+    });
+  }
+
+  async getProofCodeByHash(codeHash: string): Promise<any> {
+    return db.query.proofCodes.findFirst({ where: eq(proofCodes.codeHash, codeHash) });
+  }
+
+  async markProofCodeUsed(id: number): Promise<void> {
+    await db.update(proofCodes).set({ used: true }).where(eq(proofCodes.id, id));
+  }
+
+  async incrementProofCodeAttempts(id: number): Promise<void> {
+    await db.update(proofCodes).set({ attempts: sql`${proofCodes.attempts} + 1` }).where(eq(proofCodes.id, id));
   }
 }
 

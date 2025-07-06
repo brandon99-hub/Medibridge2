@@ -430,3 +430,13 @@ export const ussdAnalytics = pgTable("ussd_analytics", {
   success: boolean("success").default(true).notNull(),
   errorMessage: text("error_message"),
 });
+
+export const proofCodes = pgTable("proof_codes", {
+  id: serial("id").primaryKey(),
+  codeHash: text("code_hash").notNull().unique(),
+  proofId: integer("proof_id").notNull().references(() => zkpProofs.id),
+  expiresAt: timestamp("expires_at").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+  used: boolean("used").default(false),
+  attempts: integer("attempts").default(0),
+});
