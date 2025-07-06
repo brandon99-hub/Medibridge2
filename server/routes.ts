@@ -21,6 +21,7 @@ import { smsService } from "./sms-service";
 import { redisService } from "./redis-service";
 import { requireAdminAuth } from "./admin-auth-middleware";
 import zkpRoutes from "./zkp-routes";
+import { StaffInvitationService } from "./staff-invitation-service";
 
 // Zod schema for AuthorizedPersonnel
 const authorizedPersonnelSchema = z.object({
@@ -122,21 +123,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const user = req.user!;
       if (user.hospitalType !== "B") {
-        return res.status(403).json({ message: "Only Hospital B can perform patient lookup" });
+        return res.status(403).json({ message: "Only Hospital B can access patient lookup" });
       }
 
-      const { phoneNumber } = req.body;
-      if (!phoneNumber || typeof phoneNumber !== 'string') {
-        return res.status(400).json({ message: "Phone number is required" });
-      }
-
-      const searchResult = await patientLookupService.searchByPhoneNumber(
+      const { phoneNumber } = z.object({ phoneNumber: z.string() }).parse(req.body);
+      
+      const result = await patientLookupService.searchByPhoneNumber(
         phoneNumber,
-        user.id.toString(), // hospitalId
-        user.username // staffId
+        user.hospital_id.toString(),
+        user.id.toString()
       );
 
-      res.json(searchResult);
+      res.json(result);
     } catch (error) {
       next(error);
     }
@@ -1044,6 +1042,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           role: z.enum(["PHYSICIAN", "SURGEON", "EMERGENCY_DOCTOR", "CHIEF_RESIDENT"]),
           licenseNumber: z.string().min(1),
           department: z.string().min(1),
+          email: z.string().email(),
           isActive: z.boolean(),
           isOnDuty: z.boolean(),
         })).min(2).max(3),
@@ -1061,21 +1060,51 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: "Duplicate staff IDs are not allowed. Each staff member must have a unique staff ID." });
       }
 
-      // Create staff records (do NOT set adminLicense)
+      // Check for duplicate emails
+      const emails = staff.map(s => s.email);
+      const uniqueEmails = new Set(emails);
+      if (uniqueEmails.size !== emails.length) {
+        return res.status(400).json({ error: "Duplicate email addresses are not allowed. Each staff member must have a unique email." });
+      }
+
+      // Create staff records and send email invitations
       let createdStaff;
+      const staffInvitationService = StaffInvitationService.getInstance();
+      
       try {
         createdStaff = await Promise.all(
           staff.map(async (staffMember) => {
-            return await storage.createHospitalStaff({
+            // Create the staff record first
+            const staffRecord = await storage.createHospitalStaff({
               staffId: staffMember.staffId,
               name: staffMember.name,
               role: staffMember.role,
               licenseNumber: staffMember.licenseNumber,
               department: staffMember.department,
-              hospitalId: hospitalId, // Add hospitalId for multi-tenancy
+              email: staffMember.email,
+              hospitalId: hospitalId,
               isActive: staffMember.isActive,
               isOnDuty: staffMember.isOnDuty,
             });
+
+            // Send email invitation for this staff member
+            const invitationResult = await staffInvitationService.createStaffInvitation(
+              parseInt(hospitalId),
+              req.user!.id,
+              {
+                email: staffMember.email,
+                role: 'EMERGENCY_AUTHORIZER', // All profile completion staff are emergency authorizers
+                department: staffMember.department,
+                name: staffMember.name,
+              }
+            );
+
+            if (!invitationResult.success) {
+              console.error(`Failed to send invitation to ${staffMember.email}:`, invitationResult.error);
+              // Continue with staff creation even if email fails
+            }
+
+            return staffRecord;
           })
         );
       } catch (err: any) {
@@ -1104,6 +1133,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         metadata: { 
           staffCount: createdStaff.length,
           staffIds: staffIds,
+          emails: emails,
           hospitalId 
         },
         severity: "info",
@@ -1111,10 +1141,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json({
         success: true,
-        message: "Staff profile completed successfully",
+        message: "Staff profile completed successfully. Email invitations have been sent to all staff members.",
         staff: createdStaff,
       });
     } catch (error: any) {
+      console.error('Full error in complete-staff-profile:', error);
+      console.error('Error stack:', error.stack);
       return res.status(500).json({ error: `Failed to complete staff profile: ${error.message}` });
     }
   });
@@ -1126,12 +1158,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         hospitalId: z.string(),
         adminLicense: z.string().min(1),
         staff: z.array(z.object({
-          id: z.number().optional(), // Optional for new staff
+          id: z.number().optional(),
           name: z.string().min(1),
           staffId: z.string().min(1),
           role: z.enum(["PHYSICIAN", "SURGEON", "EMERGENCY_DOCTOR", "CHIEF_RESIDENT"]),
           licenseNumber: z.string().min(1),
           department: z.string().min(1),
+          email: z.string().email(),
           isActive: z.boolean(),
           isOnDuty: z.boolean(),
         })).min(2).max(3),
@@ -1149,36 +1182,64 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: "Duplicate staff IDs are not allowed. Each staff member must have a unique staff ID." });
       }
 
-      // Get existing staff for this hospital
-      const existingStaff = await storage.getHospitalStaffByHospitalId(hospitalId);
-      
-      // Update or create staff records (do NOT set adminLicense)
+      // Check for duplicate emails
+      const emails = staff.map(s => s.email);
+      const uniqueEmails = new Set(emails);
+      if (uniqueEmails.size !== emails.length) {
+        return res.status(400).json({ error: "Duplicate email addresses are not allowed. Each staff member must have a unique email." });
+      }
+
+      // Update staff records and send email invitations for new staff
       let updatedStaff;
+      const staffInvitationService = StaffInvitationService.getInstance();
+      
       try {
         updatedStaff = await Promise.all(
           staff.map(async (staffMember) => {
             if (staffMember.id) {
               // Update existing staff
               return await storage.updateHospitalStaff(staffMember.id, {
-                name: staffMember.name,
-                role: staffMember.role,
-                licenseNumber: staffMember.licenseNumber,
-                department: staffMember.department,
-                isActive: staffMember.isActive,
-                isOnDuty: staffMember.isOnDuty,
-              });
-            } else {
-              // Create new staff
-              return await storage.createHospitalStaff({
                 staffId: staffMember.staffId,
                 name: staffMember.name,
                 role: staffMember.role,
                 licenseNumber: staffMember.licenseNumber,
                 department: staffMember.department,
-                hospitalId: hospitalId, // Add hospitalId for multi-tenancy
+                email: staffMember.email,
                 isActive: staffMember.isActive,
                 isOnDuty: staffMember.isOnDuty,
               });
+            } else {
+              // Create new staff and send invitation
+              const staffRecord = await storage.createHospitalStaff({
+                staffId: staffMember.staffId,
+                name: staffMember.name,
+                role: staffMember.role,
+                licenseNumber: staffMember.licenseNumber,
+                department: staffMember.department,
+                email: staffMember.email,
+                hospitalId: hospitalId,
+                isActive: staffMember.isActive,
+                isOnDuty: staffMember.isOnDuty,
+              });
+
+              // Send email invitation for new staff member
+              const invitationResult = await staffInvitationService.createStaffInvitation(
+                parseInt(hospitalId),
+                req.user!.id,
+                {
+                  email: staffMember.email,
+                  role: 'EMERGENCY_AUTHORIZER', // All profile completion staff are emergency authorizers
+                  department: staffMember.department,
+                  name: staffMember.name,
+                }
+              );
+
+              if (!invitationResult.success) {
+                console.error(`Failed to send invitation to ${staffMember.email}:`, invitationResult.error);
+                // Continue with staff creation even if email fails
+              }
+
+              return staffRecord;
             }
           })
         );
@@ -1208,6 +1269,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         metadata: { 
           staffCount: updatedStaff.length,
           staffIds: staffIds,
+          emails: emails,
           hospitalId 
         },
         severity: "info",
@@ -1215,7 +1277,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json({
         success: true,
-        message: "Staff profile updated successfully",
+        message: "Staff profile updated successfully. Email invitations have been sent to new staff members.",
         staff: updatedStaff,
       });
     } catch (error: any) {
@@ -1276,6 +1338,104 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : 10;
       const violations = await storage.getSecurityViolations({ resolved, limit, hospital_id: req.user!.hospital_id });
       res.json({ violations });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  // Resolve security violation
+  app.post("/api/admin/security-violations/:id/resolve", requireAdminAuth, async (req, res, next) => {
+    try {
+      const violationId = parseInt(req.params.id);
+      if (isNaN(violationId)) {
+        return res.status(400).json({ error: "Invalid violation ID" });
+      }
+
+      await storage.resolveSecurityViolation(violationId, req.user!.hospital_id);
+      
+      // Log the resolution event
+      await auditService.logEvent({
+        eventType: "SECURITY_VIOLATION_RESOLVED",
+        actorType: "HOSPITAL_ADMIN",
+        actorId: req.user!.id.toString(),
+        targetType: "SECURITY_VIOLATION",
+        targetId: violationId.toString(),
+        action: "RESOLVE",
+        outcome: "SUCCESS",
+        metadata: { violationId },
+        severity: "info",
+      }, req);
+
+      res.json({ success: true, message: "Security violation resolved successfully" });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  // Unresolve security violation
+  app.post("/api/admin/security-violations/:id/unresolve", requireAdminAuth, async (req, res, next) => {
+    try {
+      const violationId = parseInt(req.params.id);
+      if (isNaN(violationId)) {
+        return res.status(400).json({ error: "Invalid violation ID" });
+      }
+
+      await storage.unresolveSecurityViolation(violationId, req.user!.hospital_id);
+      
+      // Log the unresolution event
+      await auditService.logEvent({
+        eventType: "SECURITY_VIOLATION_UNRESOLVED",
+        actorType: "HOSPITAL_ADMIN",
+        actorId: req.user!.id.toString(),
+        targetType: "SECURITY_VIOLATION",
+        targetId: violationId.toString(),
+        action: "UNRESOLVE",
+        outcome: "SUCCESS",
+        metadata: { violationId },
+        severity: "warning",
+      }, req);
+
+      res.json({ success: true, message: "Security violation marked as unresolved" });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  // Resend invitation to a staff member
+  app.post("/api/hospital/resend-invitation", requireAdminAuth, async (req, res, next) => {
+    try {
+      const { staffId, email, forceResend } = req.body;
+      if (!staffId && !email) {
+        return res.status(400).json({ error: "staffId or email is required" });
+      }
+      // Find staff by staffId or email
+      let staff;
+      if (staffId) {
+        staff = await storage.getHospitalStaffByStaffId(staffId);
+      } else {
+        const allStaff = await storage.getHospitalStaffByHospitalId(req.user!.id.toString());
+        staff = allStaff.find(s => s.email === email);
+      }
+      if (!staff) {
+        return res.status(404).json({ error: "Staff member not found" });
+      }
+      // Trigger invitation logic, pass forceResend
+      const staffInvitationService = StaffInvitationService.getInstance();
+      const invitationResult = await staffInvitationService.createStaffInvitation(
+        parseInt(staff.hospitalId),
+        req.user!.id,
+        {
+          email: staff.email,
+          role: staff.role,
+          department: staff.department,
+          name: staff.name,
+        },
+        forceResend === true
+      );
+      if (!invitationResult.success) {
+        return res.status(500).json({ error: invitationResult.error || "Failed to send invitation" });
+      }
+      res.json({ success: true, message: "Invitation resent successfully" });
     } catch (error) {
       next(error);
     }

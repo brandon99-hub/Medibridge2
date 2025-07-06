@@ -2,7 +2,7 @@ import { User } from "@shared/schema";
 import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
 import { Link } from "wouter";
-import { Stethoscope, UserRound, Shield, LogOut, Globe, User as UserIcon, Settings, AlertTriangle as AlertTriangleIcon, ChevronDown, UserCheck } from "lucide-react";
+import { Stethoscope, UserRound, Shield, LogOut, Globe, User as UserIcon, Settings, AlertTriangle as AlertTriangleIcon, ChevronDown, UserCheck, Menu, X } from "lucide-react";
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import HospitalStaffProfileCompletion from "./hospital-staff-profile-completion";
@@ -28,7 +28,7 @@ const dividerVariants = {
 export default function NavigationHeader({ currentHospital, onHospitalSwitch, user, showStaffProfileModal, setShowStaffProfileModal, setExistingStaff, onOpenStaffProfileModal }: NavigationHeaderProps) {
   const { logoutMutation } = useAuth();
   const [profileOpen, setProfileOpen] = useState(false);
-  const [hasSkippedProfile, setHasSkippedProfile] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   // Fetch staff profile status for admin users
   const { data: staffProfileData, error: staffProfileError } = useQuery({
@@ -63,16 +63,16 @@ export default function NavigationHeader({ currentHospital, onHospitalSwitch, us
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
             {/* Left: Logo & Tagline */}
-            <div className="flex items-center space-x-3 min-w-[220px]">
-              <Stethoscope className="h-6 w-6 text-blue-600" />
-              <div>
-                <h1 className="text-xl font-semibold text-slate-900 leading-tight">MediBridge</h1>
-                <span className="text-xs text-slate-500 block">Healthcare Record Interoperability</span>
+            <div className="flex items-center space-x-3 min-w-0 flex-1">
+              <Stethoscope className="h-6 w-6 text-blue-600 flex-shrink-0" />
+              <div className="min-w-0">
+                <h1 className="text-lg sm:text-xl font-semibold text-slate-900 leading-tight truncate">MediBridge</h1>
+                <span className="text-xs text-slate-500 block hidden sm:block">Healthcare Record Interoperability</span>
               </div>
             </div>
 
-            {/* Center: Hospital Toggle and Patient Portal */}
-            <div className="flex items-center space-x-3">
+            {/* Center: Hospital Toggle - Hidden on mobile, shown in mobile menu */}
+            <div className="hidden md:flex items-center space-x-3">
               <div className="relative flex bg-slate-100 rounded-full p-1 w-64 overflow-hidden">
                 <motion.div
                   key={currentHospital}
@@ -139,19 +139,20 @@ export default function NavigationHeader({ currentHospital, onHospitalSwitch, us
               </div>
             </div>
 
-            {/* Right: Emergency, Profile Dropdown */}
+            {/* Right: Emergency, Profile Dropdown, Mobile Menu */}
             <div className="flex items-center space-x-2">
-              {/* Emergency Access - For Hospital B and Admin users */}
+              {/* Emergency Access - Hidden on mobile, shown in mobile menu */}
               {user && (user.hospitalType === "B" || user.isAdmin) && (
-                <Link href="/emergency-access">
+                <Link href="/emergency-access" className="hidden md:block">
                   <Button variant="destructive" size="sm" className="bg-red-600 hover:bg-red-700 text-white">
                     <AlertTriangleIcon className="h-4 w-4 mr-2" />
                     Emergency
                   </Button>
                 </Link>
               )}
-              {/* Profile Dropdown */}
-              <div className="relative">
+              
+              {/* Profile Dropdown - Desktop */}
+              <div className="relative hidden md:block">
                 <Button
                   variant="ghost"
                   size="sm"
@@ -256,8 +257,143 @@ export default function NavigationHeader({ currentHospital, onHospitalSwitch, us
                   )}
                 </AnimatePresence>
               </div>
+
+              {/* Mobile Menu Button */}
+              <Button
+                variant="ghost"
+                size="sm"
+                className="md:hidden p-2"
+                onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+              >
+                {mobileMenuOpen ? (
+                  <X className="h-5 w-5 text-slate-700" />
+                ) : (
+                  <Menu className="h-5 w-5 text-slate-700" />
+                )}
+              </Button>
             </div>
           </div>
+
+          {/* Mobile Menu */}
+          <AnimatePresence>
+            {mobileMenuOpen && (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: "auto" }}
+                exit={{ opacity: 0, height: 0 }}
+                transition={{ duration: 0.2 }}
+                className="md:hidden border-t border-slate-200 bg-white"
+              >
+                <div className="py-4 space-y-4">
+                  {/* Hospital Toggle for Mobile */}
+                  <div className="px-4">
+                    <h3 className="text-sm font-medium text-slate-700 mb-3">Switch Hospital</h3>
+                    <div className="grid grid-cols-2 gap-2">
+                      <Button
+                        variant={currentHospital === "A" ? "default" : "outline"}
+                        size="sm"
+                        onClick={() => {
+                          onHospitalSwitch("A");
+                          setMobileMenuOpen(false);
+                        }}
+                        className="w-full"
+                      >
+                        Hospital A
+                      </Button>
+                      <Button
+                        variant={currentHospital === "B" ? "default" : "outline"}
+                        size="sm"
+                        onClick={() => {
+                          onHospitalSwitch("B");
+                          setMobileMenuOpen(false);
+                        }}
+                        className="w-full"
+                      >
+                        Hospital B
+                      </Button>
+                    </div>
+                  </div>
+
+                  {/* Emergency Access for Mobile */}
+                  {user && (user.hospitalType === "B" || user.isAdmin) && (
+                    <div className="px-4">
+                      <Link href="/emergency-access">
+                        <Button 
+                          variant="destructive" 
+                          size="sm" 
+                          className="w-full bg-red-600 hover:bg-red-700 text-white"
+                          onClick={() => setMobileMenuOpen(false)}
+                        >
+                          <AlertTriangleIcon className="h-4 w-4 mr-2" />
+                          Emergency Access
+                        </Button>
+                      </Link>
+                    </div>
+                  )}
+
+                  {/* User Info for Mobile */}
+                  <div className="px-4 py-3 bg-slate-50 rounded-lg mx-4">
+                    <p className="text-sm font-medium text-slate-900">{user.hospitalName || user.username}</p>
+                    <p className="text-xs text-slate-600">
+                      Hospital {user.hospitalType} • {user.username}
+                    </p>
+                  </div>
+
+                  {/* Mobile Menu Items */}
+                  <div className="px-4 space-y-1">
+                    {user.isAdmin && (
+                      <Link href="/admin">
+                        <button 
+                          className="w-full text-left px-3 py-2 text-sm text-orange-700 hover:bg-orange-50 rounded-md flex items-center"
+                          onClick={() => setMobileMenuOpen(false)}
+                        >
+                          <Settings className="h-4 w-4 mr-3" /> Admin Dashboard
+                        </button>
+                      </Link>
+                    )}
+                    {user.isAdmin && (
+                      <button
+                        className="w-full text-left px-3 py-2 text-sm text-blue-700 hover:bg-blue-50 rounded-md flex items-center"
+                        onClick={() => { 
+                          onOpenStaffProfileModal(); 
+                          setMobileMenuOpen(false); 
+                          setExistingStaff([]);
+                        }}
+                      >
+                        <UserCheck className="h-4 w-4 mr-3" /> 
+                        {staffProfileData?.staff?.length > 0 ? "Edit Staff Profile" : "Complete Staff Profile"}
+                      </button>
+                    )}
+                    <Link href="/patient-portal">
+                      <button 
+                        className="w-full text-left px-3 py-2 text-sm text-purple-700 hover:bg-purple-50 rounded-md flex items-center"
+                        onClick={() => setMobileMenuOpen(false)}
+                      >
+                        <UserIcon className="h-4 w-4 mr-3" /> Patient Portal
+                      </button>
+                    </Link>
+                    <Link href="/verifier">
+                      <button 
+                        className="w-full text-left px-3 py-2 text-sm text-blue-700 hover:bg-blue-50 rounded-md flex items-center"
+                        onClick={() => setMobileMenuOpen(false)}
+                      >
+                        <Shield className="h-4 w-4 mr-3" /> ZK Proof Verifier
+                      </button>
+                    </Link>
+                    <button
+                      className="w-full text-left px-3 py-2 text-sm text-slate-700 hover:bg-slate-100 rounded-md flex items-center"
+                      onClick={() => {
+                        logoutMutation.mutate();
+                        setMobileMenuOpen(false);
+                      }}
+                    >
+                      <LogOut className="h-4 w-4 mr-3" /> Logout
+                    </button>
+                  </div>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
       </nav>
     </>

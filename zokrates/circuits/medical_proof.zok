@@ -1,0 +1,19 @@
+import "hashes/poseidon/poseidon" as poseidon;
+
+def main(field a, field b, field c, field d, field e, field f, field g) {
+    /* 1. Recompute the hash of the record using Poseidon */
+    field computed_hash = poseidon([d, e, f]);
+    
+    /* 2. Verify the record hash matches the provided hash */
+    assert(computed_hash == a);
+
+    /* 3. For property code 0 (no specific property), always pass */
+    /* For property code 1 (requires rest), check if treatment indicates rest needed */
+    field computed_property = b == 0 ? 0 : (b == 1 ? (f != 0 ? 1 : 0) : 0);
+
+    /* 4. Check that the computed property matches the claimed value */
+    assert(computed_property == c);
+
+    /* 5. Verify the private value matches the claimed value */
+    assert(c == g);
+} 

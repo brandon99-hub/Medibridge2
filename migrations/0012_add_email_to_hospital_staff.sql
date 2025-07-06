@@ -1,0 +1,1 @@
+ALTER TABLE "hospital_staff" ADD COLUMN "email" text; 

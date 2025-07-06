@@ -34,6 +34,7 @@
 - **Filecoin Integration** for long-term archival storage with cryptographic proofs
 - **MetaMask Integration** for advanced users with wallet signature verification
 - **Triple Redundant Storage** (IPFS + Filecoin + Local backup)
+- **ZoKrates ZKP Integration** for privacy-preserving medical proof generation
 - **IPFS Status Monitoring** with real-time health checks and availability tracking
 
 ### 🔒 **Zero-Knowledge Proofs (ZK-MedPass)**

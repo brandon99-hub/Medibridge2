@@ -81,21 +81,6 @@ export const csrfTokenEndpoint = [
     // Set the token as a cookie
     res.cookie(csrfConfig.cookieName, token, csrfConfig.cookieOptions);
     
-    auditService.logEvent({
-      eventType: "CSRF_TOKEN_GENERATED",
-      actorType: "SYSTEM",
-      actorId: "csrf_service",
-      targetType: "CSRF_TOKEN",
-      targetId: "token_generation",
-      action: "GENERATE",
-      outcome: "SUCCESS",
-      metadata: {
-        ipAddress: req.ip,
-        userAgent: req.get("User-Agent"),
-      },
-      severity: "info",
-    }, req);
-    
     res.json({
       success: true,
       csrfToken: token,

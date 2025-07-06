@@ -26,7 +26,8 @@ import {
   Building2,
   Clock,
   AlertTriangle,
-  Sparkles
+  Sparkles,
+  Send
 } from "lucide-react";
 
 const STAFF_ROLES = [
@@ -61,28 +62,35 @@ export default function HospitalStaffProfileCompletion({
   const [staffList, setStaffList] = useState(
     isEdit && existingStaff.length > 0 
       ? existingStaff 
-      : [{ name: "", staffId: "", role: "", licenseNumber: "", department: "", adminLicense: "", isActive: true, isOnDuty: true }]
+      : [{ name: "", staffId: "", role: "", licenseNumber: "", department: "", email: "", adminLicense: "", isActive: true, isOnDuty: true }]
   );
   const [touched, setTouched] = useState<{ [k: number]: { [f: string]: boolean } }>({});
   const [submitting, setSubmitting] = useState(false);
   const [adminLicense, setAdminLicense] = useState("");
+  const [resendStatus, setResendStatus] = useState<{ [staffId: string]: 'idle' | 'loading' | 'success' | 'error' }>({});
 
   useEffect(() => {
     if (isEdit && existingStaff.length > 0) {
-      setStaffList(existingStaff);
+      // Ensure all staff objects have the email field
+      const staffWithEmail = existingStaff.map(staff => ({
+        ...staff,
+        email: staff.email || ""
+      }));
+      setStaffList(staffWithEmail);
       setAdminLicense(existingAdminLicense);
     }
   }, [isEdit, existingStaff, existingAdminLicense]);
 
   // Validation helpers
   const isStaffValid = (staff: any) =>
-    staff.name.trim() &&
-    staff.staffId.trim() &&
-    staff.role &&
-    staff.licenseNumber.trim() &&
-    staff.department.trim();
+    staff?.name?.trim() &&
+    staff?.staffId?.trim() &&
+    staff?.role &&
+    staff?.licenseNumber?.trim() &&
+    staff?.department?.trim() &&
+    staff?.email?.trim();
   const hasDuplicates = () => {
-    const ids = staffList.map((s) => s.staffId.trim());
+    const ids = staffList.map((s) => s?.staffId?.trim() || "").filter(id => id !== "");
     return new Set(ids).size !== ids.length;
   };
   const isFormValid =
@@ -90,21 +98,23 @@ export default function HospitalStaffProfileCompletion({
     staffList.length <= 3 &&
     staffList.every(isStaffValid) &&
     !hasDuplicates() &&
-    adminLicense.trim();
+    adminLicense?.trim();
 
   const addStaff = () => {
     if (staffList.length < 3) {
-      setStaffList([...staffList, { name: "", staffId: "", role: "", licenseNumber: "", department: "", adminLicense: "", isActive: true, isOnDuty: true }]);
+      setStaffList([...staffList, { name: "", staffId: "", role: "", licenseNumber: "", department: "", email: "", adminLicense: "", isActive: true, isOnDuty: true }]);
     }
   };
   const removeStaff = (idx: number) => {
-    if (staffList.length > 2) {
+    if (idx >= 0 && idx < staffList.length && staffList.length > 2) {
       setStaffList(staffList.filter((_, i) => i !== idx));
     }
   };
   const updateStaff = (idx: number, field: string, value: any) => {
-    setStaffList((prev) => prev.map((s, i) => (i === idx ? { ...s, [field]: value } : s)));
-    setTouched((t) => ({ ...t, [idx]: { ...t[idx], [field]: true } }));
+    if (idx >= 0 && idx < staffList.length) {
+      setStaffList((prev) => prev.map((s, i) => (i === idx ? { ...s, [field]: value } : s)));
+      setTouched((t) => ({ ...t, [idx]: { ...t[idx], [field]: true } }));
+    }
   };
 
   const completeStaffProfileMutation = useMutation({
@@ -132,7 +142,7 @@ export default function HospitalStaffProfileCompletion({
       });
       onComplete(data.staff);
       onClose();
-      queryClient.invalidateQueries(['staffProfile', hospitalId]);
+      queryClient.invalidateQueries({ queryKey: ['staffProfile', hospitalId] });
     },
     onError: (error: any) => {
       setSubmitting(false);
@@ -149,7 +159,7 @@ export default function HospitalStaffProfileCompletion({
     e.preventDefault();
     setTouched(
       Object.fromEntries(
-        staffList.map((_, idx) => [idx, { name: true, staffId: true, role: true, licenseNumber: true, department: true }])
+        staffList.map((_, idx) => [idx, { name: true, staffId: true, role: true, licenseNumber: true, department: true, email: true }])
       )
     );
     if (!isFormValid) {
@@ -191,7 +201,7 @@ export default function HospitalStaffProfileCompletion({
                       <DialogDescription className="text-blue-100 text-lg mt-2">
                         {isEdit 
                           ? "Update your hospital's emergency consent authorizers"
-                          : "Designate 2-3 trusted staff for emergency access authorization with medical and admin licenses"
+                          : "Designate 2-3 trusted staff for emergency access authorization. These staff will receive email invitations to activate their accounts."
                         }
                       </DialogDescription>
                     </div>
@@ -237,7 +247,8 @@ export default function HospitalStaffProfileCompletion({
                   <Alert className="border-blue-200 bg-blue-50/50 backdrop-blur-sm">
                     <UserCheck className="h-5 w-5 text-blue-600" />
                     <AlertDescription className="text-blue-800 font-medium">
-                      Only these authorized staff can approve emergency access requests. Both medical and admin licenses are required for emergency authorization.
+                      <strong>Emergency Authorizers:</strong> These staff members will have the ability to approve emergency access requests to patient medical records. 
+                      They will receive email invitations to activate their accounts and must complete the activation process before they can authorize emergency access.
                       {!isEdit && " You can edit this list later from the admin dashboard."}
                     </AlertDescription>
                   </Alert>
@@ -449,6 +460,88 @@ export default function HospitalStaffProfileCompletion({
                                   <p className="text-sm text-red-500 flex items-center space-x-1">
                                     <AlertTriangle className="h-3 w-3" />
                                     <span>Department is required</span>
+                                  </p>
+                                )}
+                              </div>
+
+                              {/* Email */}
+                              <div className="space-y-2">
+                                <Label htmlFor={`email-${idx}`} className="text-sm font-semibold text-slate-700 flex items-center space-x-2">
+                                  <Mail className="h-4 w-4" />
+                                  <span>Email Address *</span>
+                                </Label>
+                                <div className="relative flex items-center">
+                                  <Input
+                                    id={`email-${idx}`}
+                                    type="email"
+                                    value={staff.email}
+                                    onChange={(e) => updateStaff(idx, "email", e.target.value)}
+                                    onBlur={() => setTouched((t) => ({ ...t, [idx]: { ...t[idx], email: true } }))}
+                                    placeholder="dr.sarah@hospital.com"
+                                    className={`pl-12 pr-10 h-12 text-lg border-2 transition-all duration-200 ${
+                                      touched[idx]?.email && !staff.email.trim() 
+                                        ? 'border-red-300 bg-red-50' 
+                                        : touched[idx]?.email && staff.email.trim()
+                                        ? 'border-green-300 bg-green-50'
+                                        : 'border-slate-200 hover:border-blue-300 focus:border-blue-500'
+                                    }`}
+                                  />
+                                  <Mail className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" />
+                                  {touched[idx]?.email && staff.email.trim() && (
+                                    <CheckCircle className="absolute right-4 top-1/2 -translate-y-1/2 h-5 w-5 text-green-500" />
+                                  )}
+                                  {/* Resend Invitation Button */}
+                                  {isEdit && staff.id && staff.email && (
+                                    <button
+                                      type="button"
+                                      className={`absolute right-12 top-1/2 -translate-y-1/2 p-1 rounded-full border transition-colors
+                                        ${resendStatus[staff.staffId] === 'success' ? 'bg-green-100 border-green-300' : ''}
+                                        ${resendStatus[staff.staffId] === 'error' ? 'bg-red-100 border-red-300' : ''}
+                                        ${resendStatus[staff.staffId] === 'loading' ? 'bg-blue-100 border-blue-300' : 'bg-white border-blue-200 hover:bg-blue-50'}
+                                        text-blue-600 hover:text-blue-800`}
+                                      title="Resend Invitation"
+                                      disabled={resendStatus[staff.staffId] === 'loading'}
+                                      onClick={async () => {
+                                        setResendStatus((prev) => ({ ...prev, [staff.staffId]: 'loading' }));
+                                        try {
+                                          const res = await fetch("/api/hospital/resend-invitation", {
+                                            method: "POST",
+                                            headers: { "Content-Type": "application/json" },
+                                            body: JSON.stringify({ staffId: staff.staffId, forceResend: true })
+                                          });
+                                          const data = await res.json();
+                                          if (data.success) {
+                                            setResendStatus((prev) => ({ ...prev, [staff.staffId]: 'success' }));
+                                            toast({ title: "Invitation Sent", description: `Invitation resent to ${staff.email}` });
+                                            setTimeout(() => setResendStatus((prev) => ({ ...prev, [staff.staffId]: 'idle' })), 1200);
+                                          } else {
+                                            setResendStatus((prev) => ({ ...prev, [staff.staffId]: 'error' }));
+                                            toast({ title: "Failed to Resend", description: data.error || "Unknown error", variant: "destructive" });
+                                            setTimeout(() => setResendStatus((prev) => ({ ...prev, [staff.staffId]: 'idle' })), 1500);
+                                          }
+                                        } catch (err) {
+                                          setResendStatus((prev) => ({ ...prev, [staff.staffId]: 'error' }));
+                                          toast({ title: "Failed to Resend", description: "Network or server error", variant: "destructive" });
+                                          setTimeout(() => setResendStatus((prev) => ({ ...prev, [staff.staffId]: 'idle' })), 1500);
+                                        }
+                                      }}
+                                    >
+                                      {resendStatus[staff.staffId] === 'loading' ? (
+                                        <Loader2 className="h-5 w-5 animate-spin" />
+                                      ) : resendStatus[staff.staffId] === 'success' ? (
+                                        <CheckCircle className="h-5 w-5 text-green-600 transition-all" />
+                                      ) : resendStatus[staff.staffId] === 'error' ? (
+                                        <AlertTriangle className="h-5 w-5 text-red-600 transition-all" />
+                                      ) : (
+                                        <Send className="h-5 w-5" />
+                                      )}
+                                    </button>
+                                  )}
+                                </div>
+                                {touched[idx]?.email && !staff.email.trim() && (
+                                  <p className="text-sm text-red-500 flex items-center space-x-1">
+                                    <AlertTriangle className="h-3 w-3" />
+                                    <span>Email address is required</span>
                                   </p>
                                 )}
                               </div>

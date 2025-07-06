@@ -154,7 +154,6 @@ const SIDEBAR_TABS = [
   { key: "credentials", label: "VC Monitoring", icon: Shield },
   { key: "access", label: "Access Patterns", icon: Eye },
   { key: "activity", label: "Recent Activity", icon: Activity },
-  { key: "rate-limits", label: "Rate Limits", icon: Gauge },
   { key: "staff", label: "Staff Management", icon: UserPlus },
   { key: "zkp", label: "ZKP System", icon: BarChart3 },
 ];
@@ -162,6 +161,7 @@ const SIDEBAR_TABS = [
 export default function AdminDashboard() {
   const [activeTab, setActiveTab] = useState("overview");
   const [showStaffModal, setShowStaffModal] = useState(false);
+  const [violationsFilter, setViolationsFilter] = useState<"unresolved" | "resolved">("unresolved");
   const [, navigate] = useLocation();
   const { toast } = useToast();
   const { apiRequestWithCsrf } = useCsrf();
@@ -173,18 +173,11 @@ export default function AdminDashboard() {
     refetchInterval: 30000, // Refresh every 30 seconds
   });
 
-  // Fetch recent security violations
+  // Fetch security violations based on filter
   const { data: securityViolationsData, isLoading: isLoadingViolations } = useQuery<any>({
-    queryKey: ['/api/admin/security-violations', { resolved: false, limit: 5 }],
-    queryFn: async () => apiRequest("GET", "/api/admin/security-violations?resolved=false&limit=5").then(res => res.json()),
+    queryKey: ['/api/admin/security-violations', { resolved: violationsFilter === "resolved", limit: 10 }],
+    queryFn: async () => apiRequest("GET", `/api/admin/security-violations?resolved=${violationsFilter === "resolved"}&limit=10`).then(res => res.json()),
     refetchInterval: 60000, // Refresh every 60 seconds
-  });
-
-  // Fetch rate limiting statistics
-  const { data: rateLimitStats, isLoading: isLoadingRateLimits } = useQuery<any>({
-    queryKey: ['/api/rate-limits/stats'],
-    queryFn: async () => apiRequest("GET", "/api/rate-limits/stats").then(res => res.json()),
-    refetchInterval: 30000, // Refresh every 30 seconds
   });
 
   const recentViolations = securityViolationsData?.violations || [];
@@ -216,50 +209,50 @@ export default function AdminDashboard() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 flex">
+    <div className="min-h-screen bg-slate-50 flex flex-col lg:flex-row">
       {/* Sidebar */}
-      <aside className="w-64 bg-white shadow-lg min-h-screen flex flex-col">
-        <div className="p-6 border-b border-slate-200">
-          <div className="flex items-center space-x-3">
-            <Shield className="h-8 w-8 text-blue-600" />
+      <aside className="w-full lg:w-64 bg-white shadow-lg min-h-screen flex flex-col">
+        <div className="p-4 sm:p-6 border-b border-slate-200">
+          <div className="flex items-center space-x-2 sm:space-x-3">
+            <Shield className="h-6 w-6 sm:h-8 sm:w-8 text-blue-600" />
             <div>
-              <h1 className="text-xl font-bold text-slate-900">MediBridge</h1>
-              <p className="text-sm text-slate-600">Admin Dashboard</p>
+              <h1 className="text-lg sm:text-xl font-bold text-slate-900">MediBridge</h1>
+              <p className="text-xs sm:text-sm text-slate-600">Admin Dashboard</p>
             </div>
           </div>
         </div>
-        <nav className="flex-1 p-4 space-y-2">
+        <nav className="flex-1 p-3 sm:p-4 space-y-1 sm:space-y-2">
           {SIDEBAR_TABS.map(tab => (
             <button
               key={tab.key}
               onClick={() => setActiveTab(tab.key)}
-              className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg transition-colors duration-200 ${
+              className={`w-full flex items-center space-x-2 sm:space-x-3 px-3 sm:px-4 py-2 sm:py-3 rounded-lg transition-colors duration-200 text-sm sm:text-base ${
                 activeTab === tab.key
                   ? "bg-blue-50 text-blue-700 border border-blue-200"
                   : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
               }`}
             >
-              <tab.icon className="h-5 w-5" />
+              <tab.icon className="h-4 w-4 sm:h-5 sm:w-5" />
               <span className="font-medium">{tab.label}</span>
             </button>
           ))}
         </nav>
-        <div className="p-4 border-t border-slate-200">
-          <div className="flex items-center space-x-2 p-3 bg-green-50 rounded-lg">
-            <CheckCircle className="h-4 w-4 text-green-600" />
+        <div className="p-3 sm:p-4 border-t border-slate-200">
+          <div className="flex items-center space-x-2 p-2 sm:p-3 bg-green-50 rounded-lg">
+            <CheckCircle className="h-3 w-3 sm:h-4 sm:w-4 text-green-600" />
             <div>
-              <div className="text-sm font-medium text-green-900">System Healthy</div>
+              <div className="text-xs sm:text-sm font-medium text-green-900">System Healthy</div>
               <div className="text-xs text-green-700">All systems operational</div>
             </div>
           </div>
         </div>
       </aside>
       {/* Main Content */}
-      <main className="flex-1 p-6 max-w-6xl mx-auto">
+      <main className="flex-1 p-4 sm:p-6 max-w-6xl mx-auto overflow-auto">
         {/* Back Button */}
-        <div className="mb-6">
+        <div className="mb-4 sm:mb-6">
           <button
-            className="flex items-center px-4 py-2 rounded-full border border-blue-200 bg-white text-blue-700 shadow-sm hover:bg-blue-50 hover:border-blue-400 transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-blue-200"
+            className="flex items-center px-3 sm:px-4 py-2 rounded-full border border-blue-200 bg-white text-blue-700 shadow-sm hover:bg-blue-50 hover:border-blue-400 transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-blue-200 text-sm sm:text-base"
             onClick={() => navigate("/")}
           >
             <ArrowLeft className="h-4 w-4 mr-2" />
@@ -268,58 +261,58 @@ export default function AdminDashboard() {
         </div>
         {/* Section Content */}
         {activeTab === "overview" && (
-          <div className="space-y-6">
+          <div className="space-y-4 sm:space-y-6">
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center space-x-2">
-                  <Home className="h-5 w-5 text-blue-600" />
-                  <span>System Overview</span>
+                  <Home className="h-4 w-4 sm:h-5 sm:w-5 text-blue-600" />
+                  <span className="text-lg sm:text-xl">System Overview</span>
                 </CardTitle>
-                <CardDescription>
+                <CardDescription className="text-sm sm:text-base">
                   Welcome to the MediBridge Security & Audit Dashboard
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div className="space-y-4">
-                    <h3 className="text-lg font-semibold text-slate-900">Quick Stats</h3>
-                    <div className="space-y-3">
-                      <div className="flex justify-between items-center p-3 bg-blue-50 rounded-lg">
-                        <span className="text-slate-700">Successful Logins</span>
-                        <span className="font-bold text-blue-600">{securityMetrics.successfulLogins}</span>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
+                  <div className="space-y-3 sm:space-y-4">
+                    <h3 className="text-base sm:text-lg font-semibold text-slate-900">Quick Stats</h3>
+                    <div className="space-y-2 sm:space-y-3">
+                      <div className="flex justify-between items-center p-2 sm:p-3 bg-blue-50 rounded-lg">
+                        <span className="text-slate-700 text-sm sm:text-base">Successful Logins</span>
+                        <span className="font-bold text-blue-600 text-sm sm:text-base">{securityMetrics.successfulLogins}</span>
                       </div>
-                      <div className="flex justify-between items-center p-3 bg-red-50 rounded-lg">
-                        <span className="text-slate-700">Failed Logins</span>
-                        <span className="font-bold text-red-600">{securityMetrics.failedLogins}</span>
+                      <div className="flex justify-between items-center p-2 sm:p-3 bg-red-50 rounded-lg">
+                        <span className="text-slate-700 text-sm sm:text-base">Failed Logins</span>
+                        <span className="font-bold text-red-600 text-sm sm:text-base">{securityMetrics.failedLogins}</span>
                       </div>
-                      <div className="flex justify-between items-center p-3 bg-green-50 rounded-lg">
-                        <span className="text-slate-700">VCs Issued Today</span>
-                        <span className="font-bold text-green-600">{vcIssuanceStats.today}</span>
+                      <div className="flex justify-between items-center p-2 sm:p-3 bg-green-50 rounded-lg">
+                        <span className="text-slate-700 text-sm sm:text-base">VCs Issued Today</span>
+                        <span className="font-bold text-green-600 text-sm sm:text-base">{vcIssuanceStats.today}</span>
                       </div>
                     </div>
                   </div>
-                  <div className="space-y-4">
-                    <h3 className="text-lg font-semibold text-slate-900">System Health</h3>
-                    <div className="space-y-3">
-                      <div className="flex items-center space-x-3 p-3 bg-green-50 rounded-lg">
-                        <CheckCircle className="h-5 w-5 text-green-600" />
+                  <div className="space-y-3 sm:space-y-4">
+                    <h3 className="text-base sm:text-lg font-semibold text-slate-900">System Health</h3>
+                    <div className="space-y-2 sm:space-y-3">
+                      <div className="flex items-center space-x-2 sm:space-x-3 p-2 sm:p-3 bg-green-50 rounded-lg">
+                        <CheckCircle className="h-4 w-4 sm:h-5 sm:w-5 text-green-600" />
           <div>
-                          <div className="font-medium text-green-900">Rate Limiting</div>
-                          <div className="text-sm text-green-700">Active and protecting all endpoints</div>
+                          <div className="font-medium text-green-900 text-sm sm:text-base">Rate Limiting</div>
+                          <div className="text-xs sm:text-sm text-green-700">Active and protecting all endpoints</div>
                         </div>
           </div>
-                      <div className="flex items-center space-x-3 p-3 bg-blue-50 rounded-lg">
-                        <Shield className="h-5 w-5 text-blue-600" />
+                      <div className="flex items-center space-x-2 sm:space-x-3 p-2 sm:p-3 bg-blue-50 rounded-lg">
+                        <Shield className="h-4 w-4 sm:h-5 sm:w-5 text-blue-600" />
                         <div>
-                          <div className="font-medium text-blue-900">Encryption</div>
-                          <div className="text-sm text-blue-700">AES-256-GCM protecting all data</div>
+                          <div className="font-medium text-blue-900 text-sm sm:text-base">Encryption</div>
+                          <div className="text-xs sm:text-sm text-blue-700">AES-256-GCM protecting all data</div>
           </div>
         </div>
-                      <div className="flex items-center space-x-3 p-3 bg-purple-50 rounded-lg">
-                        <Activity className="h-5 w-5 text-purple-600" />
+                      <div className="flex items-center space-x-2 sm:space-x-3 p-2 sm:p-3 bg-purple-50 rounded-lg">
+                        <Activity className="h-4 w-4 sm:h-5 sm:w-5 text-purple-600" />
                         <div>
-                          <div className="font-medium text-purple-900">Audit Logging</div>
-                          <div className="text-sm text-purple-700">Comprehensive event tracking</div>
+                          <div className="font-medium text-purple-900 text-sm sm:text-base">Audit Logging</div>
+                          <div className="text-xs sm:text-sm text-purple-700">Comprehensive event tracking</div>
                         </div>
               </div>
               </div>
@@ -335,11 +328,45 @@ export default function AdminDashboard() {
               <CardHeader>
                 <CardTitle className="flex items-center space-x-2">
                   <AlertTriangle className="h-5 w-5 text-red-600" />
-                  <span>Recent Security Violations</span>
+                  <span>Security Violations</span>
                 </CardTitle>
                 <CardDescription>
-                  Suspicious activities and security incidents requiring attention
+                  Monitor and manage security incidents and suspicious activities
                 </CardDescription>
+                
+                {/* Beautiful Toggle Filter */}
+                <div className="flex items-center space-x-1 bg-slate-100 p-1 rounded-lg w-fit">
+                  <button
+                    onClick={() => setViolationsFilter("unresolved")}
+                    className={`px-4 py-2 rounded-md text-sm font-medium transition-all duration-200 ease-in-out ${
+                      violationsFilter === "unresolved"
+                        ? "bg-white text-red-600 shadow-sm ring-1 ring-red-200"
+                        : "text-slate-600 hover:text-slate-900 hover:bg-slate-50"
+                    }`}
+                  >
+                    <div className="flex items-center space-x-2">
+                      <div className={`w-2 h-2 rounded-full ${
+                        violationsFilter === "unresolved" ? "bg-red-500" : "bg-slate-400"
+                      }`} />
+                      <span>Unresolved</span>
+                    </div>
+                  </button>
+                  <button
+                    onClick={() => setViolationsFilter("resolved")}
+                    className={`px-4 py-2 rounded-md text-sm font-medium transition-all duration-200 ease-in-out ${
+                      violationsFilter === "resolved"
+                        ? "bg-white text-green-600 shadow-sm ring-1 ring-green-200"
+                        : "text-slate-600 hover:text-slate-900 hover:bg-slate-50"
+                    }`}
+                  >
+                    <div className="flex items-center space-x-2">
+                      <div className={`w-2 h-2 rounded-full ${
+                        violationsFilter === "resolved" ? "bg-green-500" : "bg-slate-400"
+                      }`} />
+                      <span>Resolved</span>
+                    </div>
+                  </button>
+                </div>
               </CardHeader>
               <CardContent>
                 {isLoadingViolations && (
@@ -364,7 +391,10 @@ export default function AdminDashboard() {
                   <Alert>
                     <CheckCircle className="h-4 w-4" />
                     <AlertDescription>
-                      No unresolved security violations found. System is looking good!
+                      {violationsFilter === "unresolved" 
+                        ? "No unresolved security violations found. System is looking good!"
+                        : "No resolved security violations found."
+                      }
                     </AlertDescription>
                   </Alert>
                 )}
@@ -399,17 +429,31 @@ export default function AdminDashboard() {
                         }</div>
                         <div className="flex items-center justify-between mt-2">
                           <span className="text-xs text-slate-500">ID: {violation.id}</span>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="text-green-700 border-green-200 hover:bg-green-50"
-                            onClick={async () => {
-                              await apiRequestWithCsrf("POST", `/api/admin/security-violations/${violation.id}/resolve`);
-                              window.location.reload();
-                            }}
-                          >
-                            Mark as Resolved
-                          </Button>
+                          {violationsFilter === "unresolved" ? (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="text-green-700 border-green-200 hover:bg-green-50"
+                              onClick={async () => {
+                                await apiRequestWithCsrf("POST", `/api/admin/security-violations/${violation.id}/resolve`);
+                                window.location.reload();
+                              }}
+                            >
+                              Mark as Resolved
+                            </Button>
+                          ) : (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="text-orange-700 border-orange-200 hover:bg-orange-50"
+                              onClick={async () => {
+                                await apiRequestWithCsrf("POST", `/api/admin/security-violations/${violation.id}/unresolve`);
+                                window.location.reload();
+                              }}
+                            >
+                              Mark as Unresolved
+                            </Button>
+                          )}
                         </div>
                       </div>
                     ))}
@@ -607,191 +651,6 @@ export default function AdminDashboard() {
                 )}
               </CardContent>
             </Card>
-        )}
-        {activeTab === "rate-limits" && (
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center space-x-2">
-                <Gauge className="h-5 w-5 text-blue-600" />
-                <span>Rate Limiting Dashboard</span>
-              </CardTitle>
-              <CardDescription>
-                Monitor API rate limits and security thresholds
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              {isLoadingRateLimits && (
-                <div className="space-y-4">
-                  {[...Array(4)].map((_, i) => (
-                    <div key={i} className="border rounded-lg p-4 space-y-3">
-                      <div className="flex items-center justify-between mb-2">
-                        <Skeleton className="h-6 w-24" />
-                        <Skeleton className="h-4 w-32" />
-                      </div>
-                      <Skeleton className="h-4 w-full" />
-                      <Skeleton className="h-4 w-3/4" />
-                    </div>
-                  ))}
-                </div>
-              )}
-              {!isLoadingRateLimits && rateLimitStats?.stats && (
-                <div className="space-y-6">
-                  {/* Rate Limit Overview */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                    <div className="text-center p-4 bg-blue-50 rounded-lg">
-                      <Gauge className="h-8 w-8 text-blue-600 mx-auto mb-2" />
-                      <div className="text-2xl font-bold text-blue-600">
-                        {Object.keys(rateLimitStats.stats.limits).length}
-                      </div>
-                      <div className="text-sm text-slate-600">Active Rate Limits</div>
-                    </div>
-                    
-                    <div className="text-center p-4 bg-green-50 rounded-lg">
-                      <Zap className="h-8 w-8 text-green-600 mx-auto mb-2" />
-                      <div className="text-2xl font-bold text-green-600">
-                        {rateLimitStats.stats.limits.AUTH?.max || 0}
-                      </div>
-                      <div className="text-sm text-slate-600">Auth Attempts/15min</div>
-                    </div>
-                    
-                    <div className="text-center p-4 bg-orange-50 rounded-lg">
-                      <Target className="h-8 w-8 text-orange-600 mx-auto mb-2" />
-                      <div className="text-2xl font-bold text-orange-600">
-                        {rateLimitStats.stats.limits.EMERGENCY?.max || 0}
-                      </div>
-                      <div className="text-sm text-slate-600">Emergency Req/Hour</div>
-                    </div>
-                    
-                    <div className="text-center p-4 bg-purple-50 rounded-lg">
-                      <Shield className="h-8 w-8 text-purple-600 mx-auto mb-2" />
-                      <div className="text-2xl font-bold text-purple-600">
-                        {rateLimitStats.stats.limits.MEDICAL_RECORDS?.max || 0}
-                      </div>
-                      <div className="text-sm text-slate-600">Record Req/5min</div>
-                    </div>
-                  </div>
-
-                  {/* Rate Limit Details */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <Card>
-                      <CardHeader>
-                        <CardTitle className="text-lg">Rate Limit Configuration</CardTitle>
-                        <CardDescription>Current rate limiting settings by endpoint type</CardDescription>
-                      </CardHeader>
-                      <CardContent>
-                        <div className="space-y-4">
-                          {Object.entries(rateLimitStats.stats.limits).map(([key, config]: [string, any]) => (
-                            <div key={key} className="border rounded-lg p-3">
-                              <div className="flex items-center justify-between mb-2">
-                                <span className="font-medium text-slate-900">{key}</span>
-                                <Badge variant="outline" className="text-xs">
-                                  {config.max} req/{Math.round(config.windowMs / 60000)}min
-                                </Badge>
-                              </div>
-                              <p className="text-sm text-slate-600 mb-2">
-                                {rateLimitStats.stats.description[key] || 'No description available'}
-                              </p>
-                              <div className="text-xs text-slate-500">
-                                Window: {Math.round(config.windowMs / 1000)}s | 
-                                Limit: {config.max} requests
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </CardContent>
-                    </Card>
-
-                    <Card>
-                      <CardHeader>
-                        <CardTitle className="text-lg">Security Insights</CardTitle>
-                        <CardDescription>Rate limiting security analysis</CardDescription>
-                      </CardHeader>
-                      <CardContent>
-                        <div className="space-y-4">
-                          <div className="flex items-center space-x-3 p-3 bg-green-50 rounded-lg">
-                            <CheckCircle className="h-5 w-5 text-green-600" />
-                            <div>
-                              <div className="font-medium text-green-900">Brute Force Protection</div>
-                              <div className="text-sm text-green-700">
-                                Authentication limited to {rateLimitStats.stats.limits.AUTH?.max || 0} attempts per 15 minutes
-                              </div>
-                            </div>
-                          </div>
-                          
-                          <div className="flex items-center space-x-3 p-3 bg-blue-50 rounded-lg">
-                            <Shield className="h-5 w-5 text-blue-600" />
-                            <div>
-                              <div className="font-medium text-blue-900">Sensitive Data Protection</div>
-                              <div className="text-sm text-blue-700">
-                                Medical records access limited to {rateLimitStats.stats.limits.MEDICAL_RECORDS?.max || 0} requests per 5 minutes
-                              </div>
-                            </div>
-                          </div>
-                          
-                          <div className="flex items-center space-x-3 p-3 bg-orange-50 rounded-lg">
-                            <AlertTriangle className="h-5 w-5 text-orange-600" />
-                            <div>
-                              <div className="font-medium text-orange-900">Emergency Access Control</div>
-                              <div className="text-sm text-orange-700">
-                                Emergency requests limited to {rateLimitStats.stats.limits.EMERGENCY?.max || 0} per hour
-                              </div>
-                            </div>
-                          </div>
-                          
-                          <div className="flex items-center space-x-3 p-3 bg-purple-50 rounded-lg">
-                            <Zap className="h-5 w-5 text-purple-600" />
-                            <div>
-                              <div className="font-medium text-purple-900">OTP Spam Prevention</div>
-                              <div className="text-sm text-purple-700">
-                                OTP requests limited to {rateLimitStats.stats.limits.OTP?.max || 0} per 10 minutes
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  </div>
-
-                  {/* Rate Limit Status */}
-                  <Card>
-                    <CardHeader>
-                      <CardTitle className="text-lg">Rate Limit Status</CardTitle>
-                      <CardDescription>Current system status and recommendations</CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        <div className="text-center p-4 bg-green-50 rounded-lg">
-                          <CheckCircle className="h-8 w-8 text-green-600 mx-auto mb-2" />
-                          <div className="text-lg font-bold text-green-600">Active</div>
-                          <div className="text-sm text-slate-600">Rate limiting is enabled</div>
-                        </div>
-                        
-                        <div className="text-center p-4 bg-blue-50 rounded-lg">
-                          <Activity className="h-8 w-8 text-blue-600 mx-auto mb-2" />
-                          <div className="text-lg font-bold text-blue-600">Monitored</div>
-                          <div className="text-sm text-slate-600">Violations are logged</div>
-                        </div>
-                        
-                        <div className="text-center p-4 bg-purple-50 rounded-lg">
-                          <Shield className="h-8 w-8 text-purple-600 mx-auto mb-2" />
-                          <div className="text-lg font-bold text-purple-600">Protected</div>
-                          <div className="text-sm text-slate-600">All endpoints secured</div>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                </div>
-              )}
-              {!isLoadingRateLimits && !rateLimitStats?.stats && (
-                <Alert>
-                  <AlertTriangle className="h-4 w-4" />
-                  <AlertDescription>
-                    Rate limiting statistics are not available. The rate limiting service may not be properly configured.
-                  </AlertDescription>
-                </Alert>
-              )}
-            </CardContent>
-          </Card>
         )}
         {activeTab === "staff" && (
             <Card>

@@ -263,30 +263,32 @@ export default function HospitalAInterface() {
 
   return (
     <div>
-      <div className="mb-8">
-        <div className="flex items-center space-x-3 mb-2">
-          <div className="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center">
-            <span className="text-white font-semibold text-sm">A</span>
+      <div className="mb-6 sm:mb-8">
+        <div className="flex items-center space-x-2 sm:space-x-3 mb-2">
+          <div className="w-6 h-6 sm:w-8 sm:h-8 bg-blue-600 rounded-full flex items-center justify-center">
+            <span className="text-white font-semibold text-xs sm:text-sm">A</span>
           </div>
-          <h2 className="text-2xl font-semibold text-slate-900">Hospital A - Record Submission</h2>
+          <h2 className="text-xl sm:text-2xl font-semibold text-slate-900">Hospital A - Record Submission</h2>
         </div>
-        <p className="text-slate-600">Submit patient visit records using traditional or Web3 decentralized storage</p>
+        <p className="text-slate-600 text-sm sm:text-base">Submit patient visit records using traditional or Web3 decentralized storage</p>
       </div>
 
-      <Tabs defaultValue="traditional" className="space-y-6">
+      <Tabs defaultValue="traditional" className="space-y-4 sm:space-y-6">
         <TabsList className="grid w-full grid-cols-2">
-          <TabsTrigger value="traditional" className="flex items-center space-x-2">
-            <FileText className="h-4 w-4" />
-            <span>Traditional Storage</span>
+          <TabsTrigger value="traditional" className="flex items-center space-x-1 sm:space-x-2 text-xs sm:text-sm">
+            <FileText className="h-3 w-3 sm:h-4 sm:w-4" />
+            <span className="hidden sm:inline">Traditional Storage</span>
+            <span className="sm:hidden">Traditional</span>
           </TabsTrigger>
-          <TabsTrigger value="web3" className="flex items-center space-x-2">
-            <Globe className="h-4 w-4" />
-            <span>Web3 + IPFS</span>
+          <TabsTrigger value="web3" className="flex items-center space-x-1 sm:space-x-2 text-xs sm:text-sm">
+            <Globe className="h-3 w-3 sm:h-4 sm:w-4" />
+            <span className="hidden sm:inline">Web3 + IPFS</span>
+            <span className="sm:hidden">Web3</span>
           </TabsTrigger>
         </TabsList>
 
         <TabsContent value="traditional">
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6 lg:gap-8">
             <div className="lg:col-span-2">
               <Card>
                 <CardHeader>
@@ -296,8 +298,8 @@ export default function HospitalAInterface() {
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <form onSubmit={handleSubmit} className="space-y-6">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <form onSubmit={handleSubmit} className="space-y-4 sm:space-y-6">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
                       <div>
                         <Label htmlFor="patientName">Patient Full Name *</Label>
                         <Input
@@ -306,6 +308,7 @@ export default function HospitalAInterface() {
                           onChange={(e) => setFormData({ ...formData, patientName: e.target.value })}
                           placeholder="Enter patient full name"
                           required
+                          className="text-sm sm:text-base"
                         />
                       </div>
                       <div>
@@ -316,11 +319,12 @@ export default function HospitalAInterface() {
                           onChange={(e) => setFormData({ ...formData, nationalId: e.target.value })}
                           placeholder="Enter NHIF or National ID"
                           required
+                          className="text-sm sm:text-base"
                         />
                       </div>
                     </div>
                     
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
                       <div>
                         <Label htmlFor="visitDate">Date of Visit *</Label>
                         <Input
@@ -329,12 +333,13 @@ export default function HospitalAInterface() {
                           value={formData.visitDate}
                           onChange={(e) => setFormData({ ...formData, visitDate: e.target.value })}
                           required
+                          className="text-sm sm:text-base"
                         />
                       </div>
                       <div>
                         <Label htmlFor="visitType">Visit Type</Label>
                         <Select value={formData.visitType} onValueChange={(value) => setFormData({ ...formData, visitType: value })}>
-                          <SelectTrigger>
+                          <SelectTrigger className="text-sm sm:text-base">
                             <SelectValue placeholder="Select visit type" />
                           </SelectTrigger>
                           <SelectContent>
@@ -354,8 +359,9 @@ export default function HospitalAInterface() {
                         value={formData.diagnosis}
                         onChange={(e) => setFormData({ ...formData, diagnosis: e.target.value })}
                         placeholder="Enter primary diagnosis and any secondary conditions"
-                        rows={4}
+                        rows={3}
                         required
+                        className="text-sm sm:text-base"
                       />
                     </div>
                     
@@ -366,11 +372,12 @@ export default function HospitalAInterface() {
                         value={formData.prescription}
                         onChange={(e) => setFormData({ ...formData, prescription: e.target.value })}
                         placeholder="List medications, dosages, and treatment instructions"
-                        rows={4}
+                        rows={3}
+                        className="text-sm sm:text-base"
                       />
                     </div>
                     
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
                       <div>
                         <Label htmlFor="physician">Attending Physician</Label>
                         <Input
@@ -378,12 +385,13 @@ export default function HospitalAInterface() {
                           value={formData.physician}
                           onChange={(e) => setFormData({ ...formData, physician: e.target.value })}
                           placeholder="Dr. Name"
+                          className="text-sm sm:text-base"
                         />
                       </div>
                       <div>
                         <Label htmlFor="department">Department</Label>
                         <Select value={formData.department} onValueChange={(value) => setFormData({ ...formData, department: value })}>
-                          <SelectTrigger>
+                          <SelectTrigger className="text-sm sm:text-base">
                             <SelectValue placeholder="Select department" />
                           </SelectTrigger>
                           <SelectContent>
@@ -397,19 +405,23 @@ export default function HospitalAInterface() {
                       </div>
                     </div>
                     
-                    <div className="flex items-center space-x-3 p-4 bg-slate-50 rounded-lg">
+                    <div className="flex items-start space-x-3 p-3 sm:p-4 bg-slate-50 rounded-lg">
                       <Checkbox
                         id="consent"
                         checked={consentChecked}
                         onCheckedChange={(checked) => setConsentChecked(checked as boolean)}
+                        className="mt-1"
                       />
-                      <Label htmlFor="consent" className="text-sm text-slate-700">
+                      <Label htmlFor="consent" className="text-xs sm:text-sm text-slate-700 leading-relaxed">
                         I confirm that patient consent has been obtained for sharing this medical record through MediBridge interoperability system
                       </Label>
                     </div>
                     
-                    <div className="flex justify-end space-x-4">
-                      <Button type="button" variant="outline" onClick={() => {
+                    <div className="flex flex-col sm:flex-row justify-end space-y-2 sm:space-y-0 sm:space-x-4">
+                      <Button 
+                        type="button" 
+                        variant="outline" 
+                        onClick={() => {
                         setFormData({
                           patientName: "",
                           nationalId: "",
@@ -421,12 +433,14 @@ export default function HospitalAInterface() {
                           department: "",
                         });
                         setConsentChecked(false);
-                      }}>
+                        }}
+                        className="w-full sm:w-auto"
+                      >
                         Clear Form
                       </Button>
                       <Button 
                         type="submit" 
-                        className="bg-blue-600 hover:bg-blue-700"
+                        className="bg-blue-600 hover:bg-blue-700 w-full sm:w-auto"
                         disabled={submitRecordMutation.isPending}
                       >
                         <Send className="h-4 w-4 mr-2" />

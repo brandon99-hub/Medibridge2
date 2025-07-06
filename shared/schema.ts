@@ -127,6 +127,7 @@ export const hospitalStaff = pgTable("hospital_staff", {
   role: text("role").notNull(), // 'ADMIN', 'PHYSICIAN', 'SURGEON', 'EMERGENCY_DOCTOR', 'CHIEF_RESIDENT'
   licenseNumber: text("license_number").notNull(),
   department: text("department").notNull(),
+  email: text("email"), // Staff email for invitations and communication
   hospitalId: text("hospital_id").notNull(), // Link to hospital for multi-tenancy
   isActive: boolean("is_active").default(true).notNull(),
   isOnDuty: boolean("is_on_duty").default(false).notNull(),
@@ -342,7 +343,7 @@ export const insertZKPVerificationSchema = createInsertSchema(zkpVerifications).
   verifiedAt: true,
 });
 
-// Feedback table for ZK-MedPass airtime rewards
+// Feedback table for MediBridge airtime rewards
 export const feedback = pgTable("feedback", {
   id: serial("id").primaryKey(),
   phoneNumber: text("phone_number").notNull(),

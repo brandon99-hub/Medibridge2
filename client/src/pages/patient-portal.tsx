@@ -175,44 +175,44 @@ export default function PatientPortal() {
   if (!patient && !currentPatient?.patient) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-purple-50 to-blue-50 flex items-center justify-center p-4">
-        <div className="w-full max-w-4xl grid grid-cols-1 lg:grid-cols-2 gap-8 items-center">
+        <div className="w-full max-w-4xl grid grid-cols-1 lg:grid-cols-2 gap-6 sm:gap-8 items-center">
           
           {/* Hero Section */}
-          <div className="space-y-6 text-center lg:text-left">
+          <div className="space-y-4 sm:space-y-6 text-center lg:text-left">
             <div className="space-y-2">
-              <h1 className="text-4xl font-bold text-slate-900">
+              <h1 className="text-3xl sm:text-4xl font-bold text-slate-900">
                 Patient Portal
               </h1>
-              <p className="text-xl text-slate-600">
+              <p className="text-lg sm:text-xl text-slate-600">
                 Your Medical Records, Your Control
               </p>
-              <p className="text-sm text-slate-500">
+              <p className="text-xs sm:text-sm text-slate-500">
                 Secure Web3 identity with simple phone authentication
               </p>
             </div>
             
-            <div className="space-y-4">
-              <div className="flex items-start space-x-3">
-                <Phone className="h-6 w-6 text-blue-600 mt-1" />
+            <div className="space-y-3 sm:space-y-4">
+              <div className="flex items-start space-x-2 sm:space-x-3">
+                <Phone className="h-5 w-5 sm:h-6 sm:w-6 text-blue-600 mt-1" />
                 <div>
-                  <h3 className="font-medium text-slate-900">Phone Authentication</h3>
-                  <p className="text-sm text-slate-600">Login securely with phone SMS or email verification</p>
+                  <h3 className="font-medium text-slate-900 text-sm sm:text-base">Phone Authentication</h3>
+                  <p className="text-xs sm:text-sm text-slate-600">Login securely with phone SMS or email verification</p>
                 </div>
               </div>
               
-              <div className="flex items-start space-x-3">
-                <Shield className="h-6 w-6 text-green-600 mt-1" />
+              <div className="flex items-start space-x-2 sm:space-x-3">
+                <Shield className="h-5 w-5 sm:h-6 sm:w-6 text-green-600 mt-1" />
                 <div>
-                  <h3 className="font-medium text-slate-900">Cryptographic Security</h3>
-                  <p className="text-sm text-slate-600">Your records are encrypted with your personal DID and keys</p>
+                  <h3 className="font-medium text-slate-900 text-sm sm:text-base">Cryptographic Security</h3>
+                  <p className="text-xs sm:text-sm text-slate-600">Your records are encrypted with your personal DID and keys</p>
                 </div>
               </div>
               
-              <div className="flex items-start space-x-3">
-                <Key className="h-6 w-6 text-purple-600 mt-1" />
+              <div className="flex items-start space-x-2 sm:space-x-3">
+                <Key className="h-5 w-5 sm:h-6 sm:w-6 text-purple-600 mt-1" />
                 <div>
-                  <h3 className="font-medium text-slate-900">Consent Control & Key Recovery</h3>
-                  <p className="text-sm text-slate-600">Grant and revoke access via verifiable credentials</p>
+                  <h3 className="font-medium text-slate-900 text-sm sm:text-base">Consent Control & Key Recovery</h3>
+                  <p className="text-xs sm:text-sm text-slate-600">Grant and revoke access via verifiable credentials</p>
                 </div>
               </div>
             </div>
@@ -222,16 +222,16 @@ export default function PatientPortal() {
           <Card className="w-full max-w-md mx-auto">
             <CardHeader className="text-center">
               <CardTitle className="flex items-center justify-center space-x-2">
-                <User className="h-5 w-5 text-purple-600" />
-                <span>Patient Access</span>
+                <User className="h-4 w-4 sm:h-5 sm:w-5 text-purple-600" />
+                <span className="text-lg sm:text-xl">Patient Access</span>
               </CardTitle>
             </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent className="space-y-3 sm:space-y-4">
               <Alert className="border-blue-200 bg-blue-50">
-                <Globe className="h-4 w-4 text-blue-600" />
+                <Globe className="h-3 w-3 sm:h-4 sm:w-4 text-blue-600" />
                 <AlertDescription className="text-blue-800">
-                  <p className="font-medium mb-1">Web3 Features</p>
-                  <p className="text-sm">
+                  <p className="font-medium mb-1 text-sm sm:text-base">Web3 Features</p>
+                  <p className="text-xs sm:text-sm">
                     Your digital identity (DID) and encryption keys are automatically 
                     generated when you first login. No wallet required!
                   </p>
@@ -244,13 +244,13 @@ export default function PatientPortal() {
                 size="lg"
               >
                 <Phone className="h-4 w-4 mr-2" />
-                Login with Phone or Email
+                <span className="text-sm sm:text-base">Login with Phone or Email</span>
               </Button>
 
-              <div className="text-center pt-4 border-t">
+              <div className="text-center pt-3 sm:pt-4 border-t">
                 <Link href="/">
-                  <Button variant="ghost" size="sm">
-                    <ArrowLeft className="h-4 w-4 mr-2" />
+                  <Button variant="ghost" size="sm" className="text-xs sm:text-sm">
+                    <ArrowLeft className="h-3 w-3 sm:h-4 sm:w-4 mr-2" />
                     Back to Hospital Portal
                   </Button>
                 </Link>
@@ -275,20 +275,20 @@ export default function PatientPortal() {
       <nav className="bg-white border-b border-slate-200">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
-            <div className="flex items-center space-x-3">
-              <User className="h-6 w-6 text-purple-600" />
-              <span className="text-lg font-semibold text-slate-900">Patient Portal</span>
+            <div className="flex items-center space-x-2 sm:space-x-3">
+              <User className="h-5 w-5 sm:h-6 sm:w-6 text-purple-600" />
+              <span className="text-base sm:text-lg font-semibold text-slate-900">Patient Portal</span>
             </div>
             
-            <div className="flex items-center space-x-4">
+            <div className="flex items-center space-x-2 sm:space-x-4">
               {/* Profile Dropdown */}
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" className="flex items-center space-x-2 px-3 py-2">
-                    <div className="w-8 h-8 bg-purple-100 rounded-full flex items-center justify-center">
-                      <User className="h-4 w-4 text-purple-600" />
+                  <Button variant="ghost" className="flex items-center space-x-2 px-2 sm:px-3 py-2">
+                    <div className="w-7 h-7 sm:w-8 sm:h-8 bg-purple-100 rounded-full flex items-center justify-center">
+                      <User className="h-3 w-3 sm:h-4 sm:w-4 text-purple-600" />
                     </div>
-                    <div className="text-left">
+                    <div className="text-left hidden sm:block">
                       <p className="text-sm font-medium text-slate-900">{activePatient.fullName || "Patient"}</p>
                       <p className="text-xs text-slate-600">
                         {activePatient.patientDID ? 
@@ -297,7 +297,7 @@ export default function PatientPortal() {
                         }
                       </p>
                     </div>
-                    <ChevronDown className="h-4 w-4 text-slate-400" />
+                    <ChevronDown className="h-3 w-3 sm:h-4 sm:w-4 text-slate-400" />
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="w-80">
@@ -362,16 +362,16 @@ export default function PatientPortal() {
         </div>
       </nav>
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <Tabs defaultValue="overview" className="space-y-6">
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-6 lg:py-8">
+        <Tabs defaultValue="overview" className="space-y-4 sm:space-y-6">
           <TabsList className="grid w-full grid-cols-3">
-            <TabsTrigger value="overview">Overview</TabsTrigger>
-            <TabsTrigger value="records">My Records</TabsTrigger>
-            <TabsTrigger value="consent">Consent Management</TabsTrigger>
+            <TabsTrigger value="overview" className="text-xs sm:text-sm">Overview</TabsTrigger>
+            <TabsTrigger value="records" className="text-xs sm:text-sm">My Records</TabsTrigger>
+            <TabsTrigger value="consent" className="text-xs sm:text-sm">Consent Management</TabsTrigger>
           </TabsList>
 
           <TabsContent value="overview">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
               <Card>
                 <CardHeader className="pb-3">
                   <CardTitle className="text-sm flex items-center space-x-2">
@@ -434,30 +434,30 @@ export default function PatientPortal() {
               </Card>
             </div>
 
-            <Card className="mt-6">
+            <Card className="mt-4 sm:mt-6">
               <CardHeader>
-                <CardTitle>How It Works</CardTitle>
+                <CardTitle className="text-lg sm:text-xl">How It Works</CardTitle>
               </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <div className="text-center p-4 bg-blue-50 rounded-lg">
-                    <Phone className="h-8 w-8 text-blue-600 mx-auto mb-2" />
-                    <h4 className="font-medium text-slate-900 mb-1">1. Phone Login</h4>
-                    <p className="text-sm text-slate-600">
+              <CardContent className="space-y-3 sm:space-y-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
+                  <div className="text-center p-3 sm:p-4 bg-blue-50 rounded-lg">
+                    <Phone className="h-6 w-6 sm:h-8 sm:w-8 text-blue-600 mx-auto mb-2" />
+                    <h4 className="font-medium text-slate-900 mb-1 text-sm sm:text-base">1. Phone Login</h4>
+                    <p className="text-xs sm:text-sm text-slate-600">
                       Authenticate with your phone number and OTP
                     </p>
                   </div>
-                  <div className="text-center p-4 bg-green-50 rounded-lg">
-                    <Shield className="h-8 w-8 text-green-600 mx-auto mb-2" />
-                    <h4 className="font-medium text-slate-900 mb-1">2. Auto Identity</h4>
-                    <p className="text-sm text-slate-600">
+                  <div className="text-center p-3 sm:p-4 bg-green-50 rounded-lg">
+                    <Shield className="h-6 w-6 sm:h-8 sm:w-8 text-green-600 mx-auto mb-2" />
+                    <h4 className="font-medium text-slate-900 mb-1 text-sm sm:text-base">2. Auto Identity</h4>
+                    <p className="text-xs sm:text-sm text-slate-600">
                       DID and encryption keys generated automatically
                     </p>
                   </div>
-                  <div className="text-center p-4 bg-purple-50 rounded-lg">
-                    <Key className="h-8 w-8 text-purple-600 mx-auto mb-2" />
-                    <h4 className="font-medium text-slate-900 mb-1">3. Control Access</h4>
-                    <p className="text-sm text-slate-600">
+                  <div className="text-center p-3 sm:p-4 bg-purple-50 rounded-lg">
+                    <Key className="h-6 w-6 sm:h-8 sm:w-8 text-purple-600 mx-auto mb-2" />
+                    <h4 className="font-medium text-slate-900 mb-1 text-sm sm:text-base">3. Control Access</h4>
+                    <p className="text-xs sm:text-sm text-slate-600">
                       Grant consent via verifiable credentials
                     </p>
                   </div>
@@ -470,44 +470,44 @@ export default function PatientPortal() {
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center space-x-2">
-                  <FileText className="h-5 w-5 text-blue-600" />
-                  <span>My Medical Records</span>
+                  <FileText className="h-4 w-4 sm:h-5 sm:w-5 text-blue-600" />
+                  <span className="text-lg sm:text-xl">My Medical Records</span>
                   {patientRecords?.totalRecords > 0 && (
-                    <Badge variant="secondary">{patientRecords.totalRecords} records</Badge>
+                    <Badge variant="secondary" className="text-xs sm:text-sm">{patientRecords.totalRecords} records</Badge>
                   )}
                 </CardTitle>
               </CardHeader>
               <CardContent>
                 {patientRecords?.records && patientRecords.records.length > 0 ? (
-                  <div className="space-y-4">
+                  <div className="space-y-3 sm:space-y-4">
                     {patientRecords.records.map((record: PatientRecord) => (
                       <Card key={record.id} className="border-l-4 border-l-blue-500">
-                        <CardContent className="pt-6">
-                          <div className="flex items-start justify-between mb-4">
-                            <div className="flex items-center space-x-3">
-                              <div className="w-10 h-10 bg-blue-50 rounded-full flex items-center justify-center">
+                        <CardContent className="pt-4 sm:pt-6">
+                          <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between mb-3 sm:mb-4 space-y-3 sm:space-y-0">
+                            <div className="flex items-center space-x-2 sm:space-x-3">
+                              <div className="w-8 h-8 sm:w-10 sm:h-10 bg-blue-50 rounded-full flex items-center justify-center">
                                 {record.visitType === "emergency" ? (
-                                  <AlertTriangle className="h-5 w-5 text-red-600" />
+                                  <AlertTriangle className="h-4 w-4 sm:h-5 sm:w-5 text-red-600" />
                                 ) : (
-                                  <Stethoscope className="h-5 w-5 text-blue-600" />
+                                  <Stethoscope className="h-4 w-4 sm:h-5 sm:w-5 text-blue-600" />
                                 )}
                               </div>
                               <div>
-                                <h5 className="font-semibold text-slate-900">
+                                <h5 className="font-semibold text-slate-900 text-sm sm:text-base">
                                   {record.visitType || "Medical Visit"}
                                 </h5>
-                                <p className="text-sm text-slate-600">{record.visitDate}</p>
-                                <p className="text-sm text-slate-500">
+                                <p className="text-xs sm:text-sm text-slate-600">{record.visitDate}</p>
+                                <p className="text-xs sm:text-sm text-slate-500">
                                   {record.physician || "Unknown Physician"}
                                 </p>
                               </div>
                             </div>
-                            <div className="flex items-center space-x-2">
-                              <Badge variant={record.recordType === "web3" ? "default" : "secondary"}>
+                            <div className="flex flex-wrap items-center gap-2">
+                              <Badge variant={record.recordType === "web3" ? "default" : "secondary"} className="text-xs">
                                 {record.recordType === "web3" ? "Web3" : "Traditional"}
                               </Badge>
                               {record.consentGiven && (
-                                <Badge className="bg-green-100 text-green-800">
+                                <Badge className="bg-green-100 text-green-800 text-xs">
                                   <Shield className="h-3 w-3 mr-1" />
                                   Consent Given
                                 </Badge>
@@ -515,35 +515,35 @@ export default function PatientPortal() {
                             </div>
                           </div>
                           
-                          <div className="space-y-3">
+                          <div className="space-y-2 sm:space-y-3">
                             <div>
-                              <h6 className="text-sm font-medium text-slate-700 mb-1">Diagnosis</h6>
-                              <p className="text-sm text-slate-600">{record.diagnosis}</p>
+                              <h6 className="text-xs sm:text-sm font-medium text-slate-700 mb-1">Diagnosis</h6>
+                              <p className="text-xs sm:text-sm text-slate-600">{record.diagnosis}</p>
                             </div>
                             
                             {record.prescription && (
                               <div>
-                                <h6 className="text-sm font-medium text-slate-700 mb-1">Prescription & Treatment</h6>
-                                <p className="text-sm text-slate-600">{record.prescription}</p>
+                                <h6 className="text-xs sm:text-sm font-medium text-slate-700 mb-1">Prescription & Treatment</h6>
+                                <p className="text-xs sm:text-sm text-slate-600">{record.prescription}</p>
                               </div>
                             )}
 
                             {record.department && (
                               <div>
-                                <h6 className="text-sm font-medium text-slate-700 mb-1">Department</h6>
-                                <p className="text-sm text-slate-600">{record.department}</p>
+                                <h6 className="text-xs sm:text-sm font-medium text-slate-700 mb-1">Department</h6>
+                                <p className="text-xs sm:text-sm text-slate-600">{record.department}</p>
                               </div>
                             )}
                           </div>
                           
-                          <div className="flex items-center justify-between mt-4 pt-4 border-t border-slate-200">
-                            <div className="flex items-center space-x-4 text-xs text-slate-500">
+                          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mt-3 sm:mt-4 pt-3 sm:pt-4 border-t border-slate-200 space-y-2 sm:space-y-0">
+                            <div className="flex flex-col sm:flex-row sm:items-center space-y-1 sm:space-y-0 sm:space-x-4 text-xs text-slate-500">
                               <span>Record ID: REC-{record.id}</span>
-                              <span>•</span>
+                              <span className="hidden sm:inline">•</span>
                               <span>Submitted: {new Date(record.submittedAt).toLocaleString()}</span>
                             </div>
                             {record.ipfsHash && (
-                              <Badge variant="outline" className="text-xs">
+                              <Badge variant="outline" className="text-xs w-fit">
                                 <Globe className="h-3 w-3 mr-1" />
                                 IPFS: {record.ipfsHash.substring(0, 10)}...
                               </Badge>

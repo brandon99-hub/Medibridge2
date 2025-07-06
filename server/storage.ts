@@ -120,6 +120,8 @@ export interface IStorage {
 
   // Admin/Audit Data Retrieval
   getSecurityViolations(options?: { limit?: number; offset?: number; resolved?: boolean; hospital_id?: number }): Promise<SecurityViolation[]>;
+  resolveSecurityViolation(violationId: number, hospital_id: number): Promise<void>;
+  unresolveSecurityViolation(violationId: number, hospital_id: number): Promise<void>;
 
   // Utility: Find patient profile by email or phone
   findPatientProfileByEmailOrPhone(email?: string, phone?: string): Promise<any>;
@@ -820,6 +822,32 @@ export class DatabaseStorage implements IStorage {
       query = query.where(eq(securityViolations.hospital_id, hospital_id));
     }
     return await query.orderBy(desc(securityViolations.createdAt)).limit(limit).offset(offset);
+  }
+
+  async resolveSecurityViolation(violationId: number, hospital_id: number): Promise<void> {
+    await db
+      .update(securityViolations)
+      .set({ 
+        resolved: true, 
+        resolvedAt: new Date() 
+      })
+      .where(and(
+        eq(securityViolations.id, violationId),
+        eq(securityViolations.hospital_id, hospital_id)
+      ));
+  }
+
+  async unresolveSecurityViolation(violationId: number, hospital_id: number): Promise<void> {
+    await db
+      .update(securityViolations)
+      .set({ 
+        resolved: false, 
+        resolvedAt: null 
+      })
+      .where(and(
+        eq(securityViolations.id, violationId),
+        eq(securityViolations.hospital_id, hospital_id)
+      ));
   }
 
   // Utility: Find patient profile by email or phone

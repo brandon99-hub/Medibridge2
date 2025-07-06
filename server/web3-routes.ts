@@ -89,6 +89,9 @@ export function registerWeb3Routes(app: Express): void {
         // Re-fetch updated profile
         patientProfile = await storage.getPatientProfileByDID(patientProfile.patientDID);
         
+        // CRITICAL FIX: Ensure patient identity exists and has phone number synced
+        await storage.updatePatientIdentityPhoneNumber(patientProfile.patientDID, patientProfile.phoneNumber || recordData.phoneNumber);
+        
         // Ensure private key exists for existing patients (for ZKP compatibility)
         try {
           await secureKeyVault.retrievePatientKey(patientProfile.patientDID);
@@ -113,6 +116,9 @@ export function registerWeb3Routes(app: Express): void {
             message: "Please ensure the patient has completed registration via phone/email before submitting medical records."
           });
         }
+        
+        // CRITICAL FIX: Ensure patient identity exists and has phone number synced
+        await storage.updatePatientIdentityPhoneNumber(patientProfile.patientDID, patientProfile.phoneNumber || recordData.phoneNumber);
       }
 
       const patientDID = patientProfile.patientDID;
@@ -161,6 +167,46 @@ export function registerWeb3Routes(app: Express): void {
       console.log('[DEBUG] Creating Web3 record with data:', recordToSave);
       const patientRecord = await storage.createPatientRecord(recordToSave);
       console.log('[DEBUG] Web3 record created with ID:', patientRecord.id, 'recordType:', patientRecord.recordType);
+
+      // Generate and store Medical Record VC
+      try {
+        const { VCService } = require("./web3-services");
+        const vcService = new VCService();
+        const issuer = user.hospital_id ? user.hospital_id.toString() : "medibridge";
+        const subject = patientDID;
+        const credentialType = "MedicalRecord";
+        const credentialSubject = {
+          recordId: patientRecord.id,
+          patientDID,
+          patientName: recordData.patientName,
+          visitDate: recordData.visitDate,
+          diagnosis: recordData.diagnosis,
+          prescription: recordData.prescription,
+          physician: recordData.physician,
+          department: recordData.department,
+          hospitalId: user.hospital_id,
+          hospitalName: user.hospitalName,
+        };
+        // TODO: Use a real private key for signing (replace 'dummy_private_key')
+        const privateKeyHex = process.env.HOSPITAL_VC_PRIVATE_KEY || "dummy_private_key";
+        const medicalRecordVcJwt = await vcService.issueCredential(
+          issuer,
+          subject,
+          credentialType,
+          credentialSubject,
+          privateKeyHex
+        );
+        await storage.createVerifiableCredential({
+          patientDID: patientDID,
+          issuerDID: user.hospital_id ? user.hospital_id.toString() : "medibridge",
+          credentialType: credentialType,
+          jwtVc: medicalRecordVcJwt,
+          credentialSubject: credentialSubject,
+          issuanceDate: new Date(),
+        });
+      } catch (vcErr) {
+        console.error("[MedicalRecordVC] Failed to issue/store Medical Record VC:", vcErr);
+      }
 
       // Update the record with storage metadata
       await storage.updateRecordFilecoin(
@@ -325,11 +371,11 @@ export function registerWeb3Routes(app: Express): void {
         // For now, storage.createVerifiableCredential can take them as optional.
         // The `verifiableCredentials` table now has `jwtVc` instead of `proof` and `credentialSubject`.
         const storedCredential = await storage.createVerifiableCredential({
-          patientDID,
+          patientDID: patientDID,
           issuerDID: patientDID, // Patient is the issuer of their consent
           credentialType: "HealthcareConsent",
           jwtVc: jwtVc,
-          // expirationDate can be parsed from JWT if needed for the DB column
+          issuanceDate: new Date(),
         });
 
         // Create consent management record

@@ -198,24 +198,6 @@ export class EnhancedStorageService {
       const decryptedContent = decryptedBytes.toString(CryptoJS.enc.Utf8);
       const parsedContent = JSON.parse(decryptedContent);
 
-      // Log successful retrieval
-      await auditService.logEvent({
-        eventType: "TRIPLE_REDUNDANT_RETRIEVAL",
-        actorType: "SYSTEM",
-        actorId: "enhanced_storage_service",
-        targetType: "RECORD",
-        targetId: ipfsCid,
-        action: "RETRIEVE",
-        outcome: "SUCCESS",
-        metadata: {
-          ipfsCid,
-          filecoinCid,
-          source,
-          duration: Date.now() - startTime
-        },
-        severity: "info",
-      });
-
       console.log(`[ENHANCED_STORAGE] Retrieved record from ${source} in ${Date.now() - startTime}ms`);
       return parsedContent;
 

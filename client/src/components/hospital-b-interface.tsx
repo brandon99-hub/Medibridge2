@@ -27,6 +27,7 @@ interface PatientRecord {
   physician: string;
   department: string;
   submittedAt: string;
+  recordType?: string;
 }
 
 interface PatientData {
@@ -194,35 +195,24 @@ export default function HospitalBInterface({ onShowConsentModal }: HospitalBInte
     },
   });
 
+  // Web3 search mutation
   const web3SearchMutation = useMutation({
     mutationFn: async (phoneNumber: string) => {
-      const response = await apiRequestWithCsrf("POST", "/api/patient-lookup/phone", {
+      const response = await apiRequestWithCsrf("POST", "/api/web3/get-records", {
         phoneNumber: phoneNumber
       });
       return await response.json();
     },
     onSuccess: (data) => {
-      setWeb3PatientData({
-        ...data,
-        patientDID: data.patientDID,
-        recordCount: data.recordsSummary?.totalRecords || 0,
+      setWeb3PatientData(data);
+      toast({
+        title: "Web3 Records Retrieved",
+        description: `Found ${data.totalRecords || 0} Web3 medical records`,
       });
-      if (data.found) {
-        toast({
-          title: "Patient Found",
-          description: `Found patient with ${data.recordsSummary?.totalRecords || 0} records`,
-        });
-      } else {
-        toast({
-          title: "No Patient Found",
-          description: data.message || "No patient found with this phone number",
-          variant: "destructive",
-        });
-      }
     },
     onError: (error: Error) => {
       toast({
-        title: "Search Failed",
+        title: "Web3 Search Failed",
         description: error.message,
         variant: "destructive",
       });
@@ -353,40 +343,42 @@ export default function HospitalBInterface({ onShowConsentModal }: HospitalBInte
 
   return (
     <div>
-      <div className="mb-8">
-        <div className="flex items-center space-x-3 mb-2">
-          <div className="w-8 h-8 bg-green-600 rounded-full flex items-center justify-center">
-            <span className="text-white font-semibold text-sm">B</span>
+      <div className="mb-6 sm:mb-8">
+        <div className="flex items-center space-x-2 sm:space-x-3 mb-2">
+          <div className="w-6 h-6 sm:w-8 sm:h-8 bg-green-600 rounded-full flex items-center justify-center">
+            <span className="text-white font-semibold text-xs sm:text-sm">B</span>
           </div>
-          <h2 className="text-2xl font-semibold text-slate-900">Hospital B - Record Retrieval</h2>
+          <h2 className="text-xl sm:text-2xl font-semibold text-slate-900">Hospital B - Record Retrieval</h2>
         </div>
-        <p className="text-slate-600">Search and retrieve patient records using traditional ID or patient phone number</p>
+        <p className="text-slate-600 text-sm sm:text-base">Search and retrieve patient records using traditional ID or patient phone number</p>
       </div>
 
-      <Tabs defaultValue="traditional" className="space-y-6">
+      <Tabs defaultValue="traditional" className="space-y-4 sm:space-y-6">
         <TabsList className="grid w-full grid-cols-2">
-          <TabsTrigger value="traditional" className="flex items-center space-x-2">
-            <Search className="h-4 w-4" />
-            <span>Traditional Search</span>
+          <TabsTrigger value="traditional" className="flex items-center space-x-1 sm:space-x-2 text-xs sm:text-sm">
+            <Search className="h-3 w-3 sm:h-4 sm:w-4" />
+            <span className="hidden sm:inline">Traditional Search</span>
+            <span className="sm:hidden">Traditional</span>
           </TabsTrigger>
-          <TabsTrigger value="web3" className="flex items-center space-x-2">
-            <Globe className="h-4 w-4" />
-            <span>Web3 DID Search</span>
+          <TabsTrigger value="web3" className="flex items-center space-x-1 sm:space-x-2 text-xs sm:text-sm">
+            <Globe className="h-3 w-3 sm:h-4 sm:w-4" />
+            <span className="hidden sm:inline">Web3 DID Search</span>
+            <span className="sm:hidden">Web3</span>
           </TabsTrigger>
         </TabsList>
 
         <TabsContent value="traditional">
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6 lg:gap-8">
             <div className="lg:col-span-1">
               <Card>
                 <CardHeader>
                   <CardTitle className="flex items-center space-x-2">
-                    <Search className="h-5 w-5 text-green-600" />
-                    <span>Patient Search</span>
+                    <Search className="h-4 w-4 sm:h-5 sm:w-5 text-green-600" />
+                    <span className="text-lg sm:text-xl">Patient Search</span>
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <form onSubmit={handleSearch} className="space-y-4">
+                  <form onSubmit={handleSearch} className="space-y-3 sm:space-y-4">
                     <div>
                       <Label htmlFor="nationalId">NHIF/National ID *</Label>
                       <Input
@@ -395,21 +387,24 @@ export default function HospitalBInterface({ onShowConsentModal }: HospitalBInte
                         onChange={(e) => setSearchData({ ...searchData, nationalId: e.target.value })}
                         placeholder="Enter patient ID"
                         required
+                        className="text-sm sm:text-base"
                       />
                     </div>
                     
                     <div>
                       <Label>Date Range (Optional)</Label>
-                      <div className="grid grid-cols-2 gap-2">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                         <Input
                           type="date"
                           value={searchData.dateFrom}
                           onChange={(e) => setSearchData({ ...searchData, dateFrom: e.target.value })}
+                          className="text-sm sm:text-base"
                         />
                         <Input
                           type="date"
                           value={searchData.dateTo}
                           onChange={(e) => setSearchData({ ...searchData, dateTo: e.target.value })}
+                          className="text-sm sm:text-base"
                         />
                       </div>
                     </div>
@@ -420,19 +415,19 @@ export default function HospitalBInterface({ onShowConsentModal }: HospitalBInte
                       disabled={searchMutation.isPending}
                     >
                       <Search className="h-4 w-4 mr-2" />
-                      {searchMutation.isPending ? "Searching..." : "Search Records"}
+                      <span className="text-sm sm:text-base">{searchMutation.isPending ? "Searching..." : "Search Records"}</span>
                     </Button>
                   </form>
                   
-                  <div className="mt-6 pt-6 border-t border-slate-200">
-                    <h4 className="text-sm font-medium text-slate-700 mb-3">Today's Activity</h4>
-                    <div className="grid grid-cols-2 gap-3">
-                      <div className="text-center p-3 bg-slate-50 rounded-lg">
-                        <div className="text-lg font-semibold text-slate-900">0</div>
+                  <div className="mt-4 sm:mt-6 pt-4 sm:pt-6 border-t border-slate-200">
+                    <h4 className="text-sm font-medium text-slate-700 mb-2 sm:mb-3">Today's Activity</h4>
+                    <div className="grid grid-cols-2 gap-2 sm:gap-3">
+                      <div className="text-center p-2 sm:p-3 bg-slate-50 rounded-lg">
+                        <div className="text-base sm:text-lg font-semibold text-slate-900">0</div>
                         <div className="text-xs text-slate-600">Searches</div>
                       </div>
-                      <div className="text-center p-3 bg-slate-50 rounded-lg">
-                        <div className="text-lg font-semibold text-slate-900">0</div>
+                      <div className="text-center p-2 sm:p-3 bg-slate-50 rounded-lg">
+                        <div className="text-base sm:text-lg font-semibold text-slate-900">0</div>
                         <div className="text-xs text-slate-600">Retrieved</div>
                       </div>
                     </div>
@@ -442,15 +437,15 @@ export default function HospitalBInterface({ onShowConsentModal }: HospitalBInte
             </div>
             
             <div className="lg:col-span-2">
-              <Card className="mb-6">
-                <CardContent className="pt-6">
-                  <div className="flex items-center justify-between">
+              <Card className="mb-4 sm:mb-6">
+                <CardContent className="pt-4 sm:pt-6">
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-2 sm:space-y-0">
                     <div className="flex items-center space-x-2">
-                      <FileText className="h-5 w-5 text-green-600" />
-                      <h3 className="text-lg font-semibold text-slate-900">Patient Records</h3>
+                      <FileText className="h-4 w-4 sm:h-5 sm:w-5 text-green-600" />
+                      <h3 className="text-base sm:text-lg font-semibold text-slate-900">Patient Records</h3>
                     </div>
-                    <div className="flex items-center space-x-2 text-sm text-slate-600">
-                      <Clock className="h-4 w-4" />
+                    <div className="flex items-center space-x-2 text-xs sm:text-sm text-slate-600">
+                      <Clock className="h-3 w-3 sm:h-4 sm:w-4" />
                       <span>Last updated: Just now</span>
                     </div>
                   </div>
@@ -458,23 +453,25 @@ export default function HospitalBInterface({ onShowConsentModal }: HospitalBInte
               </Card>
               
               {patientData && showRecords && (
-                <Card className="mb-6">
-                  <CardContent className="pt-6">
-                    <div className="flex items-start justify-between mb-4">
+                <Card className="mb-4 sm:mb-6">
+                  <CardContent className="pt-4 sm:pt-6">
+                    <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between mb-3 sm:mb-4 space-y-3 sm:space-y-0">
                       <div>
-                        <h4 className="text-lg font-semibold text-slate-900">{patientData.patientName}</h4>
-                        <p className="text-slate-600">ID: {patientData.patientDID}</p>
+                        <h4 className="text-base sm:text-lg font-semibold text-slate-900">{patientData.patientName}</h4>
+                        <p className="text-slate-600 text-sm">ID: {patientData.patientDID}</p>
                       </div>
-                      <div className="flex items-center space-x-2">
-                        <Badge className="bg-green-100 text-green-800 hover:bg-green-100">
+                      <div className="flex flex-col sm:flex-row items-start sm:items-center space-y-2 sm:space-y-0 sm:space-x-2">
+                        <Badge className="bg-green-100 text-green-800 hover:bg-green-100 text-xs">
                           <Users className="h-3 w-3 mr-1" />
                           Consent Verified
                         </Badge>
+                        <div className="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-2">
                         <Button 
                           variant="outline" 
                           size="sm"
                           onClick={() => revokeConsentMutation.mutate({ nationalId: patientData.nationalId || patientData.patientDID })}
                           disabled={revokeConsentMutation.isPending}
+                            className="text-xs sm:text-sm"
                         >
                           {revokeConsentMutation.isPending ? "Revoking..." : "Revoke Access"}
                         </Button>
@@ -483,13 +480,15 @@ export default function HospitalBInterface({ onShowConsentModal }: HospitalBInte
                           size="sm"
                           onClick={() => searchMutation.mutate({ nationalId: patientData.nationalId || patientData.patientDID })}
                           disabled={searchMutation.isPending}
+                            className="text-xs sm:text-sm"
                         >
                           {searchMutation.isPending ? "Fetching..." : "Fetch All Records"}
                         </Button>
+                        </div>
                       </div>
                     </div>
                     
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 text-xs sm:text-sm">
                       <div>
                         <p className="text-slate-500">Total Records</p>
                         <p className="font-semibold text-slate-900">{patientData.recordCount}</p>
@@ -515,26 +514,26 @@ export default function HospitalBInterface({ onShowConsentModal }: HospitalBInte
               )}
               
               {patientData && !showRecords && (
-                <Card className="mb-6">
-                  <CardContent className="pt-6">
-                    <div className="flex items-start justify-between mb-4">
+                <Card className="mb-4 sm:mb-6">
+                  <CardContent className="pt-4 sm:pt-6">
+                    <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between mb-3 sm:mb-4 space-y-3 sm:space-y-0">
                       <div>
-                        <h4 className="text-lg font-semibold text-slate-900">Patient Found</h4>
-                        <p className="text-slate-600">ID: {patientData.patientDID}</p>
-                        <p className="text-slate-600">{patientData.recordCount} medical records available</p>
+                        <h4 className="text-base sm:text-lg font-semibold text-slate-900">Patient Found</h4>
+                        <p className="text-slate-600 text-sm">ID: {patientData.patientDID}</p>
+                        <p className="text-slate-600 text-sm">{patientData.recordCount} medical records available</p>
                       </div>
-                      <Badge className="bg-amber-100 text-amber-800 hover:bg-amber-100">
+                      <Badge className="bg-amber-100 text-amber-800 hover:bg-amber-100 text-xs">
                         <Shield className="h-3 w-3 mr-1" />
                         Consent Required
                       </Badge>
                     </div>
                     
-                    <div className="bg-amber-50 rounded-lg p-4 mb-4">
-                      <div className="flex items-start space-x-3">
-                        <AlertTriangle className="h-5 w-5 text-amber-600 mt-0.5" />
+                    <div className="bg-amber-50 rounded-lg p-3 sm:p-4 mb-3 sm:mb-4">
+                      <div className="flex items-start space-x-2 sm:space-x-3">
+                        <AlertTriangle className="h-4 w-4 sm:h-5 sm:w-5 text-amber-600 mt-0.5" />
                         <div>
-                          <h5 className="font-medium text-amber-900">Patient Consent Required</h5>
-                          <p className="text-sm text-amber-700 mt-1">
+                          <h5 className="font-medium text-amber-900 text-sm sm:text-base">Patient Consent Required</h5>
+                          <p className="text-xs sm:text-sm text-amber-700 mt-1">
                             To access this patient's medical records, you must obtain proper consent. 
                             This ensures patient privacy and compliance with healthcare regulations.
                           </p>
@@ -542,16 +541,16 @@ export default function HospitalBInterface({ onShowConsentModal }: HospitalBInte
                       </div>
                     </div>
 
-                    <div className="flex space-x-3">
+                    <div className="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-3">
                       <Button 
                         onClick={() => requestConsentMutation.mutate({ 
                           nationalId: patientData.nationalId || patientData.patientDID,
                           reason: "Medical care coordination and treatment planning"
                         })}
-                        className="bg-blue-600 hover:bg-blue-700"
+                        className="bg-blue-600 hover:bg-blue-700 w-full sm:w-auto"
                         disabled={requestConsentMutation.isPending}
                       >
-                        {requestConsentMutation.isPending ? "Requesting..." : "Request Consent"}
+                        <span className="text-sm sm:text-base">{requestConsentMutation.isPending ? "Requesting..." : "Request Consent"}</span>
                       </Button>
                       <Button 
                         variant="outline"
@@ -559,8 +558,9 @@ export default function HospitalBInterface({ onShowConsentModal }: HospitalBInte
                           setPatientData(null);
                           setShowRecords(false);
                         }}
+                        className="w-full sm:w-auto"
                       >
-                        Cancel
+                        <span className="text-sm sm:text-base">Cancel</span>
                       </Button>
                     </div>
                   </CardContent>
@@ -639,17 +639,17 @@ export default function HospitalBInterface({ onShowConsentModal }: HospitalBInte
         </TabsContent>
 
         <TabsContent value="web3">
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6 lg:gap-8">
             <div className="lg:col-span-1">
               <Card>
                 <CardHeader>
                   <CardTitle className="flex items-center space-x-2">
-                    <Key className="h-5 w-5 text-purple-600" />
-                    <span>Web3 Phone Search</span>
+                    <Key className="h-4 w-4 sm:h-5 sm:w-5 text-purple-600" />
+                    <span className="text-lg sm:text-xl">Web3 Phone Search</span>
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <form onSubmit={handleWeb3Search} className="space-y-4">
+                  <form onSubmit={handleWeb3Search} className="space-y-3 sm:space-y-4">
                     <div>
                       <Label htmlFor="phoneNumber">Patient Phone Number *</Label>
                       <Input
@@ -658,6 +658,7 @@ export default function HospitalBInterface({ onShowConsentModal }: HospitalBInte
                         onChange={(e) => setWeb3SearchData({ ...web3SearchData, phoneNumber: e.target.value })}
                         placeholder="+254 700 123 456"
                         required
+                        className="text-sm sm:text-base"
                       />
                       <p className="text-xs text-slate-500 mt-1">
                         Patient provides phone number for secure lookup
@@ -670,7 +671,7 @@ export default function HospitalBInterface({ onShowConsentModal }: HospitalBInte
                       disabled={web3SearchMutation.isPending}
                     >
                       <Globe className="h-4 w-4 mr-2" />
-                      {web3SearchMutation.isPending ? "Searching IPFS..." : "Search Web3 Records"}
+                      <span className="text-sm sm:text-base">{web3SearchMutation.isPending ? "Searching IPFS..." : "Search Web3 Records"}</span>
                     </Button>
                   </form>
                   
@@ -825,7 +826,7 @@ export default function HospitalBInterface({ onShowConsentModal }: HospitalBInte
                 <div className="space-y-4">
                   {web3PatientData.fullRecords && web3PatientData.fullRecords.length > 0 ? (
                     web3PatientData.fullRecords
-                      .filter(record => record.recordType === "web3")
+                      .filter((record: any) => record.recordType === "web3")
                       .map((record: any) => (
                         <div key={record.id} className="border rounded-lg p-4 bg-slate-50">
                           <div className="flex items-start justify-between mb-3">

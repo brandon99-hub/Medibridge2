@@ -137,12 +137,6 @@ app.use((req, res, next) => {
     const isProduction = process.env.NODE_ENV === 'production';
     const hstsHeader = req.headers['strict-transport-security'];
     
-    // Log HSTS health check
-    auditService.logHstsEvent("HEALTH_CHECK", "SUCCESS", req, {
-      isProduction,
-      hstsHeader: hstsHeader || 'not-set',
-    });
-    
     res.json({
       status: isProduction ? 'enabled' : 'development',
       hstsHeader: hstsHeader || 'not-set',

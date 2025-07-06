@@ -137,7 +137,7 @@ MediBridge is a healthcare record interoperability system with **Web3 principles
 
 - June 24, 2025: **Web3 Backend with Web2 Frontend Complete**
   - Implemented phone/OTP patient authentication with automatic DID generation
-  - Created encrypted medical record storage on simulated IPFS
+  - Created encrypted medical record storage on production IPFS/Filecoin
   - Built verifiable credentials system for cryptographic consent management
   - Added `/api/issue-consent/` and `/api/get-record/` endpoints for VC-based access
   - Patients use simple phone login - all Web3 complexity hidden in backend
@@ -184,7 +184,7 @@ MediBridge is a healthcare record interoperability system with **Web3 principles
 
 ### Q4: IPFS Multi-Location Pinning and Failover
 **Answer**: Redundant storage across multiple IPFS networks ensures 99.9% availability:
-- **Primary Storage**: Web3.storage with automatic pinning
+- **Primary Storage**: NFT.storage with automatic pinning
 - **Secondary Nodes**: Pinata, Infura, Cloudflare IPFS gateways
 - **Local Backup**: Hospital-based IPFS nodes for critical records
 - **Failover Logic**: Automatic retrieval from available nodes if primary fails

@@ -29,6 +29,7 @@ export class PatientLookupService {
     try {
       // Normalize phone number format
       const normalizedPhone = this.normalizePhoneNumber(phoneNumber);
+      console.log('[DEBUG] Patient lookup by phone - normalized:', normalizedPhone);
 
       // Check cache first
       const cacheKey = `patient_lookup:phone:${normalizedPhone}`;
@@ -47,6 +48,39 @@ export class PatientLookupService {
       if (!patientIdentity) {
         patientProfile = await storage.getPatientProfileByPhone(normalizedPhone);
         console.log('[DEBUG] Patient lookup by phone: Found profile by phone:', patientProfile ? patientProfile.patientDID : 'NOT FOUND');
+        
+        // CRITICAL FIX: If we found a profile but no identity, create/update the identity
+        if (patientProfile && patientProfile.patientDID) {
+          console.log('[DEBUG] Found profile but no identity, syncing phone number to identity');
+          try {
+            await storage.updatePatientIdentityPhoneNumber(patientProfile.patientDID, normalizedPhone);
+            console.log('[DEBUG] Successfully synced phone number to patient identity');
+          } catch (error) {
+            console.error('[DEBUG] Failed to sync phone number to identity:', error);
+          }
+        }
+      }
+      
+      if (!patientIdentity && !patientProfile) {
+        // ENHANCED DEBUGGING: Check if patient exists with different phone formats
+        console.log('[DEBUG] No patient found, checking alternative phone formats...');
+        const alternativeFormats = this.generateAlternativePhoneFormats(normalizedPhone);
+        
+        for (const altFormat of alternativeFormats) {
+          const altIdentity = await storage.getPatientIdentityByPhone(altFormat);
+          const altProfile = await storage.getPatientProfileByPhone(altFormat);
+          
+          if (altIdentity || altProfile) {
+            console.log('[DEBUG] Found patient with alternative phone format:', altFormat);
+            // Use the found patient and sync the phone number
+            const foundDID = altIdentity?.did || altProfile?.patientDID;
+            if (foundDID) {
+              await storage.updatePatientIdentityPhoneNumber(foundDID, normalizedPhone);
+              patientProfile = altProfile || await storage.getPatientProfileByDID(foundDID);
+              break;
+            }
+          }
+        }
       }
       
       if (!patientIdentity && !patientProfile) {
@@ -84,8 +118,11 @@ export class PatientLookupService {
         throw new Error("No patient DID found");
       }
 
+      console.log('[DEBUG] Using patientDID for records lookup:', patientDID);
+
       // Get patient records count and summary
       const recordsSummary = await storage.getPatientRecordsSummary(patientDID);
+      console.log('[DEBUG] Records summary:', recordsSummary);
 
       await auditService.logEvent({
         eventType: "PATIENT_SEARCH_SUCCESS",
@@ -237,18 +274,6 @@ export class PatientLookupService {
       // In production, encrypt this data
       const qrData = Buffer.from(JSON.stringify(lookupData)).toString('base64');
 
-      await auditService.logEvent({
-        eventType: "PATIENT_QR_GENERATED",
-        actorType: "PATIENT",
-        actorId: phoneNumber,
-        targetType: "QR_CODE",
-        targetId: `lookup_${Date.now()}`,
-        action: "GENERATE",
-        outcome: "SUCCESS",
-        metadata: { expiresIn: "24h" },
-        severity: "info",
-      });
-
       return qrData;
 
     } catch (error: any) {
@@ -380,6 +405,47 @@ export class PatientLookupService {
 
     // Return with + prefix
     return cleaned.startsWith('+') ? phoneNumber : `+${cleaned}`;
+  }
+
+  /**
+   * Generate alternative phone number formats for better matching
+   */
+  private generateAlternativePhoneFormats(phoneNumber: string): string[] {
+    const formats: string[] = [];
+    
+    // Remove + prefix
+    if (phoneNumber.startsWith('+')) {
+      formats.push(phoneNumber.substring(1));
+    }
+    
+    // Add + prefix
+    if (!phoneNumber.startsWith('+')) {
+      formats.push(`+${phoneNumber}`);
+    }
+    
+    // Handle Kenyan numbers specifically
+    if (phoneNumber.startsWith('+254')) {
+      // Try without country code
+      formats.push(phoneNumber.substring(4));
+      // Try with 0 prefix
+      formats.push(`0${phoneNumber.substring(4)}`);
+    }
+    
+    // Handle numbers starting with 254
+    if (phoneNumber.startsWith('254')) {
+      formats.push(`+${phoneNumber}`);
+      formats.push(phoneNumber.substring(3));
+      formats.push(`0${phoneNumber.substring(3)}`);
+    }
+    
+    // Handle numbers starting with 0
+    if (phoneNumber.startsWith('0')) {
+      formats.push(`+254${phoneNumber.substring(1)}`);
+      formats.push(`254${phoneNumber.substring(1)}`);
+      formats.push(phoneNumber.substring(1));
+    }
+    
+    return Array.from(new Set(formats)); // Remove duplicates
   }
 }
 

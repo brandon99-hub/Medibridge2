@@ -4,6 +4,8 @@ import { auditService } from "./audit-service";
 import { hashPassword } from "./auth";
 import crypto from "crypto";
 import { z } from "zod";
+import { generateStaffVCPdf } from "./pdf-util";
+import { VCService } from "./web3-services";
 
 export interface StaffInvitationData {
   email: string;
@@ -35,42 +37,81 @@ export class StaffInvitationService {
   async createStaffInvitation(
     hospitalId: number,
     invitedBy: number,
-    invitationData: StaffInvitationData
+    invitationData: StaffInvitationData,
+    forceResend: boolean = false
   ): Promise<InvitationResult> {
     try {
       // Validate hospital staff limit (max 4 staff + 1 admin = 5 total)
       const currentStaffCount = await this.getHospitalStaffCount(hospitalId);
-      if (currentStaffCount >= 5) {
+      if (currentStaffCount >= 5 && !forceResend) {
         return {
           success: false,
           error: "Hospital has reached maximum staff limit (4 staff + 1 admin)"
         };
       }
 
-      // Check if email already has pending invitation
-      const existingInvitation = await storage.getPendingInvitationByEmail(invitationData.email);
-      if (existingInvitation) {
-        return {
-          success: false,
-          error: "Email already has a pending invitation"
-        };
-      }
-
-      // Check if user with this email already exists
-      const existingUser = await storage.getUserByEmail(invitationData.email);
-      if (existingUser) {
-        return {
-          success: false,
-          error: "A user with this email address already exists"
-        };
-      }
-
-      // Generate invitation token
-      const invitationToken = this.generateInvitationToken();
-      
-      // Set expiration (24 hours from now)
-      const expiresAt = new Date();
+      let existingUser = await storage.getUserByEmail(invitationData.email);
+      let tempUsername = existingUser ? existingUser.username : this.generateTemporaryUsername(invitationData.email);
+      let tempPassword = this.generateTemporaryPassword();
+      let invitationToken = this.generateInvitationToken();
+      let expiresAt = new Date();
       expiresAt.setHours(expiresAt.getHours() + 24);
+
+      if (!forceResend) {
+        // Check if email already has pending invitation
+        const existingInvitation = await storage.getPendingInvitationByEmail(invitationData.email);
+        if (existingInvitation) {
+          return {
+            success: false,
+            error: "Email already has a pending invitation"
+          };
+        }
+
+        // Check if user with this email already exists
+        if (existingUser) {
+          return {
+            success: false,
+            error: "A user with this email address already exists"
+          };
+        }
+      }
+
+      // If forceResend and user exists, do NOT create a new user, just update/create invitation and send email
+      if (forceResend && existingUser) {
+        // Create or update invitation record
+        let invitation = await storage.getPendingInvitationByEmail(invitationData.email);
+        if (invitation) {
+          // Update token and expiry
+          await storage.updateInvitation(invitation.id, { invitationToken, expiresAt });
+        } else {
+          // Create new invitation
+          invitation = await storage.createHospitalStaffInvitation({
+            email: invitationData.email,
+            hospitalId: hospitalId,
+            invitedBy: invitedBy,
+            role: invitationData.role,
+            department: invitationData.department,
+            invitationToken: invitationToken,
+            status: 'pending',
+            expiresAt: expiresAt,
+          });
+        }
+        // Send invitation email (reuse existing username, generate new temp password)
+        await this.sendInvitationEmail(invitationData.email, {
+          hospitalName: await this.getHospitalName(hospitalId),
+          role: invitationData.role,
+          department: invitationData.department,
+          username: tempUsername,
+          temporaryPassword: tempPassword,
+          invitationToken: invitationToken,
+          expiresAt: expiresAt,
+        });
+        return {
+          success: true,
+          invitationId: invitation.id,
+          invitationToken: invitationToken,
+        };
+      }
 
       // Create invitation record
       const invitation = await storage.createHospitalStaffInvitation({
@@ -82,19 +123,6 @@ export class StaffInvitationService {
         invitationToken: invitationToken,
         status: 'pending',
         expiresAt: expiresAt,
-      });
-
-      // Generate temporary credentials
-      const tempUsername = this.generateTemporaryUsername(invitationData.email);
-      const tempPassword = this.generateTemporaryPassword();
-
-      // Debug log to check hospitalId value and type
-      console.log('[StaffInvitationService] Debug - hospitalId:', {
-        value: hospitalId,
-        type: typeof hospitalId,
-        isNumber: typeof hospitalId === 'number',
-        isInteger: Number.isInteger(hospitalId),
-        isPositive: hospitalId > 0
       });
 
       // Create user account with temporary credentials
@@ -111,7 +139,73 @@ export class StaffInvitationService {
         hospital_id: hospitalId,
       });
 
-      // Send invitation email
+      // Fetch staff record to get staffId (assuming staff is created after user)
+      const staffRecord = await storage.getHospitalStaffByStaffId(user.username);
+      // If not found, fallback to tempUsername as staffId
+      const staffId = staffRecord?.staffId || tempUsername;
+      const staffName = invitationData.name;
+      const staffRole = invitationData.role;
+      const staffDepartment = invitationData.department;
+      const staffLicenseNumber = staffRecord?.licenseNumber || "";
+      const hospitalIdStr = hospitalId.toString();
+
+      // Generate Staff VC using VCService
+      const vcService = new VCService();
+      // For now, use hospitalId as issuer (replace with hospital DID if available)
+      const issuer = hospitalIdStr;
+      const subject = staffId;
+      const credentialType = "StaffEmployment";
+      const credentialSubject = {
+        staffId,
+        name: staffName,
+        role: staffRole,
+        department: staffDepartment,
+        licenseNumber: staffLicenseNumber,
+        hospitalId: hospitalIdStr,
+      };
+      // TODO: Use a real private key for signing (replace 'dummy_private_key')
+      const privateKeyHex = process.env.HOSPITAL_VC_PRIVATE_KEY || "dummy_private_key";
+      let staffVcJwt = "";
+      let staffVcPdfPath = "";
+      let staffVcPdfUrl = "";
+      try {
+        staffVcJwt = await vcService.issueCredential(
+          issuer,
+          subject,
+          credentialType,
+          credentialSubject,
+          privateKeyHex
+        );
+        // Store the VC in verifiable_credentials
+        await storage.createVerifiableCredential({
+          patientDID: staffId, // For staff, use staffId as patientDID field
+          issuerDID: hospitalIdStr, // Use hospitalId as issuerDID
+          credentialType: credentialType,
+          jwtVc: staffVcJwt,
+          credentialSubject: credentialSubject,
+          issuanceDate: new Date(),
+        });
+        // Generate PDF for the staff VC
+        const hospitalName = await this.getHospitalName(hospitalId);
+        const issueDate = new Date().toISOString();
+        staffVcPdfPath = await generateStaffVCPdf({
+          staffId,
+          name: staffName,
+          role: staffRole,
+          department: staffDepartment,
+          licenseNumber: staffLicenseNumber,
+          hospitalId: hospitalIdStr,
+          hospitalName,
+          issueDate,
+          vcJwt: staffVcJwt,
+        });
+        // Assume static file server serves /vc_pdfs/ as /static/vc_pdfs/
+        staffVcPdfUrl = `/static/vc_pdfs/${staffVcPdfPath.split("vc_pdfs/")[1]}`;
+      } catch (vcErr) {
+        console.error("[StaffInvitationService] Failed to issue/store staff VC or PDF:", vcErr);
+      }
+
+      // Send invitation email (add staffVcPdfUrl if available)
       await this.sendInvitationEmail(invitationData.email, {
         hospitalName: await this.getHospitalName(hospitalId),
         role: invitationData.role,
@@ -120,6 +214,7 @@ export class StaffInvitationService {
         temporaryPassword: tempPassword,
         invitationToken: invitationToken,
         expiresAt: expiresAt,
+        staffVcPdfUrl, // Pass the download link to the email
       });
 
       // Log the invitation
@@ -218,6 +313,7 @@ export class StaffInvitationService {
         role: this.mapRoleToStaffRole(invitation.role),
         licenseNumber: `INV-${user.id}`, // Temporary license number
         department: invitation.department,
+        email: invitation.email,
         hospitalId: invitation.hospitalId.toString(),
         isActive: true,
         isOnDuty: false,
@@ -339,10 +435,15 @@ export class StaffInvitationService {
       temporaryPassword: string;
       invitationToken: string;
       expiresAt: Date;
+      staffVcPdfUrl?: string;
     }
   ): Promise<void> {
-    const activationUrl = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/accept-invitation?token=${invitationData.invitationToken}`;
+    const activationUrl = `${process.env.BASE_URL || process.env.FRONTEND_URL || 'http://localhost:3000'}/accept-invitation?token=${invitationData.invitationToken}`;
     
+    const pdfButton = invitationData.staffVcPdfUrl
+      ? `<div style="text-align: center; margin: 20px 0;"><a href="${invitationData.staffVcPdfUrl}" style="background-color: #059669; color: white; padding: 10px 20px; text-decoration: none; border-radius: 6px; display: inline-block;">Download Your Employment Credential (PDF)</a></div>`
+      : "";
+
     const msg = {
       to: email,
       from: 'brandmwenja@gmail.com',
@@ -351,7 +452,6 @@ export class StaffInvitationService {
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
           <h2 style="color: #2563eb;">Welcome to MediBridge!</h2>
           <p>You have been invited to join <strong>${invitationData.hospitalName}</strong> on the MediBridge Healthcare System.</p>
-          
           <div style="background-color: #f0f9ff; padding: 20px; border-radius: 8px; margin: 20px 0;">
             <h3 style="color: #1e40af; margin-top: 0;">Your Account Details:</h3>
             <p><strong>Role:</strong> ${invitationData.role.replace(/_/g, ' ')}</p>
@@ -359,17 +459,15 @@ export class StaffInvitationService {
             <p><strong>Username:</strong> <code style="background-color: #e5e7eb; padding: 4px; border-radius: 4px;">${invitationData.username}</code></p>
             <p><strong>Temporary Password:</strong> <code style="background-color: #e5e7eb; padding: 4px; border-radius: 4px;">${invitationData.temporaryPassword}</code></p>
           </div>
-          
           <div style="background-color: #fef3c7; padding: 15px; border-radius: 8px; margin: 20px 0;">
             <p style="margin: 0; color: #92400e;"><strong>Important:</strong> This invitation expires on ${invitationData.expiresAt.toLocaleString()}. Please activate your account within 24 hours.</p>
           </div>
-          
           <div style="text-align: center; margin: 30px 0;">
             <a href="${activationUrl}" style="background-color: #2563eb; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; display: inline-block;">
               Activate Your Account
             </a>
           </div>
-          
+          ${pdfButton}
           <p><strong>Next Steps:</strong></p>
           <ol>
             <li>Click the "Activate Your Account" button above</li>
@@ -377,7 +475,6 @@ export class StaffInvitationService {
             <li>Set a new secure password</li>
             <li>Complete your profile</li>
           </ol>
-          
           <hr style="margin: 30px 0; border: none; border-top: 1px solid #e5e7eb;">
           <p style="color: #6b7280; font-size: 14px;">
             This is an automated invitation from ${invitationData.hospitalName}. If you have any questions, please contact your hospital administrator.
@@ -386,26 +483,15 @@ export class StaffInvitationService {
       `,
       text: `
         Welcome to MediBridge!
-        
         You have been invited to join ${invitationData.hospitalName} on the MediBridge Healthcare System.
-        
         Your Account Details:
         - Role: ${invitationData.role.replace(/_/g, ' ')}
         - Department: ${invitationData.department}
         - Username: ${invitationData.username}
         - Temporary Password: ${invitationData.temporaryPassword}
-        
         Important: This invitation expires on ${invitationData.expiresAt.toLocaleString()}.
-        
         To activate your account, visit: ${activationUrl}
-        
-        Next Steps:
-        1. Click the activation link above
-        2. Enter your temporary credentials
-        3. Set a new secure password
-        4. Complete your profile
-        
-        This is an automated invitation from ${invitationData.hospitalName}.
+        ${invitationData.staffVcPdfUrl ? `Download your employment credential: ${invitationData.staffVcPdfUrl}` : ''}
       `
     };
 

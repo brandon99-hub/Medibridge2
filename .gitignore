@@ -16,6 +16,7 @@ build/
 .env.development.local
 .env.test.local
 .env.production.local
+.env.*.local
 
 # IDE and editor files
 .vscode/
@@ -23,6 +24,9 @@ build/
 *.swp
 *.swo
 *~
+.vscode/settings.json
+.vscode/launch.json
+.vscode/tasks.json
 
 # OS generated files
 .DS_Store
@@ -36,6 +40,10 @@ Thumbs.db
 # Logs
 logs/
 *.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
 
 # Runtime data
 pids/
@@ -123,3 +131,206 @@ test-results.xml
 
 # Drizzle
 drizzle/
+
+# ===== ZKP (Zero-Knowledge Proofs) =====
+# Zokrates temporary files
+zokrates/witness
+zokrates/out
+zokrates/*.out
+zokrates/*.witness
+zokrates/*.proving.key
+zokrates/*.verification.key
+zokrates/*.verifier.sol
+
+# Zokrates artifacts (keep compiled ones, ignore temp)
+zokrates/artifacts/*.tmp
+zokrates/artifacts/*.temp
+zokrates/artifacts/*.cache
+
+# ===== Security & Keys =====
+# Private keys and sensitive files
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+private/
+secrets/
+keys/
+*.private
+*.secret
+
+# Wallet files
+*.wallet
+*.keystore
+wallets/
+keystores/
+
+# ===== Web3 & Blockchain =====
+# Hardhat
+cache/
+artifacts/
+typechain/
+typechain-types/
+
+# Ganache
+ganache-cli.log
+
+# ===== IPFS & Filecoin =====
+# IPFS local storage
+.ipfs/
+ipfs/
+filecoin/
+
+# ===== Development Tools =====
+# Docker
+.dockerignore
+docker-compose.override.yml
+
+# Kubernetes
+*.kubeconfig
+
+# Terraform
+*.tfstate
+*.tfstate.*
+.terraform/
+.terraform.lock.hcl
+
+# ===== Monitoring & Analytics =====
+# Application monitoring
+monitoring/
+metrics/
+analytics/
+
+# ===== Backup & Archive =====
+# Archive files
+*.7z
+*.bz2
+*.gz
+*.tar
+*.xz
+
+# ===== OS Specific =====
+# Windows
+desktop.ini
+$RECYCLE.BIN/
+*.cab
+*.msi
+*.msix
+*.msm
+*.msp
+
+# Linux
+*~
+.fuse_hidden*
+.directory
+.Trash-*
+.nfs*
+
+# macOS
+.AppleDouble
+.LSOverride
+Icon
+._*
+
+# ===== Project Specific =====
+# MediBridge specific
+mednlp-env/
+*.pyc
+__pycache__/
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# ===== IDE Specific =====
+# VSCode
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+*.code-workspace
+
+# IntelliJ
+.idea/
+*.iws
+*.iml
+*.ipr
+
+# Sublime Text
+*.sublime-project
+*.sublime-workspace
+
+# Vim
+*.swp
+*.swo
+*~
+
+# Emacs
+*~
+\#*\#
+/.emacs.desktop
+/.emacs.desktop.lock
+*.elc
+auto-save-list
+tramp
+.\#*
+
+# ===== Testing =====
+# Jest
+coverage/
+.nyc_output/
+
+# Cypress
+cypress/videos/
+cypress/screenshots/
+
+# Playwright
+test-results/
+playwright-report/
+playwright/.cache/
+
+# ===== Performance =====
+# Lighthouse
+.lighthouseci/
+
+# ===== Misc =====
+# Local development
+.local/
+local/
+
+# Temporary files
+*.tmp
+*.temp
+*.cache
+
+# Lock files (keep package-lock.json, ignore others)
+yarn.lock
+pnpm-lock.yaml
+
+# ===== Production =====
+# Production builds
+build/
+dist/
+out/
+
+# ===== Documentation =====
+# Generated docs
+docs/build/
+docs/_build/
+
+# ===== Database =====
+# Local database files
+*.db
+*.sqlite
+*.sqlite3
+*.db-journal
+
+# Database dumps
+*.dump
+*.sql.bak

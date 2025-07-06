@@ -62,19 +62,6 @@ export class EnhancedEncryptionService {
         integritySignature,
       };
       
-      // Audit log the encryption event
-      await auditService.logEncryptionEvent(
-        patientDID,
-        recordHash,
-        "ENCRYPT",
-        "SUCCESS",
-        {
-          algorithm: metadata.algorithm,
-          recordSize: recordString.length,
-          encryptedSize: encryptedData.length,
-        }
-      );
-      
       return {
         encryptedData,
         encryptionKey,
@@ -143,18 +130,6 @@ export class EnhancedEncryptionService {
       }
       
       const recordData = JSON.parse(decrypted);
-      
-      // Audit successful decryption
-      await auditService.logEncryptionEvent(
-        patientDID,
-        expectedMetadata?.recordHash || "unknown",
-        "DECRYPT",
-        "SUCCESS",
-        {
-          recordSize: decrypted.length,
-          integrityVerified: !!expectedMetadata?.recordHash,
-        }
-      );
       
       return recordData;
       

@@ -4,7 +4,6 @@ import NavigationHeader from "@/components/navigation-header";
 import HospitalAInterface from "@/components/hospital-a-interface";
 import HospitalBInterface from "@/components/hospital-b-interface";
 import ConsentModal from "@/components/consent-modal";
-import Web3ConsentDemo from "@/components/web3-consent-demo";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Globe, Building } from "lucide-react";
 import HospitalStaffProfileCompletion from "@/components/hospital-staff-profile-completion";
@@ -47,7 +46,9 @@ export default function HomePage() {
       user.isAdmin &&
       !showStaffProfileModal &&
       !hasSkippedProfile &&
-      (staffProfileData === null || staffProfileData === undefined || !staffProfileData.hasStaffProfile || staffProfileData.staffCount < 2)
+      staffProfileData !== null && 
+      staffProfileData !== undefined && 
+      (!staffProfileData.hasStaffProfile || staffProfileData.staffCount < 2 || !staffProfileData.adminLicense)
     ) {
       setIsManualOpen(false); // Auto-popup, not manual
       setShowStaffProfileModal(true);
@@ -88,7 +89,7 @@ export default function HomePage() {
         onOpenStaffProfileModal={handleOpenStaffProfileModal}
       />
       
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-6 lg:py-8">
         {currentHospital === "A" ? (
           <HospitalAInterface />
         ) : (
@@ -121,8 +122,8 @@ export default function HomePage() {
             setHasSkippedProfile(false);
           }}
           hospitalId={user.id?.toString() || ""}
-          isEdit={existingStaff.length > 0}
-          existingStaff={existingStaff}
+          isEdit={(existingStaff?.length || 0) > 0}
+          existingStaff={existingStaff || []}
           existingAdminLicense={staffProfileData?.adminLicense || ""}
         />
       )}
