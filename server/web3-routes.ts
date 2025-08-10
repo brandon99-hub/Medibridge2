@@ -385,7 +385,8 @@ export function registerWeb3Routes(app: Express): void {
           consentType,
           consentGiven: true,
           consentCredentialId: storedCredential.id,
-          expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+          // Set Web3 consent expiry to 12 hours
+          expiresAt: new Date(Date.now() + 12 * 60 * 60 * 1000),
         });
 
         issuedJwtVCs.push(storedCredential);

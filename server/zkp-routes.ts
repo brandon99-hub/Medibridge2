@@ -40,26 +40,22 @@ router.post('/ussd', async (req, res) => {
     const menuParts = (text || '').split('*');
     if (!text || text === "") {
       response = "CON Welcome to MediBridge\n1. Access my medical proofs\n2. Share proof with hospital\n3. Check proof status\n4. Emergency access";
-    } else if (menuParts[0] === "1" && menuParts.length === 2 && menuParts[1].length === 6) {
+  } else if (menuParts[0] === "1" && menuParts.length === 2 && menuParts[1].length === 6) {
       // User entered a 6-digit code after selecting option 1
       const code = menuParts[1];
       const codeHash = crypto.createHash('sha256').update(code).digest('hex');
-      const codeRecord = await storage.getProofCodeByHash(codeHash);
+      const codeRows = await storage.getProofCodesByHash(codeHash);
       const now = new Date();
-      if (!codeRecord) {
+      if (!codeRows || codeRows.length === 0) {
         response = "END Code not found or expired.";
-      } else if (codeRecord.used) {
-        response = "END Code already used.";
-      } else if (codeRecord.expiresAt < now) {
-        response = "END Code expired.";
-      } else if (codeRecord.attempts >= 5) {
-        response = "END Too many attempts. Try again later.";
       } else {
-        const proof = await storage.getZKPProof(codeRecord.proofId);
-        if (!proof) {
-          response = "END Proof not found.";
-        } else {
-          const zkpServiceInstance = await zkpService;
+        // Validate across all proofs linked to this code
+        const validProofs = [] as any[];
+        const zkpServiceInstance = await zkpService;
+        for (const row of codeRows) {
+          if (row.used || row.expiresAt < now || row.attempts >= 5) continue;
+          const proof = await storage.getZKPProof(row.proofId);
+          if (!proof) continue;
           const result = await zkpServiceInstance.verifyProof(
             proof.id,
             0,
@@ -67,13 +63,16 @@ router.post('/ussd', async (req, res) => {
             'ussd-code-verification',
             false
           );
-          await storage.incrementProofCodeAttempts(codeRecord.id);
+          await storage.incrementProofCodeAttempts(row.id);
           if (result.isValid) {
-            await storage.markProofCodeUsed(codeRecord.id);
-            response = `END ✅ Proof is VALID.\n${proof.publicStatement || ''}`;
-          } else {
-            response = "END ❌ Invalid proof.";
+            validProofs.push(proof);
+            await storage.markProofCodeUsed(row.id);
           }
+        }
+        if (validProofs.length > 0) {
+          response = `END ✅ Proofs valid (${validProofs.length}).`;
+        } else {
+          response = "END ❌ No valid proofs for this code.";
         }
       }
     } else if (text === "1") {
@@ -332,11 +331,29 @@ router.post('/generate-proofs-from-form', async (req, res) => {
     );
     console.log('[ZKP] Proofs generated:', proofs);
 
+    // If no proofs were generated, do not create or send a visit code
+    if (!proofs || proofs.length === 0) {
+      await auditService.logEvent({
+        eventType: "ZKP_PROOFS_GENERATED_FROM_FORM",
+        actorType: "HOSPITAL",
+        actorId: "hospital-a",
+        targetType: "PATIENT",
+        targetId: formData.nationalId || "unknown",
+        action: "GENERATE_PROOFS",
+        outcome: "FAILURE",
+        metadata: { reason: 'NO_PROOFS_GENERATED' },
+        severity: "warning",
+      });
+      return res.status(400).json({
+        error: 'No proofs were generated for this visit. Please ensure the diagnosis/treatment includes recognizable disease terms.'
+      });
+    }
+
     const visitCode = Math.floor(100000 + Math.random() * 900000).toString();
     const codeHash = crypto.createHash('sha256').update(visitCode).digest('hex');
     const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // 30 days
-    
-    // Debug: Check proof structure
+
+    // Debug: Check proof structure and persist one row per proof (same code for the visit)
     console.log('[ZKP] Creating proof codes for visitCode:', visitCode);
     for (const proof of proofs) {
       console.log('[ZKP] Processing proof:', { proofId: proof.proofId, type: proof.type, statement: proof.statement });
@@ -398,7 +415,8 @@ router.post('/generate-proofs-from-form', async (req, res) => {
 
   } catch (error: any) {
     console.error('[ZKP] Error generating proofs from form:', error, '\nRequest body:', req.body);
-    res.status(400).json({ error: `Failed to generate proofs: ${error.message}` });
+    const msg = (error && error.code === '23505') ? 'Duplicate visit code detected. Please retry.' : `Failed to generate proofs: ${error.message}`;
+    res.status(400).json({ error: msg });
   }
 });
 
@@ -688,63 +706,63 @@ router.post('/verify-code', async (req, res) => {
       return res.status(400).json({ valid: false, message: 'Invalid code format' });
     }
     const codeHash = crypto.createHash('sha256').update(code).digest('hex');
-    const codeRecord = await storage.getProofCodeByHash(codeHash);
+    const rows = await storage.getProofCodesByHash(codeHash);
     const now = new Date();
-    if (!codeRecord) {
+    if (!rows || rows.length === 0) {
       return res.status(404).json({ valid: false, message: 'Code not found or expired' });
     }
-    if (codeRecord.used) {
-      return res.status(400).json({ valid: false, message: 'Code already used' });
-    }
-    if (codeRecord.expiresAt < now) {
-      return res.status(400).json({ valid: false, message: 'Code expired' });
-    }
-    if (codeRecord.attempts >= 5) {
-      return res.status(429).json({ valid: false, message: 'Too many attempts' });
-    }
-    // Fetch the proof
-    const proof = await storage.getZKPProof(codeRecord.proofId);
-    if (!proof) {
-      return res.status(404).json({ valid: false, message: 'Proof not found' });
-    }
-    // Verify the proof
     const zkpServiceInstance = await zkpService;
-    const result = await zkpServiceInstance.verifyProof(
-      proof.id,
-      0, // verifiedBy (not tracked here)
-      '', // hospitalId
-      'code-verification',
-      false
-    );
-    await storage.incrementProofCodeAttempts(codeRecord.id);
-    // Mark as used if valid
-    if (result.isValid) {
-      await storage.markProofCodeUsed(codeRecord.id);
+    const proofs = [] as any[];
+    let usedCount = 0;
+    for (const row of rows) {
+      if (row.expiresAt < now) continue;
+      const p = await storage.getZKPProof(row.proofId);
+      if (!p) continue;
+      const result = await zkpServiceInstance.verifyProof(p.id, 0, '', 'code-verification', false);
+      await storage.incrementProofCodeAttempts(row.id);
+      if (result.isValid) {
+        proofs.push({
+          proofId: p.id,
+          type: p.proofType,
+          statement: p.publicStatement,
+          verifiedAt: p.verifiedAt,
+          expiresAt: p.expiresAt,
+        });
+        if (!row.used) {
+          await storage.markProofCodeUsed(row.id);
+          usedCount += 1;
+        }
+      }
     }
-    // Audit log
+    const contagious = proofs.some(pr => pr.type === 'contagious_flag' || /contagious/i.test(pr.statement || ''));
+    const categories = Array.from(new Set(
+      proofs
+        .filter(pr => pr.type === 'icd_category')
+        .map(pr => (pr.statement || '').replace(/^Patient condition falls under\s*/i, '').replace(/^ICD-11 category:\s*/i, '').trim())
+    ));
+    const valid = proofs.length > 0;
     await auditService.logEvent({
       eventType: 'ZKP_CODE_VERIFICATION',
       actorType: 'ANONYMOUS',
       actorId: '',
       targetType: 'ZKP_PROOF',
-      targetId: proof.id.toString(),
+      targetId: valid ? proofs[0].proofId.toString() : 'unknown',
       action: 'VERIFY_BY_CODE',
-      outcome: result.isValid ? 'SUCCESS' : 'FAILURE',
-      metadata: { codeHash, attempts: codeRecord.attempts + 1 },
-      severity: result.isValid ? 'info' : 'warning',
+      outcome: valid ? 'SUCCESS' : 'FAILURE',
+      metadata: { codeHash, proofs: proofs.length, usedCount },
+      severity: valid ? 'info' : 'warning',
     });
-    if (result.isValid) {
-      return res.json({
-        valid: true,
-        patientName: proof.publicStatement || '',
-        claimType: proof.proofType || '',
-        claimValue: proof.publicStatement || '',
-        claimDate: proof.verifiedAt || '',
-        message: 'Proof is valid',
-      });
-    } else {
-      return res.status(400).json({ valid: false, message: 'Invalid proof' });
+    if (!valid) {
+      return res.status(400).json({ valid: false, message: 'Invalid or expired proofs for this code' });
     }
+    return res.json({
+      valid: true,
+      visitCode: code,
+      totalProofs: proofs.length,
+      summary: { contagious, categories },
+      proofs,
+      message: 'Proofs valid',
+    });
   } catch (error: any) {
     return res.status(500).json({ valid: false, message: error.message || 'Verification failed' });
   }

@@ -175,7 +175,8 @@ export class ZKPService {
     expiresInDays: number = 30,
     propertyCode: number,
     propertyValue: number,
-    patientPhoneNumber?: string
+    patientPhoneNumber?: string,
+    publicStatementOverride?: string
   ): Promise<{ proofId: number; proofData: ZKPProofData; verificationCode?: string }> {
     const { diagnosis, prescription, treatment } = medicalData;
     const d = ZKPService.stringToField(diagnosis);
@@ -245,7 +246,7 @@ export class ZKPService {
       const proofRecord = await storage.createZKPProof({
         patientDID: medicalData.patientDID,
         proofType: 'medical_record',
-        publicStatement: `Patient ${medicalData.patientDID} has a valid medical record for property code ${propertyCode}`,
+        publicStatement: publicStatementOverride || `Patient ${medicalData.patientDID} has a valid medical record for property code ${propertyCode}`,
         secretData: '',
         proofData: proofData,
         challenge: '',
@@ -484,14 +485,124 @@ export class ZKPService {
     const prescription = formData.prescription || "";
     const treatment = formData.treatment || prescription || ""; // Use prescription as treatment if no treatment field
     
-    // Simple medical analysis logic
+    // --- Enhancement: Call Python NLP microservice for entity extraction and ICD-11 mapping ---
+    let nlpEntities = [];
+    let icdCodes = [] as Array<{ entity?: string; icd_code?: string; icd_description?: string; title?: string; chapter?: string; block?: string; contagious?: boolean }>;
+    let nlpError = null;
+    try {
+      const response = await fetch('http://localhost:8000/analyze', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ diagnosis, prescription, treatment })
+      });
+      if (response.ok) {
+        const nlpResult = await response.json();
+        nlpEntities = nlpResult.entities || [];
+        icdCodes = nlpResult.icd_codes || [];
+      } else {
+        nlpError = `NLP service error: ${response.status}`;
+      }
+    } catch (err) {
+      nlpError = `NLP service unavailable: ${err}`;
+    }
+
+    // Load ICD-11 dictionary (lazy) and compute contagious flag using descriptors, not hardcoded diseases
+    const CONTAGION_HINT_WORDS = [
+      'infectious', 'communicable', 'transmissible', 'zoonotic', 'viral', 'bacterial', 'parasitic', 'mycobacterial', 'fungal', 'mycosis',
+      'infection', 'infected'
+    ];
+    const normalize = (s?: string) => (s || '').toLowerCase().trim();
+
+    let icdIndex: Record<string, any> | null = null;
+    try {
+      // Read once and cache on the class (in-memory)
+      // @ts-ignore
+      if (!(this as any)._icdIndex) {
+        const dictPath = path.join(__dirname, '../icd11_dict.json');
+        const json = fs.readFileSync(dictPath, 'utf8');
+        (this as any)._icdIndex = JSON.parse(json);
+        if (process.env.NODE_ENV !== 'production') {
+          console.log('[ZKP] ICD-11 dictionary loaded');
+        }
+      }
+      icdIndex = (this as any)._icdIndex as Record<string, any>;
+    } catch (e) {
+      icdIndex = null; // proceed without dictionary
+      if (process.env.NODE_ENV !== 'production') {
+        console.warn('[ZKP] ICD-11 dictionary failed to load:', (e as any)?.message);
+      }
+    }
+
+    // Filter out non-diseases (e.g., drug names or severity modifiers) using descriptor hints
+    let diseaseIcds = icdCodes.filter((item) => {
+      const desc = normalize(item.icd_description) || normalize(item.title) || normalize(item.entity);
+      if (!desc) return false;
+      // If dictionary available, try to find a matching entry to confirm it's a disease-like term
+      let dictHit: string | null = null;
+      if (icdIndex) {
+        if (icdIndex[desc]) dictHit = desc;
+        else if (icdIndex[desc.replace(/\s+\(.*\)$/, '')]) dictHit = desc.replace(/\s+\(.*\)$/, '');
+      }
+      const looksLikeDisease = /disease|infection|syndrome|fever|influenza|pneumonia|meningitis|hepatitis|diarrhea|cholera|measles|malaria|tuberculosis/.test(desc) || !!dictHit;
+      // Exclude obvious medications/modifiers
+      const looksLikeDrugOrModifier = /tablet|capsule|injection|syrup|dose|mg|drug|medication|vitamin|supplement|mild|moderate|severe|cetirizine|paracetamol|ibuprofen/.test(desc);
+      return looksLikeDisease && !looksLikeDrugOrModifier;
+    });
+
+    // Dictionary-backed fallback: if nothing classified as disease, try to map diagnosis tokens to ICD entries
+    if ((!diseaseIcds || diseaseIcds.length === 0) && icdIndex) {
+      const dx = normalize(diagnosis);
+      if (dx) {
+        const compact = dx.replace(/[^a-z0-9]/g, ''); // covid-19 -> covid19
+        const rawTokens = dx.replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).filter(t => t.length >= 3);
+        const joinedPairs: string[] = [];
+        for (let i = 0; i < rawTokens.length - 1; i++) {
+          const a = rawTokens[i];
+          const b = rawTokens[i + 1];
+          if (/^\d+$/.test(b) || /^[a-z]+\d+$/.test(b)) {
+            joinedPairs.push(a + b); // covid + 19 => covid19
+          }
+        }
+        const candidates = Array.from(new Set<string>([compact, ...rawTokens, ...joinedPairs]));
+
+        const inferred: Array<{ icd_description: string }> = [];
+        for (const cand of candidates) {
+          const entry = icdIndex[cand];
+          const desc = normalize(entry?.desc) || cand;
+          if (!entry) continue;
+          const looksLikeDisease = /disease|infection|syndrome|fever|influenza|pneumonia|meningitis|hepatitis|diarrhea|cholera|measles|malaria|tuberculosis|covid/.test(desc);
+          const looksLikeDrugOrModifier = /tablet|capsule|injection|syrup|dose|mg|drug|medication|vitamin|supplement|vaccine|cetirizine|paracetamol|ibuprofen/.test(desc);
+          if (looksLikeDisease && !looksLikeDrugOrModifier) {
+            inferred.push({ icd_description: entry.desc || cand });
+          }
+        }
+        if (inferred.length > 0) {
+          diseaseIcds = inferred;
+        }
+      }
+    }
+
+    // Determine contagious by checking ICD descriptions (or dict entries) for contagion hints
+    const diseaseTexts = diseaseIcds.map(i => normalize(i.icd_description) || normalize(i.title) || normalize(i.entity));
+    const isContagiousByIcd = diseaseTexts.some((t) => t && CONTAGION_HINT_WORDS.some(w => t.includes(w)));
+    let isContagious = isContagiousByIcd;
+    if (!isContagious) {
+      // Fallback: diagnosis text contains generic contagion hints (not specific diseases)
+      const dx = normalize(diagnosis);
+      isContagious = CONTAGION_HINT_WORDS.some(w => dx.includes(w));
+    }
+
+    // Build final analysis
     const analysis = {
       requiresTreatment: diagnosis.toLowerCase().includes('treatment') || treatment.length > 0,
       requiresRest: diagnosis.toLowerCase().includes('rest') || diagnosis.toLowerCase().includes('recovery'),
       requiresMedication: prescription.length > 0,
-      isContagious: diagnosis.toLowerCase().includes('infectious') || diagnosis.toLowerCase().includes('contagious'),
+      isContagious,
       severity: this.determineSeverity(diagnosis),
-      workImpact: this.determineWorkImpact(diagnosis, treatment)
+      workImpact: this.determineWorkImpact(diagnosis, treatment),
+      entities: nlpEntities,
+      icd_codes: diseaseIcds,
+      nlpError
     };
 
     return analysis;
@@ -501,44 +612,78 @@ export class ZKPService {
    * Generate proofs from medical data
    */
   async generateProofsFromMedicalData(patientDID: string, formData: any, analysis: any): Promise<any[]> {
-    const proofs = [];
+    const proofs: Array<{ proofId: number; type: string; statement: string }> = [];
 
-    // Generate condition proof
-    if (analysis.requiresTreatment || analysis.requiresMedication) {
-      console.log('[ZKP] Generating condition proof for patientDID:', patientDID);
-      const conditionProof = await this.generateMedicalRecordProof({
+    // Dynamic ICD-11 driven proofs
+    const icdList: Array<{ code?: string; title?: string; chapter?: string; block?: string; contagious?: boolean }> = analysis?.icd_codes || [];
+    const seenStatements = new Set<string>();
+
+    // Helper to create an abstract statement and generate proof once per category/title
+    const generateCategoryProof = async (categoryLabel: string, propertyCode = 0, propertyValue = 0) => {
+      const statement = `Patient condition falls under ${categoryLabel}`;
+      if (seenStatements.has(statement)) return;
+      const proofRes = await this.generateMedicalRecordProof({
         diagnosis: formData.diagnosis,
         prescription: formData.prescription,
-        treatment: formData.treatment || formData.prescription || "No specific treatment", // Use prescription as treatment if no treatment field
+        treatment: formData.treatment || formData.prescription || "No specific treatment",
         patientDID,
-        doctorDID: `doctor-${formData.hospital_id || '001'}`, // Use hospital_id to create doctor DID
-        hospital_id: formData.hospital_id || 0, // Use hospital_id to create hospital DID
+        doctorDID: `doctor-${formData.hospital_id || '001'}`,
+        hospital_id: formData.hospital_id || 0,
         visitDate: Date.now()
-      }, 0, 0, 0);
-      console.log('[ZKP] Condition proof generated:', conditionProof);
-      proofs.push({
-        proofId: conditionProof.proofId,
-        type: 'condition',
-        statement: 'Patient has valid medical condition requiring treatment'
-      });
+      }, 0, propertyCode, propertyValue, undefined, `ICD-11 category: ${categoryLabel}`);
+      proofs.push({ proofId: proofRes.proofId, type: 'icd_category', statement });
+      seenStatements.add(statement);
+    };
+
+    const generateContagiousProof = async () => {
+      const statement = 'Patient condition may be contagious';
+      if (seenStatements.has(statement)) return;
+      const proofRes = await this.generateMedicalRecordProof({
+        diagnosis: formData.diagnosis,
+        prescription: formData.prescription,
+        treatment: formData.treatment || formData.prescription || "No specific treatment",
+        patientDID,
+        doctorDID: `doctor-${formData.hospital_id || '001'}`,
+        hospital_id: formData.hospital_id || 0,
+        visitDate: Date.now()
+      }, 1, 1, 1, undefined, 'Contagious condition present');
+      proofs.push({ proofId: proofRes.proofId, type: 'contagious_flag', statement });
+      seenStatements.add(statement);
+    };
+
+    // 1) Generate proofs per ICD-11 abstraction (prefer block, then chapter, then title)
+    for (const icd of icdList) {
+      if (icd.block) {
+        await generateCategoryProof(`ICD-11 block ${icd.block}`);
+        continue;
+      }
+      if (icd.chapter) {
+        await generateCategoryProof(`ICD-11 chapter ${icd.chapter}`);
+        continue;
+      }
+      if (icd.title) {
+        // Abstract the specific title to avoid revealing exact disease
+        await generateCategoryProof(`ICD-11 disease category: ${icd.title}`);
+        continue;
+      }
+
+      // Fallback: if NLP returned raw icd_code/icd_description fields, still produce an abstract proof
+      const anyIcd = icd as any;
+      if (anyIcd.icd_description && typeof anyIcd.icd_description === 'string') {
+        await generateCategoryProof(`ICD-11 disease category: ${anyIcd.icd_description}`);
+        continue;
+      }
+      if (anyIcd.icd_code && typeof anyIcd.icd_code === 'string') {
+        await generateCategoryProof(`ICD-11 code ${anyIcd.icd_code}`);
+        continue;
+      }
     }
 
-    // Generate rest requirement proof
-    if (analysis.requiresRest) {
-      const restProof = await this.generateMedicalRecordProof({
-        diagnosis: formData.diagnosis,
-        prescription: formData.prescription,
-        treatment: formData.treatment || formData.prescription || "No specific treatment", // Use prescription as treatment if no treatment field
-        patientDID,
-        doctorDID: `doctor-${formData.hospital_id || '001'}`, // Use hospital_id to create doctor DID
-        hospital_id: formData.hospital_id || 0, // Use hospital_id to create hospital DID
-        visitDate: Date.now()
-      }, 0, 0, 0);
-      proofs.push({
-        proofId: restProof.proofId,
-        type: 'rest',
-        statement: 'Patient requires rest period'
-      });
+    // 2) Contagious/widespread flag based on NLP
+    if (analysis?.isContagious) {
+      await generateContagiousProof();
+    } else if (icdList.some(i => i.contagious)) {
+      await generateContagiousProof();
     }
 
     return proofs;

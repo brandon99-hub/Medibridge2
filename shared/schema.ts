@@ -57,6 +57,8 @@ export const patientRecords = pgTable("patient_records", {
   storageCost: decimal("storage_cost", { precision: 20, scale: 8 }).default("0"), // Storage cost in FIL
   storageMetadata: jsonb("storage_metadata"), // Additional storage metadata
   hospital_id: integer("hospital_id").notNull(),
+  entities: jsonb("entities"), // NLP-extracted entities
+  icd_codes: jsonb("icd_codes"), // ICD-11 codes
 });
 
 export const consentRecords = pgTable("consent_records", {

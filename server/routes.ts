@@ -22,6 +22,7 @@ import { redisService } from "./redis-service";
 import { requireAdminAuth } from "./admin-auth-middleware";
 import zkpRoutes from "./zkp-routes";
 import { StaffInvitationService } from "./staff-invitation-service";
+import { zkpService } from "./zkp-service";
 
 // Zod schema for AuthorizedPersonnel
 const authorizedPersonnelSchema = z.object({
@@ -70,6 +71,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Setup ZKP routes
   app.use('/api/zkp', zkpRoutes);
 
+  // Analytics: Disease summary from verified ZK proofs (aggregated, privacy-preserving)
+  app.get('/api/analytics/disease-summary', async (req, res, next) => {
+    try {
+      const { from, to } = req.query as { from?: string; to?: string };
+      const fromDate = from ? new Date(from) : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+      const toDate = to ? new Date(to) : new Date();
+
+      // Minimal aggregation using stored zkpProofs publicStatement
+      // In a fuller implementation, we’d join with icd_codes or a mapping table
+      const proofs = await storage.getZKPProofsByDateRange(fromDate, toDate);
+      const summary: Record<string, number> = {};
+      for (const p of proofs) {
+        // Count by publicStatement bucket (e.g., category or contagious flag)
+        const key = p.publicStatement || 'Unknown';
+        summary[key] = (summary[key] || 0) + 1;
+      }
+
+      res.json({ success: true, from: fromDate.toISOString(), to: toDate.toISOString(), summary });
+    } catch (error) {
+      next(error);
+    }
+  });
+
   // Setup Staff Management routes
   app.use('/api/staff', staffManagementRoutes);
 
@@ -98,10 +122,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
         submittedBy: user.id,
         hospital_id: user.hospital_id, // Ensure hospital_id is always set
       };
+
+      // --- Enhancement: Analyze medical data and add NLP results ---
+      try {
+        const zkp = await zkpService;
+        const analysis = await zkp.analyzeMedicalData(validatedData);
+        recordData.entities = analysis.entities || [];
+        recordData.icd_codes = analysis.icd_codes || [];
+      } catch (err) {
+        console.error("[NLP/ICD] Failed to analyze medical data:", err);
+        // Proceed without entities/icd_codes if analysis fails
+      }
       
       console.log("User in /api/submit_record:", user);
       console.log("Record data to insert:", recordData);
       const record = await storage.createPatientRecord(recordData);
+
+      // Fire-and-forget: generate dynamic ZK proofs from NLP/ICD analysis (non-blocking)
+      try {
+        const zkp = await zkpService;
+        if (recordData.patientDID) {
+          zkp.generateProofsFromMedicalData(recordData.patientDID, validatedData, {
+            entities: recordData.entities || [],
+            icd_codes: recordData.icd_codes || [],
+          }).catch(err => console.error('[ZKP] Proof generation failed:', err));
+        }
+      } catch (e) {
+        console.error('[ZKP] Skipping auto-proof generation:', e);
+      }
 
       res.status(201).json({ 
         message: "Record submitted successfully", 
@@ -165,7 +213,38 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Check if consent has been granted for this hospital
       const consentRecords = await storage.getConsentRecordsByPatientId(nationalId, user.id);
-      const hasConsent = consentRecords.length > 0;
+      // Compute traditional consent validity as last access within 12 hours
+      let hasConsent = false;
+      let traditionalConsentExpiresAt: Date | undefined = undefined;
+      if (consentRecords.length > 0) {
+        const lastAccessed = consentRecords
+          .map(r => r.accessedAt)
+          .filter(Boolean)
+          .sort((a: any, b: any) => new Date(b as any).getTime() - new Date(a as any).getTime())[0] as Date | undefined;
+        if (lastAccessed) {
+          const expires = new Date(new Date(lastAccessed).getTime() + 12 * 60 * 60 * 1000);
+          traditionalConsentExpiresAt = expires;
+          hasConsent = new Date() < expires;
+        }
+      }
+
+      // If patient has DID, also consider Web3 consent (stricter, stored with explicit expiresAt)
+      let web3ConsentExpiresAt: Date | undefined = undefined;
+      if (patientProfile?.patientDID) {
+        const web3Consents = await storage.getConsentByPatientAndRequester(
+          patientProfile.patientDID,
+          `did:medbridge:hospital:${user.id}`
+        );
+        const active = web3Consents.filter(c => c.consentGiven && !c.revokedAt && (!c.expiresAt || new Date() < c.expiresAt));
+        if (active.length > 0) {
+          // Take the soonest expiry among active consents
+          const expList = active.map(c => c.expiresAt).filter(Boolean) as Date[];
+          if (expList.length > 0) {
+            web3ConsentExpiresAt = new Date(Math.min(...expList.map(d => new Date(d).getTime())));
+          }
+          hasConsent = true;
+        }
+      }
 
       // Return patient info and record count for consent modal
       res.json({
@@ -175,6 +254,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         patientDID: patientProfile?.patientDID,
         hasWeb3Profile: !!patientProfile,
         hasConsent: hasConsent,
+        consentExpiresAt: web3ConsentExpiresAt || traditionalConsentExpiresAt || null,
+        consentType: web3ConsentExpiresAt ? 'web3' : 'traditional',
+        // Server-side pagination support (optional; client currently paginates)
+        totalRecords: records.length,
         records: hasConsent ? records.map(record => ({
           id: record.id,
           visitDate: record.visitDate,
@@ -1425,8 +1508,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         parseInt(staff.hospitalId),
         req.user!.id,
         {
-          email: staff.email,
-          role: staff.role,
+          email: staff.email || "",
+          role: (staff.role as any) || "BOTH_A_B",
           department: staff.department,
           name: staff.name,
         },

@@ -11,6 +11,15 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Search, FileText, Clock, Users, Stethoscope, AlertTriangle, Globe, Key, Shield } from "lucide-react";
+import {
+  Pagination,
+  PaginationContent,
+  PaginationItem,
+  PaginationPrevious,
+  PaginationNext,
+  PaginationLink,
+  PaginationEllipsis,
+} from "@/components/ui/pagination";
 
 interface SearchFormData {
   nationalId: string;
@@ -65,6 +74,14 @@ export default function HospitalBInterface({ onShowConsentModal }: HospitalBInte
   const [showWeb3Records, setShowWeb3Records] = useState(false);
   const [authenticatedPatient, setAuthenticatedPatient] = useState<any>(null);
   const [web3ConsentData, setWeb3ConsentData] = useState<any>(null);
+
+  // Pagination state (Traditional records)
+  const [recordsPage, setRecordsPage] = useState<number>(1);
+  const recordsPageSize = 5;
+
+  // Pagination state (Web3 records list at bottom)
+  const [web3Page, setWeb3Page] = useState<number>(1);
+  const web3PageSize = 5;
 
   const { apiRequestWithCsrf } = useCsrf();
 
@@ -169,22 +186,23 @@ export default function HospitalBInterface({ onShowConsentModal }: HospitalBInte
   // Access record with verifiable credential
   const accessRecordMutation = useMutation({
     mutationFn: async () => {
-      if (!web3ConsentData?.verifiableCredential) {
-        throw new Error("No verifiable credential available");
+      if (!web3PatientData?.patientDID) {
+        throw new Error("No patient DID available. Search by phone first.");
       }
-      
-      const response = await apiRequestWithCsrf("POST", "/api/get-record/", {
-        verifiableCredential: web3ConsentData.verifiableCredential,
-        hospitalDID: "did:medbridge:hospital:brandon",
+
+      const requesterId = `did:medbridge:hospital:${user?.id}`;
+      const response = await apiRequestWithCsrf("POST", "/api/web3/access-records", {
+        patientDID: web3PatientData.patientDID,
+        requesterId,
       });
       return response.json();
     },
     onSuccess: (data) => {
       toast({
-        title: "Web3 Record Access Successful",
-        description: "Medical record retrieved using verifiable credential",
+        title: "Web3 Access Successful",
+        description: "Accessed patient records via consent verification",
       });
-      console.log("Decrypted Web3 record:", data.record);
+      console.log("Accessible Web3 records:", data.records);
     },
     onError: (error: Error) => {
       toast({
@@ -195,20 +213,29 @@ export default function HospitalBInterface({ onShowConsentModal }: HospitalBInte
     },
   });
 
-  // Web3 search mutation
+  // Web3 search mutation (phone -> DID resolution, then allow DID-based fetch)
   const web3SearchMutation = useMutation({
     mutationFn: async (phoneNumber: string) => {
-      const response = await apiRequestWithCsrf("POST", "/api/web3/get-records", {
-        phoneNumber: phoneNumber
+      const response = await apiRequestWithCsrf("POST", "/api/patient-lookup/phone", {
+        phoneNumber,
       });
       return await response.json();
     },
     onSuccess: (data) => {
       setWeb3PatientData(data);
-      toast({
-        title: "Web3 Records Retrieved",
-        description: `Found ${data.totalRecords || 0} Web3 medical records`,
-      });
+      if (data?.found) {
+        const count = data?.recordsSummary?.totalRecords ?? data?.recordCount ?? 0;
+        toast({
+          title: "Web3 Patient Found",
+          description: `DID resolved. ${count} record(s) available.`,
+        });
+      } else {
+        toast({
+          title: "No Web3 Patient Found",
+          description: data?.message || "No patient found with this phone number",
+          variant: "destructive",
+        });
+      }
     },
     onError: (error: Error) => {
       toast({
@@ -463,7 +490,15 @@ export default function HospitalBInterface({ onShowConsentModal }: HospitalBInte
                       <div className="flex flex-col sm:flex-row items-start sm:items-center space-y-2 sm:space-y-0 sm:space-x-2">
                         <Badge className="bg-green-100 text-green-800 hover:bg-green-100 text-xs">
                           <Users className="h-3 w-3 mr-1" />
-                          Consent Verified
+                          {(() => {
+                            const exp = (patientData as any).consentExpiresAt ? new Date((patientData as any).consentExpiresAt) : null;
+                            if (exp) {
+                              const remainingMs = exp.getTime() - Date.now();
+                              const remainingHrs = Math.max(0, Math.floor(remainingMs / (1000 * 60 * 60)));
+                              return `Consent Verified • expires in ${remainingHrs}h`;
+                            }
+                            return "Consent Verified";
+                          })()}
                         </Badge>
                         <div className="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-2">
                         <Button 
@@ -568,9 +603,38 @@ export default function HospitalBInterface({ onShowConsentModal }: HospitalBInte
               )}
 
               <div className="space-y-4">
-                {patientData && showRecords && patientData.records
-                  .filter(record => record.recordType === "traditional")
-                  .map((record) => (
+                {patientData && showRecords && (() => {
+                  const total = patientData.records.length;
+                  const totalPages = Math.max(1, Math.ceil(total / recordsPageSize));
+                  const currentPage = Math.min(recordsPage, totalPages);
+                  const startIdx = (currentPage - 1) * recordsPageSize;
+                  const endIdx = Math.min(startIdx + recordsPageSize, total);
+                  const pageRecords = patientData.records.slice(startIdx, endIdx);
+
+                  const buildPageNumbers = () => {
+                    const pages: (number | string)[] = [];
+                    if (totalPages <= 7) {
+                      for (let i = 1; i <= totalPages; i++) pages.push(i);
+                    } else {
+                      pages.push(1);
+                      if (currentPage > 4) pages.push("...");
+                      const start = Math.max(2, currentPage - 1);
+                      const end = Math.min(totalPages - 1, currentPage + 1);
+                      for (let i = start; i <= end; i++) pages.push(i);
+                      if (currentPage < totalPages - 3) pages.push("...");
+                      pages.push(totalPages);
+                    }
+                    return pages;
+                  };
+
+                  return (
+                    <>
+                      <div className="flex items-center justify-between text-xs text-slate-600">
+                        <span>
+                          Showing {total === 0 ? 0 : startIdx + 1}–{endIdx} of {total}
+                        </span>
+                      </div>
+                      {pageRecords.map((record) => (
                     <Card key={record.id}>
                       <CardContent className="pt-6">
                         <div className="flex items-start justify-between mb-4">
@@ -594,6 +658,9 @@ export default function HospitalBInterface({ onShowConsentModal }: HospitalBInte
                             {record.department && (
                               <Badge variant="secondary">{record.department}</Badge>
                             )}
+                            <Badge className={record.recordType === 'web3' ? 'bg-purple-100 text-purple-800' : 'bg-slate-100 text-slate-700'}>
+                              {record.recordType === 'web3' ? 'Web3' : 'Traditional'}
+                            </Badge>
                           </div>
                         </div>
                         
@@ -620,7 +687,44 @@ export default function HospitalBInterface({ onShowConsentModal }: HospitalBInte
                         </div>
                       </CardContent>
                     </Card>
-                  ))}
+                      ))}
+
+                      {totalPages > 1 && (
+                        <Pagination className="mt-2">
+                          <PaginationContent>
+                            <PaginationItem>
+                              <PaginationPrevious
+                                href="#"
+                                onClick={(e) => { e.preventDefault(); setRecordsPage(Math.max(1, currentPage - 1)); }}
+                              />
+                            </PaginationItem>
+                            {buildPageNumbers().map((p, idx) => (
+                              <PaginationItem key={idx}>
+                                {p === "..." ? (
+                                  <PaginationEllipsis />
+                                ) : (
+                                  <PaginationLink
+                                    href="#"
+                                    isActive={p === currentPage}
+                                    onClick={(e) => { e.preventDefault(); setRecordsPage(p as number); }}
+                                  >
+                                    {p as number}
+                                  </PaginationLink>
+                                )}
+                              </PaginationItem>
+                            ))}
+                            <PaginationItem>
+                              <PaginationNext
+                                href="#"
+                                onClick={(e) => { e.preventDefault(); setRecordsPage(Math.min(totalPages, currentPage + 1)); }}
+                              />
+                            </PaginationItem>
+                          </PaginationContent>
+                        </Pagination>
+                      )}
+                    </>
+                  );
+                })()}
                 
                 {!patientData && (
                   <Card>
@@ -824,10 +928,39 @@ export default function HospitalBInterface({ onShowConsentModal }: HospitalBInte
             <CardContent>
               {web3PatientData.hasConsent ? (
                 <div className="space-y-4">
-                  {web3PatientData.fullRecords && web3PatientData.fullRecords.length > 0 ? (
-                    web3PatientData.fullRecords
-                      .filter((record: any) => record.recordType === "web3")
-                      .map((record: any) => (
+                  {(() => {
+                    const list = (web3PatientData.fullRecords || []).filter((record: any) => record.recordType === "web3");
+                    const total = list.length;
+                    const totalPages = Math.max(1, Math.ceil(total / web3PageSize));
+                    const currentPage = Math.min(web3Page, totalPages);
+                    const startIdx = (currentPage - 1) * web3PageSize;
+                    const endIdx = Math.min(startIdx + web3PageSize, total);
+                    const pageRecords = list.slice(startIdx, endIdx);
+
+                    const buildPageNumbers = () => {
+                      const pages: (number | string)[] = [];
+                      if (totalPages <= 7) {
+                        for (let i = 1; i <= totalPages; i++) pages.push(i);
+                      } else {
+                        pages.push(1);
+                        if (currentPage > 4) pages.push("...");
+                        const start = Math.max(2, currentPage - 1);
+                        const end = Math.min(totalPages - 1, currentPage + 1);
+                        for (let i = start; i <= end; i++) pages.push(i);
+                        if (currentPage < totalPages - 3) pages.push("...");
+                        pages.push(totalPages);
+                      }
+                      return pages;
+                    };
+
+                    return total > 0 ? (
+                      <>
+                        <div className="flex items-center justify-between text-xs text-slate-600 mb-2">
+                          <span>
+                            Showing {total === 0 ? 0 : startIdx + 1}–{endIdx} of {total}
+                          </span>
+                        </div>
+                        {pageRecords.map((record: any) => (
                         <div key={record.id} className="border rounded-lg p-4 bg-slate-50">
                           <div className="flex items-start justify-between mb-3">
                             <div>
@@ -867,10 +1000,46 @@ export default function HospitalBInterface({ onShowConsentModal }: HospitalBInte
                             </div>
                           </div>
                         </div>
-                      ))
-                  ) : (
-                    <div className="text-center text-slate-500">No medical records found.</div>
-                  )}
+                        ))}
+
+                        {totalPages > 1 && (
+                          <Pagination className="mt-2">
+                            <PaginationContent>
+                              <PaginationItem>
+                                <PaginationPrevious
+                                  href="#"
+                                  onClick={(e) => { e.preventDefault(); setWeb3Page(Math.max(1, currentPage - 1)); }}
+                                />
+                              </PaginationItem>
+                              {buildPageNumbers().map((p, idx) => (
+                                <PaginationItem key={idx}>
+                                  {p === "..." ? (
+                                    <PaginationEllipsis />
+                                  ) : (
+                                    <PaginationLink
+                                      href="#"
+                                      isActive={p === currentPage}
+                                      onClick={(e) => { e.preventDefault(); setWeb3Page(p as number); }}
+                                    >
+                                      {p as number}
+                                    </PaginationLink>
+                                  )}
+                                </PaginationItem>
+                              ))}
+                              <PaginationItem>
+                                <PaginationNext
+                                  href="#"
+                                  onClick={(e) => { e.preventDefault(); setWeb3Page(Math.min(totalPages, currentPage + 1)); }}
+                                />
+                              </PaginationItem>
+                            </PaginationContent>
+                          </Pagination>
+                        )}
+                      </>
+                    ) : (
+                      <div className="text-center text-slate-500">No medical records found.</div>
+                    );
+                  })()}
                 </div>
               ) : web3PatientData.requiresConsent ? (
                 <div className="text-center text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-6">

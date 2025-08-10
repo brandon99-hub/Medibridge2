@@ -112,11 +112,36 @@ export default function HospitalAInterface() {
       const response = await apiRequestWithCsrf("POST", "/api/submit_record", data);
       return await response.json();
     },
-    onSuccess: () => {
+    onSuccess: async (result: any) => {
       toast({
         title: "Record Submitted",
         description: "Patient record submitted successfully to MediBridge",
       });
+      // Best-effort: analyze and generate proofs to show a read-only summary
+      try {
+        const analyzeRes = await apiRequestWithCsrf("POST", "/api/zkp/analyze-medical-data", {
+          formData,
+        });
+        const analyzeJson = await analyzeRes.json();
+
+        const proofsRes = await apiRequestWithCsrf("POST", "/api/zkp/generate-proofs-from-form", {
+          patientDID: result?.patientDID || "",
+          formData: { ...formData, hospital_id: user?.hospital_id || 1 },
+        });
+        const proofsJson = await proofsRes.json();
+
+        setZkProofResult({
+          code: proofsJson.visitCode || "",
+          message: proofsJson.message || "",
+          full: {
+            analysis: analyzeJson?.analysis || analyzeJson,
+            proofs: proofsJson?.proofs || [],
+          }
+        });
+        setShowProofModal(true);
+      } catch (e) {
+        console.warn('[NLP/ZKP UX] Inline summary skipped:', e);
+      }
       setFormData({
         patientName: "",
         nationalId: "",
@@ -450,6 +475,52 @@ export default function HospitalAInterface() {
                   </form>
                 </CardContent>
               </Card>
+
+              {showProofModal && zkProofResult && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle>NLP & Proofs Summary</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    <div>
+                      <h6 className="text-sm font-medium text-slate-700 mb-1">NLP extracted conditions (ICD‑11)</h6>
+                      <div className="text-sm text-slate-600">
+                        {(zkProofResult.full?.analysis?.icd_codes || []).length > 0 ? (
+                          <ul className="list-disc ml-5">
+                            {zkProofResult.full.analysis.icd_codes.map((c: any, idx: number) => (
+                              <li key={idx}>
+                                {c.code ? `${c.code} — ` : ""}{c.title || c.block || c.chapter || "ICD entry"}
+                                {c.contagious ? " • contagious" : ""}
+                              </li>
+                            ))}
+                          </ul>
+                        ) : (
+                          <span>No ICD‑11 entries detected.</span>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="pt-2 border-t border-slate-200">
+                      <h6 className="text-sm font-medium text-slate-700 mb-1">Proofs generated</h6>
+                      <div className="text-sm text-slate-600">
+                        {(zkProofResult.full?.proofs || []).length > 0 ? (
+                          <ul className="list-disc ml-5">
+                            {zkProofResult.full.proofs.map((p: any, idx: number) => (
+                              <li key={idx}>{p.statement || p.type}</li>
+                            ))}
+                          </ul>
+                        ) : (
+                          <span>No proofs generated.</span>
+                        )}
+                      </div>
+                    </div>
+
+                    {zkProofResult.code && (
+                      <div className="text-xs text-slate-500">Visit code: {zkProofResult.code}</div>
+                    )}
+                  </CardContent>
+                </Card>
+              )}
             </div>
 
             <div className="space-y-6">

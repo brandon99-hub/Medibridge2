@@ -25,7 +25,7 @@ import {
   type EmergencyConsentRecordSchema
 } from "@shared/schema"; // Import emergency consent schema
 import { db } from "./db";
-import { eq, and, or, sql, isNull, gt, desc, inArray, lt } from "drizzle-orm"; // Import sql and inArray
+import { eq, and, or, sql, isNull, gt, desc, inArray, lt, gte, lte } from "drizzle-orm"; // Import sql and inArray
 import session from "express-session";
 import connectPg from "connect-pg-simple";
 import { pool } from "./db";
@@ -1435,12 +1435,29 @@ export class DatabaseStorage implements IStorage {
     return db.query.proofCodes.findFirst({ where: eq(proofCodes.codeHash, codeHash) });
   }
 
+  // Fetch all proof-code rows for a given code (one code can map to multiple proofs in a visit)
+  async getProofCodesByHash(codeHash: string): Promise<any[]> {
+    return db.select().from(proofCodes).where(eq(proofCodes.codeHash, codeHash));
+  }
+
   async markProofCodeUsed(id: number): Promise<void> {
     await db.update(proofCodes).set({ used: true }).where(eq(proofCodes.id, id));
   }
 
   async incrementProofCodeAttempts(id: number): Promise<void> {
     await db.update(proofCodes).set({ attempts: sql`${proofCodes.attempts} + 1` }).where(eq(proofCodes.id, id));
+  }
+
+  // Analytics helper: fetch ZKP proofs by date range (active only)
+  async getZKPProofsByDateRange(from: Date, to: Date): Promise<ZKPProof[]> {
+    return await db
+      .select()
+      .from(zkpProofs)
+      .where(and(
+        gte(zkpProofs.createdAt, from),
+        lte(zkpProofs.createdAt, to),
+        eq(zkpProofs.isActive, true)
+      ));
   }
 }
 

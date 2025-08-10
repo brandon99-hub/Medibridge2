@@ -1,9 +1,10 @@
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import { useLocation } from "wouter";
 
 export default function VerifierPage() {
   const [code, setCode] = useState("");
   const [result, setResult] = useState<string | null>(null);
+  const [struct, setStruct] = useState<any | null>(null);
   const [, navigate] = useLocation();
 
   const handleVerify = async () => {
@@ -15,10 +16,10 @@ export default function VerifierPage() {
     });
     const data = await resp.json();
     if (data.valid) {
-      setResult(
-        `✅ Proof is VALID\nPatient: ${data.patientName}\nClaim: ${data.claimType} = ${data.claimValue}\nDate: ${data.claimDate}`
-      );
+      setStruct(data);
+      setResult(null);
     } else {
+      setStruct(null);
       setResult(`❌ ${data.message || 'Invalid code or proof'}`);
     }
   };
@@ -62,6 +63,33 @@ export default function VerifierPage() {
         </div>
         {result && (
           <div className={`mt-4 text-lg font-semibold text-center ${result.includes('VALID') ? 'text-green-600' : 'text-red-600'}`}>{result.split('\n').map((line, i) => <div key={i}>{line}</div>)}</div>
+        )}
+        {struct && (
+          <div className="mt-4 space-y-3">
+            <div className="text-green-700 font-bold text-center">✅ Proofs VALID ({struct.totalProofs})</div>
+            {struct.summary?.contagious && (
+              <div className="text-sm text-red-700 bg-red-50 border border-red-200 rounded px-3 py-2 text-center">Contagious condition</div>
+            )}
+            {Array.isArray(struct.summary?.categories) && struct.summary.categories.length > 0 && (
+              <div className="text-sm text-slate-700 bg-slate-50 border border-slate-200 rounded px-3 py-2">
+                <div className="font-semibold mb-1">ICD‑11 Categories:</div>
+                <ul className="list-disc ml-5">
+                  {struct.summary.categories.map((c: string, i: number) => (
+                    <li key={i}>{c}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            <div className="space-y-2">
+              {struct.proofs?.map((p: any) => (
+                <div key={p.proofId} className="border border-slate-200 rounded-lg p-3">
+                  <div className="text-xs uppercase text-slate-500">{p.type === 'icd_category' ? 'ICD‑11 Category' : p.type === 'contagious_flag' ? 'Contagious Flag' : p.type}</div>
+                  <div className="font-medium text-slate-800">{p.statement}</div>
+                  <div className="text-xs text-slate-500 mt-1">Expires: {p.expiresAt ? new Date(p.expiresAt).toLocaleString() : '—'}</div>
+                </div>
+              ))}
+            </div>
+          </div>
         )}
         <div className="mt-8 text-xs text-slate-500 text-center border-t pt-4">
           <p><b>How it works:</b> Enter the code or scan the QR from a patient's phone or printout. This page will verify the proof instantly, even offline.</p>
