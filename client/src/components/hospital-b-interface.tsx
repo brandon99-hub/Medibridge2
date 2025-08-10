@@ -389,8 +389,8 @@ export default function HospitalBInterface({ onShowConsentModal }: HospitalBInte
           </TabsTrigger>
           <TabsTrigger value="web3" className="flex items-center space-x-1 sm:space-x-2 text-xs sm:text-sm">
             <Globe className="h-3 w-3 sm:h-4 sm:w-4" />
-            <span className="hidden sm:inline">Web3 DID Search</span>
-            <span className="sm:hidden">Web3</span>
+            <span className="hidden sm:inline">On chain</span>
+            <span className="sm:hidden">On chain</span>
           </TabsTrigger>
         </TabsList>
 
