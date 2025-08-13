@@ -19,7 +19,9 @@ export default function AuthPage() {
     username: "", 
     password: "", 
     hospitalName: "", 
-    hospitalType: "" 
+    hospitalType: "",
+    // Placeholder; backend assigns real hospital_id on registration
+    hospital_id: 0
   });
 
   // Redirect if already logged in

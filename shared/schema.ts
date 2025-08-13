@@ -442,3 +442,15 @@ export const proofCodes = pgTable("proof_codes", {
   used: boolean("used").default(false),
   attempts: integer("attempts").default(0),
 });
+
+// Secure key store for persisted patient private keys (encrypted at rest)
+export const secureKeyStore = pgTable("secure_key_store", {
+  patientDid: text("patient_did").primaryKey(),
+  encryptedKey: text("encrypted_key").notNull(),
+  iv: text("iv").notNull(),
+  authTag: text("auth_tag").notNull(),
+  patientSalt: text("patient_salt").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+  lastAccessed: timestamp("last_accessed"),
+  accessCount: integer("access_count").default(0).notNull(),
+});

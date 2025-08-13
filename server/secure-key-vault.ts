@@ -1,6 +1,9 @@
 import crypto from "crypto";
 import bip39 from 'bip39';
 import { auditService } from "./audit-service";
+import { db } from "./db";
+import { secureKeyStore } from "@shared/schema";
+import { eq } from "drizzle-orm";
 
 /**
  * Secure Key Vault - Patient Private Key Management
@@ -16,6 +19,9 @@ export class SecureKeyVault {
   private constructor() {
     // In production, this would be loaded from a secure environment variable
     // or hardware security module (HSM)
+    if (process.env.NODE_ENV === 'production' && !process.env.MASTER_KEY) {
+      throw new Error("MASTER_KEY must be set in production to initialize SecureKeyVault");
+    }
     const masterKeyString = process.env.MASTER_KEY || crypto.randomBytes(32).toString('hex');
     this.masterKey = Buffer.from(masterKeyString, 'hex');
     this.deriveDekKek();
@@ -72,8 +78,26 @@ export class SecureKeyVault {
         accessCount: 0,
       };
 
-      // Store in secure memory (in production, use encrypted database or HSM)
-      this.keyStore.set(patientDID, encryptedKeyData);
+      // Persist to secure database table for durability
+      await db
+        .insert(secureKeyStore)
+        .values({
+          patientDid: patientDID,
+          encryptedKey: encrypted,
+          iv: iv.toString('hex'),
+          authTag: authTag.toString('hex'),
+          patientSalt,
+          accessCount: 0,
+        })
+        .onConflictDoUpdate({
+          target: secureKeyStore.patientDid,
+          set: {
+            encryptedKey: encrypted,
+            iv: iv.toString('hex'),
+            authTag: authTag.toString('hex'),
+            patientSalt,
+          }
+        });
 
       // Audit log key storage
       await auditService.logEvent({
@@ -103,9 +127,22 @@ export class SecureKeyVault {
    */
   async retrievePatientKey(patientDID: string): Promise<string> {
     try {
-      const encryptedData = this.keyStore.get(patientDID);
+      let encryptedData = this.keyStore.get(patientDID);
       if (!encryptedData) {
-        throw new Error('Patient key not found');
+        const row = await db.query.secureKeyStore.findFirst({ where: eq(secureKeyStore.patientDid, patientDID) });
+        if (!row) {
+          throw new Error('Patient key not found');
+        }
+        encryptedData = {
+          encryptedKey: row.encryptedKey,
+          iv: row.iv,
+          authTag: row.authTag,
+          patientSalt: row.patientSalt,
+          createdAt: row.createdAt?.toISOString?.() || new Date().toISOString(),
+          accessCount: row.accessCount || 0,
+          lastAccessed: row.lastAccessed?.toISOString?.(),
+        };
+        this.keyStore.set(patientDID, encryptedData);
       }
 
       // Derive decryption key
@@ -128,6 +165,15 @@ export class SecureKeyVault {
       // Update access count and audit
       encryptedData.accessCount++;
       encryptedData.lastAccessed = new Date().toISOString();
+      try {
+        await db
+          .update(secureKeyStore)
+          .set({
+            accessCount: encryptedData.accessCount,
+            lastAccessed: new Date(),
+          })
+          .where(eq(secureKeyStore.patientDid, patientDID));
+      } catch {}
 
       await auditService.logEvent({
         eventType: "PRIVATE_KEY_ACCESSED",

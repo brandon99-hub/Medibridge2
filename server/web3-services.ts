@@ -1,7 +1,7 @@
 import { ethers } from "ethers";
 import { Resolver } from "did-resolver";
 import { createHash } from "crypto";
-import CryptoJS from "crypto-js";
+import crypto from "crypto";
 import { v4 as uuidv4 } from "uuid";
 import PinataClient from '@pinata/sdk';
 import fetch from 'node-fetch';
@@ -164,13 +164,21 @@ export class IPFSService {
   // Store encrypted content on IPFS
   async storeContent(content: any, encryptionKey?: string): Promise<string> {
     try {
-      let dataToStore = JSON.stringify(content);
-      // Encrypt content if key provided
+      const plaintext = Buffer.from(JSON.stringify(content), 'utf8');
+      let dataToStore: string;
       if (encryptionKey) {
-        dataToStore = CryptoJS.AES.encrypt(dataToStore, encryptionKey).toString();
+        // AES-256-GCM with IV + authTag prefix, base64 payload
+        const keyBuf = Buffer.from(encryptionKey, 'hex');
+        const iv = crypto.randomBytes(12);
+        const cipher = crypto.createCipheriv('aes-256-gcm', keyBuf, iv);
+        const ciphertext = Buffer.concat([cipher.update(plaintext), cipher.final()]);
+        const authTag = cipher.getAuthTag();
+        dataToStore = Buffer.concat([iv, authTag, ciphertext]).toString('base64');
+      } else {
+        dataToStore = plaintext.toString('base64');
       }
       // Pin JSON to IPFS via Pinata
-      const result = await pinata.pinJSONToIPFS({ data: dataToStore });
+      const result = await pinata.pinJSONToIPFS({ pinataContent: dataToStore });
       return result.IpfsHash;
     } catch (error) {
       console.error("Failed to store content on IPFS (Pinata):", error);
@@ -184,13 +192,21 @@ export class IPFSService {
       // Fetch from Pinata public gateway
       const response = await fetch(`${PINATA_GATEWAY}${hash}`);
       if (!response.ok) throw new Error(`Failed to fetch from IPFS gateway: ${response.statusText}`);
-      let content = await response.text();
-      // Decrypt content if key provided
+      const b64 = await response.text();
+      const buf = Buffer.from(b64, 'base64');
+      let plaintext: Buffer;
       if (encryptionKey) {
-        const bytes = CryptoJS.AES.decrypt(content, encryptionKey);
-        content = bytes.toString(CryptoJS.enc.Utf8);
+        const keyBuf = Buffer.from(encryptionKey, 'hex');
+        const iv = buf.subarray(0, 12);
+        const authTag = buf.subarray(12, 28);
+        const ciphertext = buf.subarray(28);
+        const decipher = crypto.createDecipheriv('aes-256-gcm', keyBuf, iv);
+        decipher.setAuthTag(authTag);
+        plaintext = Buffer.concat([decipher.update(ciphertext), decipher.final()]);
+      } else {
+        plaintext = buf;
       }
-      return JSON.parse(content);
+      return JSON.parse(plaintext.toString('utf8'));
     } catch (error) {
       console.error("Failed to retrieve content from IPFS (Pinata):", error);
       throw new Error("IPFS retrieval failed");

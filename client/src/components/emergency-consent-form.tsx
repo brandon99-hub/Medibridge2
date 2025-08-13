@@ -364,7 +364,7 @@ export default function EmergencyConsentForm() {
               >
                 <SelectTrigger><SelectValue placeholder={staffLoading ? "Loading staff..." : "Select secondary authorizer"} /></SelectTrigger>
                 <SelectContent>
-                  {staffProfileData?.filter((staff: any) => staff.staffId !== user.username).map((staff: any) => (
+                  {staffProfileData?.filter((staff: any) => staff.staffId !== (user?.username || "")).map((staff: any) => (
                     <SelectItem key={staff.staffId} value={staff.staffId}>
                       {staff.name} ({staff.role}, {staff.department})
                     </SelectItem>

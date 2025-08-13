@@ -3,6 +3,7 @@
 
 import { db } from './db';
 import { ussdSessions, clinicCodes, ussdAnalytics } from '../shared/schema';
+import { smsService } from './sms-service';
 import { eq } from 'drizzle-orm';
 
 const africasTalkingApiKey = process.env.AFRICAS_TALKING_API_KEY;
@@ -279,7 +280,7 @@ export class AfricasTalkingService {
           let proofMenu = lang === 'en'
             ? `CON Proofs for visit on ${visit.date}:\n`
             : `CON Uthibitisho wa ziara tarehe ${visit.date}:\n`;
-          visit.proofs.forEach((p, i) => {
+          visit.proofs.forEach((p: any, i: number) => {
             proofMenu += `- ${p.type}: ${p.statement}\n`;
           });
           proofMenu += `\nCode: ${visit.code}\n1. Resend Code via SMS\n2. Back`;
@@ -595,15 +596,16 @@ function hashPhone(phoneNumber: string): string {
 async function getRecentVisitsByPhone(phoneNumber: string, limit: number) {
   // This should fetch from your real storage/db in production
   // For demo, use demoProofStore
-  const visits = Object.entries(demoProofStore)
-    .filter(([code, v]) => v && v.patientName && v.proofs && v.expiresAt && v.phoneNumber === phoneNumber)
-    .sort((a, b) => b[1].expiresAt - a[1].expiresAt)
+  const demoStore: Record<string, any> = ((globalThis as any).demoProofStore || {}) as Record<string, any>;
+  const visits = (Object.entries(demoStore) as Array<[string, any]>)
+    .filter(([, v]) => v && v.patientName && v.proofs && v.expiresAt && v.phoneNumber === phoneNumber)
+    .sort((a: [string, any], b: [string, any]) => (Number(b[1].expiresAt) - Number(a[1].expiresAt)))
     .slice(0, limit)
     .map(([code, v]) => ({
       code,
-      date: new Date(v.expiresAt - 30 * 24 * 60 * 60 * 1000).toLocaleDateString(),
-      summary: v.proofs.map(p => p.type).join(', '),
-      proofs: v.proofs
+      date: new Date(Number(v.expiresAt) - 30 * 24 * 60 * 60 * 1000).toLocaleDateString(),
+      summary: (v.proofs as any[]).map((p: any) => p.type).join(', '),
+      proofs: v.proofs as any[]
     }));
   return visits;
 } 

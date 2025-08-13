@@ -77,56 +77,23 @@ class SMSService {
     const message = `URGENT: ${data.nextOfKinName}, you are listed as ${data.patientRelationship} for a patient requiring emergency medical care at ${data.hospitalName}. Verification code: ${data.verificationCode}. Please respond immediately.`;
 
     // Use the same service selection logic as OTP
-    if (msg91ApiKey) {
-      try {
-        await this.sendViaMSG91(data.to, message);
-        console.log(`[SMSService] Emergency consent SMS sent via MSG91 to ${data.to}`);
-        return;
-      } catch (error: any) {
-        console.warn(`[SMSService] MSG91 failed: ${error.message}`);
-      }
-    }
+    // Intentionally skipping provider-specific implementations in this build
 
     // Try alternative providers for emergency consent
-    if (vonageApiKey && vonageApiSecret && vonageFromNumber) {
+    if (africasTalkingService && africasTalkingSenderId !== undefined) {
       try {
-        await this.sendViaVonage(data.to, message);
-        console.log(`[SMSService] Emergency consent SMS sent via Vonage to ${data.to}`);
+        await africasTalkingService.sendSMS(data.to, message, africasTalkingSenderId);
         return;
       } catch (error: any) {
-        console.warn(`[SMSService] Vonage failed: ${error.message}`);
+        console.warn(`[SMSService] Africa's Talking failed: ${error.message}`);
       }
     }
 
-    if (awsAccessKeyId && awsSecretAccessKey && awsSnsFromNumber) {
-      try {
-        await this.sendViaAWSSNS(data.to, message);
-        console.log(`[SMSService] Emergency consent SMS sent via AWS SNS to ${data.to}`);
-        return;
-      } catch (error: any) {
-        console.warn(`[SMSService] AWS SNS failed: ${error.message}`);
-      }
-    }
+    // Fallbacks are disabled by default
 
-    if (sendGridApiKey && sendGridFromNumber) {
-      try {
-        await this.sendViaSendGrid(data.to, message);
-        console.log(`[SMSService] Emergency consent SMS sent via SendGrid to ${data.to}`);
-        return;
-      } catch (error: any) {
-        console.warn(`[SMSService] SendGrid failed: ${error.message}`);
-      }
-    }
+    // ...
 
-    if (plivoAuthId && plivoAuthToken && plivoFromNumber) {
-      try {
-        await this.sendViaPlivo(data.to, message);
-        console.log(`[SMSService] Emergency consent SMS sent via Plivo to ${data.to}`);
-        return;
-      } catch (error: any) {
-        console.warn(`[SMSService] Plivo failed: ${error.message}`);
-      }
-    }
+    // ...
 
     throw new Error('No SMS service configured for emergency consent');
   }
@@ -138,56 +105,16 @@ class SMSService {
     const message = `Welcome to MediBridge! Your patient DID is: ${data.patientDID}. You can now securely access and manage your medical records.`;
 
     // Use the same service selection logic
-    if (msg91ApiKey) {
-      try {
-        await this.sendViaMSG91(data.to, message);
-        console.log(`[SMSService] Welcome SMS sent via MSG91 to ${data.to}`);
-        return;
-      } catch (error: any) {
-        console.warn(`[SMSService] MSG91 failed: ${error.message}`);
-      }
-    }
+    // (MSG91 path omitted in this build)
 
     // Try alternative providers for welcome SMS
-    if (vonageApiKey && vonageApiSecret && vonageFromNumber) {
-      try {
-        await this.sendViaVonage(data.to, message);
-        console.log(`[SMSService] Welcome SMS sent via Vonage to ${data.to}`);
-        return;
-      } catch (error: any) {
-        console.warn(`[SMSService] Vonage failed: ${error.message}`);
-      }
-    }
+    // (Vonage path omitted in this build)
 
-    if (awsAccessKeyId && awsSecretAccessKey && awsSnsFromNumber) {
-      try {
-        await this.sendViaAWSSNS(data.to, message);
-        console.log(`[SMSService] Welcome SMS sent via AWS SNS to ${data.to}`);
-        return;
-      } catch (error: any) {
-        console.warn(`[SMSService] AWS SNS failed: ${error.message}`);
-      }
-    }
+    // (AWS SNS path omitted in this build)
 
-    if (sendGridApiKey && sendGridFromNumber) {
-      try {
-        await this.sendViaSendGrid(data.to, message);
-        console.log(`[SMSService] Welcome SMS sent via SendGrid to ${data.to}`);
-        return;
-      } catch (error: any) {
-        console.warn(`[SMSService] SendGrid failed: ${error.message}`);
-      }
-    }
+    // (SendGrid SMS path omitted in this build)
 
-    if (plivoAuthId && plivoAuthToken && plivoFromNumber) {
-      try {
-        await this.sendViaPlivo(data.to, message);
-        console.log(`[SMSService] Welcome SMS sent via Plivo to ${data.to}`);
-        return;
-      } catch (error: any) {
-        console.warn(`[SMSService] Plivo failed: ${error.message}`);
-      }
-    }
+    // (Plivo path omitted in this build)
 
     // Don't throw error for welcome SMS as it's not critical
     console.warn('[SMSService] No SMS service configured for welcome message');

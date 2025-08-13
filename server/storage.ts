@@ -735,7 +735,7 @@ export class DatabaseStorage implements IStorage {
   async countAuditEvents(filters?: { eventType?: string | string[]; outcome?: string; hospital_id?: number }): Promise<number> {
     let query = db.select({ count: sql<number>`count(*)` }).from(auditEvents);
     if (filters && filters.hospital_id !== undefined) {
-      query = query.where(eq(auditEvents.hospital_id, filters.hospital_id));
+      query = (query as any).where(eq(auditEvents.hospital_id, filters.hospital_id));
     }
 
     if (filters && Object.keys(filters).length > 0) {
@@ -768,7 +768,7 @@ export class DatabaseStorage implements IStorage {
   async countSecurityViolations(filters?: { violationType?: string; resolved?: boolean; hospital_id?: number }): Promise<number> {
     let query = db.select({ count: sql<number>`count(*)` }).from(securityViolations);
     if (filters && filters.hospital_id !== undefined) {
-      query = query.where(eq(securityViolations.hospital_id, filters.hospital_id));
+      query = (query as any).where(eq(securityViolations.hospital_id, filters.hospital_id));
     }
     
     if (filters?.violationType && filters?.resolved !== undefined) {
@@ -824,10 +824,10 @@ export class DatabaseStorage implements IStorage {
     const { limit = 10, offset = 0, resolved, hospital_id } = options || {};
     let query = db.select().from(securityViolations);
     if (typeof resolved === "boolean") {
-      query = query.where(eq(securityViolations.resolved, resolved));
+      query = (query as any).where(eq(securityViolations.resolved, resolved));
     }
     if (hospital_id !== undefined) {
-      query = query.where(eq(securityViolations.hospital_id, hospital_id));
+      query = (query as any).where(eq(securityViolations.hospital_id, hospital_id));
     }
     return await query.orderBy(desc(securityViolations.createdAt)).limit(limit).offset(offset);
   }

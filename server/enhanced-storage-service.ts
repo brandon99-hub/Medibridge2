@@ -3,7 +3,7 @@ import { ipfsService } from "./web3-services";
 import { ipfsRedundancyService } from "./ipfs-redundancy-service";
 import { auditService } from "./audit-service";
 import { storage } from "./storage";
-import CryptoJS from "crypto-js";
+import crypto from "crypto";
 import { promises as fs } from 'fs';
 import path from 'path';
 
@@ -54,24 +54,25 @@ export class EnhancedStorageService {
     const contentString = JSON.stringify(content);
     const contentBuffer = Buffer.from(contentString, 'utf8');
     
-    // Generate encryption key for this record
-    const encryptionKey = CryptoJS.lib.WordArray.random(256/8).toString(CryptoJS.enc.Hex);
-    
-    // Encrypt content
-    const encryptedContent = CryptoJS.AES.encrypt(contentString, encryptionKey).toString();
-    const encryptedBuffer = Buffer.from(encryptedContent, 'utf8');
+    // Generate encryption key and encrypt with AES-256-GCM
+    const encryptionKey = crypto.randomBytes(32); // 256-bit DEK
+    const iv = crypto.randomBytes(12);
+    const cipher = crypto.createCipheriv('aes-256-gcm', encryptionKey, iv);
+    const ciphertext = Buffer.concat([cipher.update(contentBuffer), cipher.final()]);
+    const authTag = cipher.getAuthTag();
+    const encryptedPayload = Buffer.concat([iv, authTag, ciphertext]).toString('base64');
 
     try {
       // 1. Store on IPFS with redundancy
       const ipfsResult = await ipfsRedundancyService.storeWithRedundancy(
-        encryptedContent,
+        encryptedPayload,
         { ...metadata, patientDID, encryptionMethod: 'AES-256-GCM' },
         patientDID
       );
 
       // 2. Store on Filecoin for long-term archival
       const filecoinResult = await filecoinService.storeOnFilecoin(
-        encryptedBuffer,
+        Buffer.from(encryptedPayload, 'utf8'),
         { 
           filename: `medical_record_${Date.now()}.enc`,
           patientDID, 
@@ -88,7 +89,7 @@ export class EnhancedStorageService {
       // 3. Store local copy (optional, based on hospital policy)
       let localPath: string | undefined;
       if (process.env.ENABLE_LOCAL_STORAGE === 'true') {
-        localPath = await this.storeLocally(encryptedBuffer, ipfsResult.cid);
+        localPath = await this.storeLocally(Buffer.from(encryptedPayload, 'utf8'), ipfsResult.cid);
       }
 
       const result: StorageResult = {
@@ -97,7 +98,7 @@ export class EnhancedStorageService {
         localPath,
         storageCost: 0, // Pinata free tier available
         redundancyLevel: 'TRIPLE',
-        encryptionKey,
+        encryptionKey: encryptionKey.toString('hex'),
         metadata: {
           patientDID,
           recordType: metadata.recordType || 'medical_record',
@@ -195,10 +196,16 @@ export class EnhancedStorageService {
         throw new Error('All storage layers failed to retrieve content');
       }
 
-      // Decrypt content
-      const decryptedBytes = CryptoJS.AES.decrypt(retrievedContent, encryptionKey);
-      const decryptedContent = decryptedBytes.toString(CryptoJS.enc.Utf8);
-      const parsedContent = JSON.parse(decryptedContent);
+      // Decrypt content (base64 with IV(12) + authTag(16) + ciphertext)
+      const payload = Buffer.from(retrievedContent, 'base64');
+      const ivBuf = payload.subarray(0, 12);
+      const tagBuf = payload.subarray(12, 28);
+      const ctBuf = payload.subarray(28);
+      const keyBuf = Buffer.from(encryptionKey, 'hex');
+      const decipher = crypto.createDecipheriv('aes-256-gcm', keyBuf, ivBuf);
+      decipher.setAuthTag(tagBuf);
+      const plaintext = Buffer.concat([decipher.update(ctBuf), decipher.final()]);
+      const parsedContent = JSON.parse(plaintext.toString('utf8'));
 
       console.log(`[ENHANCED_STORAGE] Retrieved record from ${source} in ${Date.now() - startTime}ms`);
       return parsedContent;

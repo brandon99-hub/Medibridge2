@@ -4,8 +4,7 @@ import { didService, vcService, ipfsService, consentService, WalletService } fro
 import { secureKeyVault } from "./secure-key-vault"; // Import SecureKeyVault
 import { enhancedStorageService } from "./enhanced-storage-service"; // Import EnhancedStorageService
 import { z } from "zod";
-import CryptoJS from "crypto-js";
-import Hex from "crypto-js/enc-hex.js";
+import crypto from "crypto";
 import { requirePatientAuth } from "./patient-auth-middleware"; // Import the middleware
 import { InsertPatientRecord } from "@shared/schema";
 
@@ -207,7 +206,7 @@ export function registerWeb3Routes(app: Express): void {
         console.error("[MedicalRecordVC] Failed to issue/store Medical Record VC:", vcErr);
       }
 
-      // Update the record with storage metadata
+      // Update the record with storage metadata and persist encrypted DEK
       await storage.updateRecordFilecoin(
         patientRecord.id,
         storageResult.filecoinCid,
@@ -221,6 +220,13 @@ export function registerWeb3Routes(app: Express): void {
           storedAt: storageResult.metadata.storedAt
         }
       );
+      // Persist encrypted Data Encryption Key for later retrieval
+      try {
+        const encryptedDek = await secureKeyVault.encryptDataKey(storageResult.encryptionKey);
+        await storage.updateRecordIPFS(patientRecord.id, storageResult.ipfsCid, encryptedDek);
+      } catch (e) {
+        console.error('[WEB3] Failed to persist encrypted DEK:', e);
+      }
 
       // Create storage location records
       await storage.createStorageLocation({

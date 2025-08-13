@@ -1,6 +1,5 @@
 import { auditService } from "./audit-service";
 import PinataClient from '@pinata/sdk';
-import { create } from 'ipfs-http-client';
 import { FilecoinService } from './filecoin-service';
 
 const pinataApiKey = process.env.PINATA_API_KEY;
@@ -50,18 +49,20 @@ export class IPFSRedundancyService {
     try {
       // Primary storage: Pinata
       if (!pinata) throw new Error('Pinata credentials not set');
-      const pinataResult = await pinata.pinJSONToIPFS({ 
-        pinataContent: content,
-        pinataMetadata: {
-          name: metadata.filename || 'medical_record.json',
-          keyvalues: {
-            patientDID,
-            recordType: metadata.recordType || 'medical_record',
-            storedAt: new Date().toISOString(),
-            ...metadata
+      const pinataResult = await pinata.pinJSONToIPFS(
+        { payload: content },
+        {
+          pinataMetadata: {
+            name: metadata.filename || 'medical_record.json',
+            keyvalues: {
+              patientDID,
+              recordType: metadata.recordType || 'medical_record',
+              storedAt: new Date().toISOString(),
+              ...metadata
+            }
           }
         }
-      });
+      );
       primaryCID = pinataResult.IpfsHash;
       results.push({
         gateway: "pinata",
@@ -144,7 +145,15 @@ export class IPFSRedundancyService {
       try {
         const response = await fetch(gateway);
         if (!response.ok) throw new Error(`Failed to fetch from ${gateway}`);
-        const content = await response.text();
+        const raw = await response.text();
+        let content = raw;
+        try {
+          const json = JSON.parse(raw);
+          if (json && typeof json === 'object') {
+            if (typeof json.payload === 'string') content = json.payload;
+            else if (typeof json.pinataContent === 'string') content = json.pinataContent;
+          }
+        } catch {}
         await auditService.logEvent({
           eventType: "IPFS_RETRIEVAL_SUCCESS",
           actorType: "SYSTEM",

@@ -1,6 +1,7 @@
 import type { Express } from "express";
 import { z } from "zod";
 import { enhancedStorageService } from "./enhanced-storage-service";
+import { secureKeyVault } from "./secure-key-vault";
 import { filecoinService } from "./filecoin-service";
 import { storage } from "./storage";
 import { auditService } from "./audit-service";
@@ -50,26 +51,42 @@ export function registerFilecoinRoutes(app: Express): void {
 
       // Create traditional record with Filecoin references
       const patientRecord = await storage.createPatientRecord({
-        ...recordData,
+        patientName: recordData.patientName,
+        nationalId: recordData.nationalId,
+        visitDate: recordData.visitDate,
+        visitType: recordData.visitType,
+        diagnosis: recordData.diagnosis,
+        prescription: recordData.prescription,
+        physician: recordData.physician,
+        department: recordData.department,
         patientDID,
         submittedBy: user.id,
+        hospital_id: user.hospital_id,
         recordType: 'web3',
-      });
+      } as any);
 
       // Update record with storage metadata
+      const storageMeta: any = {
+        ipfsCid: storageResult.ipfsCid,
+        redundancyLevel: storageResult.redundancyLevel,
+        encryptionMethod: 'AES-256-GCM',
+        accessPattern,
+      };
+      if (storageResult.localPath) storageMeta.localPath = storageResult.localPath;
+      if (storageResult.metadata && storageResult.metadata.storedAt) storageMeta.storedAt = storageResult.metadata.storedAt;
       await storage.updateRecordFilecoin(
         patientRecord.id,
         storageResult.filecoinCid,
         storageResult.storageCost,
-        {
-          ipfsCid: storageResult.ipfsCid,
-          localPath: storageResult.localPath,
-          redundancyLevel: storageResult.redundancyLevel,
-          encryptionMethod: 'AES-256-GCM',
-          accessPattern,
-          storedAt: storageResult.metadata.storedAt
-        }
+        storageMeta
       );
+      // Persist encrypted DEK
+      try {
+        const encryptedDek = await secureKeyVault.encryptDataKey(storageResult.encryptionKey);
+        await storage.updateRecordIPFS(patientRecord.id, storageResult.ipfsCid, encryptedDek);
+      } catch (e) {
+        console.error('[FILECOIN] Failed to persist encrypted DEK:', e);
+      }
 
       // Create storage location records
       await storage.createStorageLocation({
@@ -126,10 +143,9 @@ export function registerFilecoinRoutes(app: Express): void {
 
       const schema = z.object({
         recordId: z.number(),
-        encryptionKey: z.string(),
       });
 
-      const { recordId, encryptionKey } = schema.parse(req.body);
+      const { recordId } = schema.parse(req.body);
 
       // Get record metadata
       const record = await storage.getPatientRecordById(recordId);
@@ -141,12 +157,25 @@ export function registerFilecoinRoutes(app: Express): void {
         return res.status(400).json({ error: "Record not stored with Filecoin integration" });
       }
 
+      // Determine plaintext DEK
+      let plaintextDekHex: string | null = null;
+      if (record.encryptionKey) {
+        try {
+          plaintextDekHex = await secureKeyVault.decryptDataKey(record.encryptionKey);
+        } catch (e) {
+          console.error('[FILECOIN] Failed to decrypt DEK from vault:', e);
+        }
+      }
+      if (!plaintextDekHex) {
+        return res.status(400).json({ error: "Missing or invalid data encryption key for this record" });
+      }
+
       // Retrieve with failover
       const recordData = await enhancedStorageService.retrieveWithFailover(
         record.ipfsHash,
         record.filecoinCid,
-        encryptionKey,
-        record.storageMetadata?.localPath
+        plaintextDekHex,
+        (record.storageMetadata as any)?.localPath
       );
 
       // Log access
@@ -173,7 +202,7 @@ export function registerFilecoinRoutes(app: Express): void {
           recordId: record.id,
           patientName: record.patientName,
           visitDate: record.visitDate,
-          storedAt: record.storageMetadata?.storedAt
+          storedAt: (record.storageMetadata as any)?.storedAt
         }
       });
 

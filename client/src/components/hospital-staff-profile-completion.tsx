@@ -504,10 +504,9 @@ export default function HospitalStaffProfileCompletion({
                                       onClick={async () => {
                                         setResendStatus((prev) => ({ ...prev, [staff.staffId]: 'loading' }));
                                         try {
-                                          const res = await fetch("/api/hospital/resend-invitation", {
-                                            method: "POST",
-                                            headers: { "Content-Type": "application/json" },
-                                            body: JSON.stringify({ staffId: staff.staffId, forceResend: true })
+                                          const res = await apiRequestWithCsrf("POST", "/api/hospital/resend-invitation", {
+                                            staffId: staff.staffId,
+                                            forceResend: true
                                           });
                                           const data = await res.json();
                                           if (data.success) {

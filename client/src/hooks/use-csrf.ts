@@ -72,6 +72,7 @@ export function useCsrf() {
     const options: RequestInit = {
       method,
       headers,
+      credentials: 'include',
     };
 
     if (data && method !== 'GET') {
