@@ -27,7 +27,8 @@ function Router() {
       <ProtectedRoute path="/emergency-access" component={EmergencyAccessPage} /> {/* Add emergency access route */}
       <ProtectedRoute path="/emergency-dashboard" component={EmergencyAccessDashboard} /> {/* Add emergency dashboard route */}
       <Route path="/auth" component={AuthPage} />
-      <Route path="/accept-invitation" component={AcceptInvitation} /> {/* Add invitation acceptance route */}
+      <Route path="/accept-invitation" component={() => (<AcceptInvitation /> as unknown as JSX.Element)} /> {/* Legacy query param support */}
+      <Route path="/accept-invitation/:token" component={AcceptInvitation} /> {/* Path-based token support */}
       <Route path="/patient-portal" component={PatientPortal} />
       <Route path="/web3-patient" component={Web3PatientDashboard} />
       <Route path="/verifier" component={VerifierPage} />

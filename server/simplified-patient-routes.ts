@@ -622,7 +622,8 @@ export function registerSimplifiedPatientRoutes(app: Express): void {
             requesterId: `did:medbridge:hospital:${consentRequest.accessedBy}`,
             consentType: 'read',
             consentGiven: true,
-            expiresAt: null,
+            // Grant time-limited access (12 hours)
+            expiresAt: new Date(Date.now() + 12 * 60 * 60 * 1000),
             revokedAt: null,
           });
 
@@ -671,6 +672,8 @@ export function registerSimplifiedPatientRoutes(app: Express): void {
             accessedBy: consentRequest.accessedBy,
             recordId: record.id,
             consentGrantedBy: patientProfile.patientDID,
+            hospital_id: Number(consentRequest.accessedBy),
+            consent_type: 'traditional',
           });
         }
         await storage.updateConsentRequestStatus(patientProfile.nationalId, consentRequest.accessedBy, "granted");

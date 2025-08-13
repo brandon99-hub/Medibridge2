@@ -10,7 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Search, FileText, Clock, Users, Stethoscope, AlertTriangle, Globe, Key, Shield } from "lucide-react";
+import { Search, FileText, Clock, Users, Stethoscope, AlertTriangle, Globe, Key, Shield, CheckCircle } from "lucide-react";
 import {
   Pagination,
   PaginationContent,
@@ -93,7 +93,14 @@ export default function HospitalBInterface({ onShowConsentModal }: HospitalBInte
     onSuccess: (data: PatientData) => {
       setPatientData(data);
       if (!data.hasConsent) {
-        onShowConsentModal(data);
+        // Open consent modal but avoid showing PII in main panel pre-consent
+        onShowConsentModal({
+          ...data,
+          patientName: (data as any).patientName || 'Patient',
+          patientDID: (data as any).patientDID || '',
+          records: [],
+        } as any);
+        setShowRecords(false);
       } else {
         setShowRecords(true);
       }
@@ -254,7 +261,14 @@ export default function HospitalBInterface({ onShowConsentModal }: HospitalBInte
           patientDID: patientDID
         });
         if (!response.ok) {
-          const errorData = await response.json();
+          // Clone before reading to avoid 'body stream already read'
+          const cloned = response.clone();
+          let errorData: any = {};
+          try {
+            errorData = await cloned.json();
+          } catch (_) {
+            try { errorData.message = await response.text(); } catch (_) {}
+          }
           if (response.status === 403 && errorData.requiresConsent) {
             return {
               patientDID,
@@ -265,7 +279,8 @@ export default function HospitalBInterface({ onShowConsentModal }: HospitalBInte
               message: errorData.message || "Patient consent required to access Web3 records."
             };
           }
-          throw new Error(errorData.message || "Failed to fetch Web3 records");
+          const statusText = `${response.status}` + (errorData.message ? `: ${errorData.message}` : "");
+          throw new Error(statusText || "Failed to fetch Web3 records");
         }
         return await response.json();
       } catch (error: any) {
@@ -280,7 +295,8 @@ export default function HospitalBInterface({ onShowConsentModal }: HospitalBInte
         hasConsent: data.hasConsent,
         recordCount: data.recordCount,
         requiresConsent: data.requiresConsent || false,
-        consentMessage: data.message || undefined
+        consentMessage: data.message || undefined,
+        consentExpiresAt: data.consentExpiresAt || undefined,
       }));
       setShowWeb3Records(true);
       if (data.hasConsent) {
@@ -297,9 +313,14 @@ export default function HospitalBInterface({ onShowConsentModal }: HospitalBInte
       }
     },
     onError: (error: Error) => {
+      const message = /403/.test(error.message)
+        ? "Consent not granted or expired. Request patient consent first."
+        : /CSRF/i.test(error.message)
+        ? "Session expired. Refresh the page and try again."
+        : error.message;
       toast({
         title: "Failed to Retrieve Records",
-        description: error.message,
+        description: message,
         variant: "destructive",
       });
     },
@@ -485,7 +506,7 @@ export default function HospitalBInterface({ onShowConsentModal }: HospitalBInte
                     <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between mb-3 sm:mb-4 space-y-3 sm:space-y-0">
                       <div>
                         <h4 className="text-base sm:text-lg font-semibold text-slate-900">{patientData.patientName}</h4>
-                        <p className="text-slate-600 text-sm">ID: {patientData.patientDID}</p>
+                        <p className="text-slate-600 text-sm">ID: {patientData.patientDID || "Hidden until consent"}</p>
                       </div>
                       <div className="flex flex-col sm:flex-row items-start sm:items-center space-y-2 sm:space-y-0 sm:space-x-2">
                         <Badge className="bg-green-100 text-green-800 hover:bg-green-100 text-xs">
@@ -563,25 +584,51 @@ export default function HospitalBInterface({ onShowConsentModal }: HospitalBInte
                       </Badge>
                     </div>
                     
-                    <div className="bg-amber-50 rounded-lg p-3 sm:p-4 mb-3 sm:mb-4">
-                      <div className="flex items-start space-x-2 sm:space-x-3">
-                        <AlertTriangle className="h-4 w-4 sm:h-5 sm:w-5 text-amber-600 mt-0.5" />
-                        <div>
-                          <h5 className="font-medium text-amber-900 text-sm sm:text-base">Patient Consent Required</h5>
-                          <p className="text-xs sm:text-sm text-amber-700 mt-1">
-                            To access this patient's medical records, you must obtain proper consent. 
-                            This ensures patient privacy and compliance with healthcare regulations.
-                          </p>
+                    {(() => {
+                      const exp = (patientData as any).consentExpiresAt ? new Date((patientData as any).consentExpiresAt) : null;
+                      const hasConsent = !!exp && exp.getTime() > Date.now();
+                      if (hasConsent) {
+                        const remainingMs = exp!.getTime() - Date.now();
+                        const remainingMins = Math.max(0, Math.floor(remainingMs / (1000 * 60)));
+                        const hrs = Math.floor(remainingMins / 60);
+                        const mins = remainingMins % 60;
+                        const isSoon = remainingMins <= 60;
+                        return (
+                          <div className={`${isSoon ? 'bg-amber-50 border-amber-200' : 'bg-green-50 border-green-200'} rounded-lg p-3 sm:p-4 mb-3 sm:mb-4 border`}>
+                            <div className="flex items-start space-x-2 sm:space-x-3">
+                              <CheckCircle className={`h-4 w-4 sm:h-5 sm:w-5 ${isSoon ? 'text-amber-600' : 'text-green-600'} mt-0.5`} />
+                              <div>
+                                <h5 className={`font-medium ${isSoon ? 'text-amber-900' : 'text-green-900'} text-sm sm:text-base`}>Consent Granted</h5>
+                                <p className={`text-xs sm:text-sm ${isSoon ? 'text-amber-700' : 'text-green-700'} mt-1`}>
+                                  Expires in {hrs > 0 ? `${hrs}h ` : ''}{mins}m. Fetch records or renew consent if needed.
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      }
+                      return (
+                        <div className="bg-amber-50 rounded-lg p-3 sm:p-4 mb-3 sm:mb-4">
+                          <div className="flex items-start space-x-2 sm:space-x-3">
+                            <AlertTriangle className="h-4 w-4 sm:h-5 sm:w-5 text-amber-600 mt-0.5" />
+                            <div>
+                              <h5 className="font-medium text-amber-900 text-sm sm:text-base">Patient Consent Required</h5>
+                              <p className="text-xs sm:text-sm text-amber-700 mt-1">
+                                To access this patient's medical records, you must obtain proper consent. 
+                                This ensures patient privacy and compliance with healthcare regulations.
+                              </p>
+                            </div>
+                          </div>
                         </div>
-                      </div>
-                    </div>
+                      );
+                    })()}
 
                     <div className="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-3">
-                      <Button 
-                        onClick={() => requestConsentMutation.mutate({ 
-                          nationalId: patientData.nationalId || patientData.patientDID,
-                          reason: "Medical care coordination and treatment planning"
-                        })}
+                        <Button 
+                          onClick={() => requestConsentMutation.mutate({ 
+                            nationalId: patientData.nationalId || searchData.nationalId || patientData.patientDID,
+                            reason: "Medical care coordination and treatment planning"
+                          })}
                         className="bg-blue-600 hover:bg-blue-700 w-full sm:w-auto"
                         disabled={requestConsentMutation.isPending}
                       >
@@ -846,17 +893,43 @@ export default function HospitalBInterface({ onShowConsentModal }: HospitalBInte
                       </div>
                     </div>
 
-                    <div className="bg-amber-50 rounded-lg p-4 mb-4">
-                      <div className="flex items-start space-x-3">
-                        <AlertTriangle className="h-5 w-5 text-amber-600 mt-0.5" />
-                        <div>
-                          <h5 className="font-medium text-amber-900">Patient Consent Required</h5>
-                          <p className="text-sm text-amber-700 mt-1">
-                            This patient's records are encrypted and stored on IPFS. Patient must provide consent via phone authentication to access the data.
-                          </p>
+                    {(() => {
+                      const exp = (web3PatientData as any).consentExpiresAt ? new Date((web3PatientData as any).consentExpiresAt) : null;
+                      const hasConsent = !!exp && exp.getTime() > Date.now();
+                      if (hasConsent) {
+                        const remainingMs = exp!.getTime() - Date.now();
+                        const remainingMins = Math.max(0, Math.floor(remainingMs / (1000 * 60)));
+                        const hrs = Math.floor(remainingMins / 60);
+                        const mins = remainingMins % 60;
+                        const isSoon = remainingMins <= 60;
+                        return (
+                          <div className={`${isSoon ? 'bg-amber-50 border-amber-200' : 'bg-green-50 border-green-200'} rounded-lg p-4 mb-4 border`}>
+                            <div className="flex items-start space-x-3">
+                              <CheckCircle className={`h-5 w-5 ${isSoon ? 'text-amber-600' : 'text-green-600'} mt-0.5`} />
+                              <div>
+                                <h5 className={`font-medium ${isSoon ? 'text-amber-900' : 'text-green-900'}`}>Consent Granted</h5>
+                                <p className={`${isSoon ? 'text-amber-700' : 'text-green-700'} mt-1`}>
+                                  Expires in {hrs > 0 ? `${hrs}h ` : ''}{mins}m.
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      }
+                      return (
+                        <div className="bg-amber-50 rounded-lg p-4 mb-4">
+                          <div className="flex items-start space-x-3">
+                            <AlertTriangle className="h-5 w-5 text-amber-600 mt-0.5" />
+                            <div>
+                              <h5 className="font-medium text-amber-900">Patient Consent Required</h5>
+                              <p className="text-sm text-amber-700 mt-1">
+                                This patient's records are encrypted and stored on IPFS. Patient must provide consent via phone authentication to access the data.
+                              </p>
+                            </div>
+                          </div>
                         </div>
-                      </div>
-                    </div>
+                      );
+                    })()}
 
                     <div className="flex space-x-3">
                       <Button 

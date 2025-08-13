@@ -641,6 +641,8 @@ export class DatabaseStorage implements IStorage {
         consentGrantedBy: "pending",
         consent_type: request.consentType || 'traditional',
         hospital_id: request.hospital_id,
+        // Ensure pending requests do NOT get treated as recent access
+        accessedAt: null as any,
       })
       .returning();
     // Consent request created successfully

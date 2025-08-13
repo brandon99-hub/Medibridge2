@@ -103,7 +103,11 @@ router.get('/list', requireAdminAuth, async (req, res) => {
     const hospitalId = req.user.id.toString();
     const staff = await storage.getHospitalStaffByHospitalId(hospitalId);
     const invitations = await storage.getInvitationsByHospitalId(req.user.id);
-    const pendingInvitations = invitations.filter(inv => inv.status === 'pending' && inv.expiresAt > new Date());
+    const now = new Date();
+    const pendingInvitations = invitations.filter(inv => {
+      const expires = inv.expiresAt instanceof Date ? inv.expiresAt : new Date(inv.expiresAt as unknown as string);
+      return inv.status === 'pending' && expires.getTime() > now.getTime();
+    });
     res.json({
       success: true,
       staff: staff.map(s => ({

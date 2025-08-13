@@ -6,6 +6,7 @@ import crypto from "crypto";
 import { z } from "zod";
 import { generateStaffVCPdf } from "./pdf-util";
 import { VCService } from "./web3-services";
+import nodemailer from "nodemailer";
 
 export interface StaffInvitationData {
   email: string;
@@ -41,6 +42,14 @@ export class StaffInvitationService {
     forceResend: boolean = false
   ): Promise<InvitationResult> {
     try {
+      console.log(`[INVITE] Request to invite staff`, {
+        hospitalId,
+        invitedBy,
+        email: invitationData.email,
+        role: invitationData.role,
+        department: invitationData.department,
+        forceResend,
+      });
       // Validate hospital staff limit (max 4 staff + 1 admin = 5 total)
       const currentStaffCount = await this.getHospitalStaffCount(hospitalId);
       if (currentStaffCount >= 5 && !forceResend) {
@@ -56,6 +65,7 @@ export class StaffInvitationService {
       let invitationToken = this.generateInvitationToken();
       let expiresAt = new Date();
       expiresAt.setHours(expiresAt.getHours() + 24);
+      console.log(`[INVITE] Generated token and expiry`, { tokenPreview: invitationToken.slice(0, 8) + '…', expiresAt: expiresAt.toISOString() });
 
       if (!forceResend) {
         // Check if email already has pending invitation
@@ -83,6 +93,7 @@ export class StaffInvitationService {
         if (invitation) {
           // Update token and expiry
           await storage.updateInvitation(invitation.id, { invitationToken, expiresAt });
+          console.log(`[INVITE] Updated existing pending invitation`, { invitationId: invitation.id });
         } else {
           // Create new invitation
           invitation = await storage.createHospitalStaffInvitation({
@@ -95,8 +106,10 @@ export class StaffInvitationService {
             status: 'pending',
             expiresAt: expiresAt,
           });
+          console.log(`[INVITE] Created new invitation`, { invitationId: invitation.id });
         }
         // Send invitation email (reuse existing username, generate new temp password)
+        console.log(`[EMAIL] Sending staff invitation (forceResend path)`, { to: invitationData.email });
         await this.sendInvitationEmail(invitationData.email, {
           hospitalName: await this.getHospitalName(hospitalId),
           role: invitationData.role,
@@ -106,6 +119,7 @@ export class StaffInvitationService {
           invitationToken: invitationToken,
           expiresAt: expiresAt,
         });
+        console.log(`[EMAIL] Invitation sent (forceResend path)`, { to: invitationData.email });
         return {
           success: true,
           invitationId: invitation.id,
@@ -206,6 +220,7 @@ export class StaffInvitationService {
       }
 
       // Send invitation email (add staffVcPdfUrl if available)
+      console.log(`[EMAIL] Sending staff invitation`, { to: invitationData.email });
       await this.sendInvitationEmail(invitationData.email, {
         hospitalName: await this.getHospitalName(hospitalId),
         role: invitationData.role,
@@ -216,6 +231,7 @@ export class StaffInvitationService {
         expiresAt: expiresAt,
         staffVcPdfUrl, // Pass the download link to the email
       });
+      console.log(`[EMAIL] Invitation sent`, { to: invitationData.email });
 
       // Log the invitation
       await auditService.logEvent({
@@ -438,7 +454,21 @@ export class StaffInvitationService {
       staffVcPdfUrl?: string;
     }
   ): Promise<void> {
-    const activationUrl = `${process.env.BASE_URL || process.env.FRONTEND_URL || 'http://localhost:3000'}/accept-invitation?token=${invitationData.invitationToken}`;
+    const baseUrl = process.env.BASE_URL || process.env.FRONTEND_URL || 'http://localhost:3000';
+    // Use path-based token to avoid email clients stripping query params
+    const activationUrl = `${baseUrl.replace(/\/$/, '')}/accept-invitation/${invitationData.invitationToken}`;
+    console.log('[EMAIL] Preparing invitation email', {
+      to: email,
+      baseUrl,
+      hasSendgridApiKey: !!process.env.SENDGRID_API_KEY,
+    });
+    const smtpUser = process.env.SMTP_USER;
+    const smtpPass = process.env.SMTP_PASS;
+    const smtpService = process.env.SMTP_SERVICE || (smtpUser && smtpUser.includes('@gmail.com') ? 'gmail' : undefined);
+    const smtpHost = process.env.SMTP_HOST;
+    const smtpPort = process.env.SMTP_PORT ? parseInt(process.env.SMTP_PORT) : undefined;
+    const smtpSecure = process.env.SMTP_SECURE ? process.env.SMTP_SECURE === 'true' : undefined;
+    const smtpFrom = process.env.SMTP_FROM || smtpUser || 'no-reply@localhost';
     
     const pdfButton = invitationData.staffVcPdfUrl
       ? `<div style="text-align: center; margin: 20px 0;"><a href="${invitationData.staffVcPdfUrl}" style="background-color: #059669; color: white; padding: 10px 20px; text-decoration: none; border-radius: 6px; display: inline-block;">Download Your Employment Credential (PDF)</a></div>`
@@ -446,7 +476,7 @@ export class StaffInvitationService {
 
     const msg = {
       to: email,
-      from: 'brandmwenja@gmail.com',
+      from: smtpFrom,
       subject: `Welcome to ${invitationData.hospitalName} - Your MediBridge Account`,
       html: `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
@@ -495,15 +525,69 @@ export class StaffInvitationService {
       `
     };
 
-    if (process.env.SENDGRID_API_KEY && process.env.SENDGRID_API_KEY !== 'your-sendgrid-api-key-here') {
-      const sgMail = await import('@sendgrid/mail');
-      sgMail.default.setApiKey(process.env.SENDGRID_API_KEY);
-      await sgMail.default.send(msg);
-    } else {
-      console.log(`[DEV MODE] Staff invitation email would be sent to ${email}`);
-      console.log(`[DEV MODE] Activation URL: ${activationUrl}`);
-      console.log(`[DEV MODE] Username: ${invitationData.username}, Password: ${invitationData.temporaryPassword}`);
+    // Prefer Nodemailer (SMTP). If SMTP creds missing, fall back to SendGrid or DEV logs.
+    if (smtpUser && smtpPass) {
+      try {
+        const transportOptions = smtpService
+          ? { service: smtpService as any, auth: { user: smtpUser, pass: smtpPass } }
+          : smtpHost
+          ? { host: smtpHost, port: smtpPort || 587, secure: smtpSecure ?? false, auth: { user: smtpUser, pass: smtpPass } }
+          : { service: 'gmail' as any, auth: { user: smtpUser, pass: smtpPass } };
+        const transporter = nodemailer.createTransport(transportOptions as any);
+        try {
+          await transporter.verify();
+        } catch (verifyErr) {
+          console.warn('[EMAIL] SMTP verify failed (continuing to send):', (verifyErr as any)?.message || verifyErr);
+        }
+        const info = await transporter.sendMail({
+          from: msg.from,
+          to: msg.to as string,
+          subject: msg.subject,
+          html: msg.html,
+          text: msg.text,
+        });
+        console.log('[EMAIL SENT] Staff invitation via SMTP', {
+          to: email,
+          messageId: (info as any)?.messageId,
+          response: (info as any)?.response,
+        });
+        return;
+      } catch (smtpErr: any) {
+        console.error('[EMAIL ERROR] SMTP send failed, will attempt SendGrid fallback if configured:', smtpErr?.message || smtpErr);
+      }
     }
+
+    // Fallback to SendGrid if configured
+    if (process.env.SENDGRID_API_KEY && process.env.SENDGRID_API_KEY !== 'your-sendgrid-api-key-here') {
+      try {
+        const sgMail = await import('@sendgrid/mail');
+        sgMail.default.setApiKey(process.env.SENDGRID_API_KEY);
+        const res = await sgMail.default.send({
+          to: msg.to as string,
+          from: smtpFrom,
+          subject: msg.subject,
+          html: msg.html as string,
+          text: msg.text as string,
+        });
+        const status = Array.isArray(res) && res[0] && 'statusCode' in res[0] ? (res[0] as any).statusCode : undefined;
+        console.log(`[EMAIL SENT] Staff invitation via SendGrid`, { to: email, status });
+        return;
+      } catch (err: any) {
+        console.error('[EMAIL ERROR] Failed to send staff invitation via SendGrid', {
+          to: email,
+          code: err?.code,
+          message: err?.message,
+          response: err?.response?.body,
+          status: err?.response?.statusCode,
+        });
+        // fall through to dev logs
+      }
+    }
+
+    // Dev logs as last resort
+    console.log(`[DEV MODE] Staff invitation email would be sent to ${email}`);
+    console.log(`[DEV MODE] Activation URL: ${activationUrl}`);
+    console.log(`[DEV MODE] Username: ${invitationData.username}, Password: ${invitationData.temporaryPassword}`);
   }
 }
 

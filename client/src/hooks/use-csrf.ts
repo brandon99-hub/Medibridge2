@@ -86,8 +86,16 @@ export function useCsrf() {
     const response = await fetch(url, options);
     // If CSRF token is invalid, refresh and retry once
     if (response.status === 403) {
-      const errorData = await response.json();
-      if (errorData.code === 'CSRF_VIOLATION') {
+      let code: string | undefined;
+      try {
+        // Clone the response so callers can still read the body
+        const cloned = response.clone();
+        const errorData = await cloned.json();
+        code = errorData?.code;
+      } catch (_) {
+        // Non-JSON error body; ignore
+      }
+      if (code === 'CSRF_VIOLATION') {
         await refreshToken();
         // Retry the request with new token
         return apiRequestWithCsrf(method, url, data);

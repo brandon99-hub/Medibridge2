@@ -44,6 +44,9 @@ export default function AcceptInvitation(): JSX.Element {
   const { toast } = useToast();
   const { apiRequestWithCsrf } = useCsrf();
   const [, navigate] = useLocation();
+  // Support both query param and path param for token
+  const pathMatch = window.location.pathname.match(/\/accept-invitation\/(.+)$/);
+  const pathToken = pathMatch && pathMatch[1] ? decodeURIComponent(pathMatch[1]) : null;
   const searchParams = new URLSearchParams(window.location.search);
   const [showPassword, setShowPassword] = useState(false);
   const [invitationData, setInvitationData] = useState<InvitationData | null>(null);
@@ -56,7 +59,7 @@ export default function AcceptInvitation(): JSX.Element {
     confirmPassword: ""
   });
 
-  const token = searchParams.get('token');
+  const token = pathToken || searchParams.get('token');
 
   // Fetch invitation details
   useEffect(() => {

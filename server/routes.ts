@@ -213,13 +213,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Check if consent has been granted for this hospital
       const consentRecords = await storage.getConsentRecordsByPatientId(nationalId, user.id);
-      // Compute traditional consent validity as last access within 12 hours
+      // Compute traditional consent validity as last GRANTED access within 12 hours
+      // Only consider consent records where consentGrantedBy is a numeric hospital id (not "pending")
+      const grantedRecords = consentRecords.filter((r: any) => typeof r.consentGrantedBy === 'string' && /^\d+$/.test(r.consentGrantedBy));
       let hasConsent = false;
       let traditionalConsentExpiresAt: Date | undefined = undefined;
-      if (consentRecords.length > 0) {
-        const lastAccessed = consentRecords
+      if (grantedRecords.length > 0) {
+        const lastAccessed = grantedRecords
           .map(r => r.accessedAt)
-          .filter(Boolean)
+          .filter((d: any) => !!d)
           .sort((a: any, b: any) => new Date(b as any).getTime() - new Date(a as any).getTime())[0] as Date | undefined;
         if (lastAccessed) {
           const expires = new Date(new Date(lastAccessed).getTime() + 12 * 60 * 60 * 1000);
@@ -246,19 +248,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
 
-      // Return patient info and record count for consent modal
+      // If consent is NOT valid, avoid returning PII or medical details
+      if (!hasConsent) {
+        return res.json({
+          hasConsent: false,
+          requiresConsent: true,
+          recordCount: records.length,
+        });
+      }
+
+      // Return patient info and records when consent is valid
       res.json({
         patientName: records[0].patientName,
         nationalId: records[0].nationalId,
         recordCount: records.length,
         patientDID: patientProfile?.patientDID,
         hasWeb3Profile: !!patientProfile,
-        hasConsent: hasConsent,
+        hasConsent: true,
         consentExpiresAt: web3ConsentExpiresAt || traditionalConsentExpiresAt || null,
         consentType: web3ConsentExpiresAt ? 'web3' : 'traditional',
-        // Server-side pagination support (optional; client currently paginates)
         totalRecords: records.length,
-        records: hasConsent ? records.map(record => ({
+        records: records.map(record => ({
           id: record.id,
           visitDate: record.visitDate,
           visitType: record.visitType,
@@ -268,7 +278,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           department: record.department,
           submittedAt: record.submittedAt,
           recordType: record.recordType,
-        })) : [], // Don't return records if no consent
+        })),
       });
     } catch (error) {
       next(error);
@@ -586,9 +596,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "No Web3 records found for this patient" });
       }
 
-      // Check if consent has been granted for this hospital
+      // Check if consent has been granted for this hospital and is not expired
       const consentRecords = await storage.getConsentByPatientAndRequester(patientDID, `did:medbridge:hospital:${user.id}`);
-      const hasConsent = consentRecords.some(c => c.consentGiven && !c.revokedAt);
+      const now = new Date();
+      // Require explicit expiry; null expiry is NOT considered valid
+      const validConsents = consentRecords.filter(c => c.consentGiven && !c.revokedAt && !!c.expiresAt && now < c.expiresAt);
+      const hasConsent = validConsents.length > 0;
+      let consentExpiresAt: Date | null = null;
+      if (hasConsent) {
+        const expiries = validConsents.map(c => new Date(c.expiresAt as any).getTime()).filter(Boolean);
+        if (expiries.length > 0) {
+          consentExpiresAt = new Date(Math.min(...expiries));
+        }
+      }
 
       if (!hasConsent) {
         return res.status(403).json({ 
@@ -604,6 +624,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         patientDID,
         recordCount: web3Records.length,
         hasConsent: true,
+        consentExpiresAt,
         records: web3Records.map(record => ({
           id: record.id,
           visitDate: record.visitDate,
