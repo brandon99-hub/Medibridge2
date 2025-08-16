@@ -79,10 +79,20 @@ export class AuditService {
    */
   async logSecurityViolation(violation: InsertSecurityViolation, req?: Request): Promise<void> {
     try {
+      // Extract hospital_id from authenticated user if available
+      let hospital_id: number | undefined;
+      if (req?.user && typeof req.user === 'object' && 'hospital_id' in req.user) {
+        hospital_id = (req.user as any).hospital_id;
+      } else if (req?.user && typeof req.user === 'object' && 'id' in req.user) {
+        // Fallback: use user ID as hospital_id for hospital users
+        hospital_id = (req.user as any).id;
+      }
+
       const enrichedViolation = {
         ...violation,
         ipAddress: req?.ip || violation.ipAddress,
         userAgent: req?.get('User-Agent') || violation.userAgent,
+        hospital_id, // Add hospital context
       };
 
       console.log(`[SECURITY_VIOLATION] ${JSON.stringify(enrichedViolation)}`);
@@ -100,8 +110,8 @@ export class AuditService {
         severity: violation.severity === "critical" ? "error" : "warning",
       }, req);
 
-      // Store in security violations table
-      await storage.createSecurityViolation(enrichedViolation);
+      // Store in security violations table with hospital context
+      await storage.createSecurityViolation(enrichedViolation, hospital_id);
     } catch (error) {
       console.error(`[SECURITY_AUDIT_ERROR] Failed to log security violation: ${error}`);
     }

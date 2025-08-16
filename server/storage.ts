@@ -952,7 +952,12 @@ export class DatabaseStorage implements IStorage {
 
   // Store a security violation in the security_violations table
   async createSecurityViolation(violation: any, hospital_id?: number): Promise<void> {
-    await db.insert(securityViolations).values({ ...violation, hospital_id }).returning();
+    // Use hospital_id from violation object if provided, otherwise use parameter
+    const finalHospitalId = violation.hospital_id ?? hospital_id;
+    await db.insert(securityViolations).values({ 
+      ...violation, 
+      hospital_id: finalHospitalId 
+    }).returning();
   }
 
   // Fetch the N most recent audit events

@@ -60,8 +60,10 @@ export function registerWeb3Routes(app: Express): void {
         return res.status(403).json({ error: "Only Hospital A can submit records. Your hospital type does not have permission for this action." });
       }
 
+      // More flexible schema to handle different field names from frontend
       const recordData = z.object({
-        phoneNumber: z.string(),
+        phoneNumber: z.string().optional(),
+        phone: z.string().optional(), // Alternative field name
         patientName: z.string(),
         nationalId: z.string(),
         visitDate: z.string(),
@@ -72,52 +74,67 @@ export function registerWeb3Routes(app: Express): void {
         department: z.string().optional(),
       }).parse(req.body);
 
-      // Find patient profile by phone or email
-      let patientProfile = await storage.findPatientProfileByEmailOrPhone(
-        recordData.phoneNumber.includes('@') ? recordData.phoneNumber : undefined,
-        !recordData.phoneNumber.includes('@') ? recordData.phoneNumber : undefined
-      );
+      // Extract phone number from multiple possible field names
+      const phoneNumber = recordData.phoneNumber || recordData.phone;
+      console.log('[WEB3_SUBMIT] Looking up patient with:', { phoneNumber, nationalId: recordData.nationalId });
+
+      // Find patient profile by phone or email first
+      let patientProfile = null;
+      if (phoneNumber) {
+        patientProfile = await storage.findPatientProfileByEmailOrPhone(
+          phoneNumber.includes('@') ? phoneNumber : undefined,
+          !phoneNumber.includes('@') ? phoneNumber : undefined
+        );
+        console.log('[WEB3_SUBMIT] Phone/email lookup result:', patientProfile ? `Found DID: ${patientProfile.patientDID}` : 'Not found');
+      }
       if (patientProfile) {
         // If the profile is missing this identifier, update it
-        if (!patientProfile.phoneNumber && !recordData.phoneNumber.includes('@')) {
-          await storage.updatePatientProfileIdentifiers(patientProfile.patientDID, { phoneNumber: recordData.phoneNumber });
+        if (phoneNumber && !patientProfile.phoneNumber && !phoneNumber.includes('@')) {
+          await storage.updatePatientProfileIdentifiers(patientProfile.patientDID, { phoneNumber });
         }
-        if (!patientProfile.email && recordData.phoneNumber.includes('@')) {
-          await storage.updatePatientProfileIdentifiers(patientProfile.patientDID, { email: recordData.phoneNumber });
+        if (phoneNumber && !patientProfile.email && phoneNumber.includes('@')) {
+          await storage.updatePatientProfileIdentifiers(patientProfile.patientDID, { email: phoneNumber });
         }
         // Re-fetch updated profile
         patientProfile = await storage.getPatientProfileByDID(patientProfile.patientDID);
         
         // CRITICAL FIX: Ensure patient identity exists and has phone number synced
-        await storage.updatePatientIdentityPhoneNumber(patientProfile.patientDID, patientProfile.phoneNumber || recordData.phoneNumber);
+        await storage.updatePatientIdentityPhoneNumber(patientProfile.patientDID, patientProfile.phoneNumber || phoneNumber);
         
         // Ensure private key exists for existing patients (for ZKP compatibility)
         try {
           await secureKeyVault.retrievePatientKey(patientProfile.patientDID);
-          console.log('[DEBUG] Patient key found for existing patient:', patientProfile.patientDID);
+          console.log('[WEB3_SUBMIT] Patient key found for existing patient:', patientProfile.patientDID);
         } catch (error) {
-          console.log('[DEBUG] Patient key not found, generating for existing patient:', patientProfile.patientDID);
+          console.log('[WEB3_SUBMIT] Patient key not found, generating for existing patient:', patientProfile.patientDID);
           // Generate and store private key for existing patient
           const wallet = WalletService.generateWallet();
           const privateKey = wallet.privateKey;
-          const patientSalt = `patient_${recordData.phoneNumber}_${Date.now()}`;
+          const patientSalt = `patient_${phoneNumber || recordData.nationalId}_${Date.now()}`;
           await secureKeyVault.storePatientKey(patientProfile.patientDID, privateKey, patientSalt);
-          
-          // Note: Patient identity wallet address update not implemented - not critical for ZKP
         }
       } else {
-        // Check by nationalId
+        // Check by nationalId as fallback
+        console.log('[WEB3_SUBMIT] Phone lookup failed, trying nationalId lookup');
         patientProfile = await storage.getPatientProfileByNationalId(recordData.nationalId);
+        console.log('[WEB3_SUBMIT] NationalId lookup result:', patientProfile ? `Found DID: ${patientProfile.patientDID}` : 'Not found');
+        
         if (!patientProfile) {
           return res.status(400).json({ 
             error: "Patient not found. Patient must be registered in the system before medical records can be submitted.",
             requiresRegistration: true,
-            message: "Please ensure the patient has completed registration via phone/email before submitting medical records."
+            message: "Please ensure the patient has completed registration via phone/email before submitting medical records.",
+            debug: {
+              searchedPhone: phoneNumber,
+              searchedNationalId: recordData.nationalId,
+              foundByPhone: false,
+              foundByNationalId: false
+            }
           });
         }
         
         // CRITICAL FIX: Ensure patient identity exists and has phone number synced
-        await storage.updatePatientIdentityPhoneNumber(patientProfile.patientDID, patientProfile.phoneNumber || recordData.phoneNumber);
+        await storage.updatePatientIdentityPhoneNumber(patientProfile.patientDID, patientProfile.phoneNumber || phoneNumber);
       }
 
       const patientDID = patientProfile.patientDID;
