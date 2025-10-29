@@ -56,8 +56,7 @@ const emergencyConsentRequestSchema = z.object({
 
 
 export async function registerRoutes(app: Express): Promise<Server> {
-  // Setup authentication routes
-  await setupAuth(app);
+  // Auth is initialized in server/index.ts
 
   // Simplified patient routes with Web3 backend, Web2 UX
   registerSimplifiedPatientRoutes(app);
@@ -134,8 +133,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // Proceed without entities/icd_codes if analysis fails
       }
       
-      console.log("User in /api/submit_record:", user);
-      console.log("Record data to insert:", recordData);
+      if (process.env.NODE_ENV !== 'production') {
+        console.log("User in /api/submit_record");
+        console.log("Record data prepared for insert");
+      }
       const record = await storage.createPatientRecord(recordData);
 
       // Fire-and-forget: generate dynamic ZK proofs from NLP/ICD analysis (non-blocking)

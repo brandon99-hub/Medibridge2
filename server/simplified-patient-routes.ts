@@ -122,34 +122,42 @@ export function registerSimplifiedPatientRoutes(app: Express): void {
    */
   app.post("/api/patient/verify-otp", async (req, res) => {
     try {
-      const { phoneNumber, otpCode } = z.object({
-        phoneNumber: z.string(),
+      // Accept both 'contact' and 'phoneNumber' for backward compatibility
+      const { phoneNumber, contact, otpCode } = z.object({
+        phoneNumber: z.string().optional(),
+        contact: z.string().optional(),
         otpCode: z.string().length(6),
       }).parse(req.body);
       
+      // Use contact if provided, otherwise fall back to phoneNumber
+      const identifier = contact || phoneNumber;
+      if (!identifier) {
+        return res.status(400).json({ error: "Contact information (email or phone) is required" });
+      }
+      
       // Verify OTP from Redis
-      const storedOtp = await redisService.getOTP(phoneNumber);
+      const storedOtp = await redisService.getOTP(identifier);
       if (!storedOtp || storedOtp.code !== otpCode || storedOtp.expires < Date.now()) {
         return res.status(400).json({ error: "Invalid or expired OTP. Please request a new code." });
       }
       // Remove used OTP from Redis
-      await redisService.deleteOTP(phoneNumber);
+      await redisService.deleteOTP(identifier);
       
       // Try to find existing profile by phone or email
       let patientProfile = await storage.findPatientProfileByEmailOrPhone(
-        phoneNumber.includes('@') ? phoneNumber : undefined,
-        !phoneNumber.includes('@') ? phoneNumber : undefined
+        identifier.includes('@') ? identifier : undefined,
+        !identifier.includes('@') ? identifier : undefined
       );
       
       if (patientProfile) {
         // Ensure identity exists for existing profile
         await ensurePatientIdentityExists(patientProfile.patientDID, patientProfile.phoneNumber);
         // If the profile is missing this identifier, update it
-        if (!patientProfile.phoneNumber && !phoneNumber.includes('@')) {
-          await storage.updatePatientProfileIdentifiers(patientProfile.patientDID, { phoneNumber });
+        if (!patientProfile.phoneNumber && !identifier.includes('@')) {
+          await storage.updatePatientProfileIdentifiers(patientProfile.patientDID, { phoneNumber: identifier });
         }
-        if (!patientProfile.email && phoneNumber.includes('@')) {
-          await storage.updatePatientProfileIdentifiers(patientProfile.patientDID, { email: phoneNumber });
+        if (!patientProfile.email && identifier.includes('@')) {
+          await storage.updatePatientProfileIdentifiers(patientProfile.patientDID, { email: identifier });
         }
         // Re-fetch updated profile
         patientProfile = await storage.getPatientProfileByDID(patientProfile.patientDID);
@@ -157,15 +165,15 @@ export function registerSimplifiedPatientRoutes(app: Express): void {
         await syncIdentityPhoneNumber(patientProfile.patientDID, patientProfile.phoneNumber);
       } else {
         // First-time user: Generate DID and create profile
-        const identity = await patientWeb3Service.createPatientIdentity(phoneNumber);
+        const identity = await patientWeb3Service.createPatientIdentity(identifier);
         // Ensure identity exists for new profile
-        await ensurePatientIdentityExists(identity.patientDID, phoneNumber);
+        await ensurePatientIdentityExists(identity.patientDID, identifier.includes('@') ? undefined : identifier);
         // Create basic profile (National ID will be added later)
         const newProfile = {
           patientDID: identity.patientDID,
-          nationalId: "", // Will be set during profile completion
-          phoneNumber: phoneNumber.includes('@') ? "" : phoneNumber, // Empty for email users
-          email: phoneNumber.includes('@') ? phoneNumber : null,     // Email for email users
+          nationalId: `temp_${Date.now()}_${Math.random().toString(36).substring(7)}`, // Temporary unique ID
+          phoneNumber: identifier.includes('@') ? "" : identifier, // Empty for email users
+          email: identifier.includes('@') ? identifier : null,     // Email for email users
           fullName: "", // Will be set during profile completion
           isProfileComplete: false
         };
@@ -173,18 +181,31 @@ export function registerSimplifiedPatientRoutes(app: Express): void {
         patientProfile = await storage.createPatientProfile(newProfile);
         // Patient profile created successfully
         // Send welcome message if it's an email-based account
-        if (phoneNumber.includes('@')) {
-          await emailService.sendWelcomeEmail(phoneNumber, identity.patientDID);
+        if (identifier.includes('@')) {
+          try {
+            await emailService.sendWelcomeEmail(identifier, identity.patientDID);
+          } catch (emailError) {
+            console.error('[EMAIL] Failed to send welcome email:', emailError);
+            // Don't fail the whole request if email fails
+          }
         } else {
           // Send welcome SMS for phone-based accounts
-          await smsService.sendWelcomeSMS({
-            to: phoneNumber,
-            patientDID: identity.patientDID
-          });
+          try {
+            await smsService.sendWelcomeSMS({
+              to: identifier,
+              patientDID: identity.patientDID
+            });
+          } catch (smsError) {
+            console.error('[SMS] Failed to send welcome SMS:', smsError);
+            // Don't fail the whole request if SMS fails
+          }
         }
         // Re-fetch updated profile
         const latestProfile = await storage.getPatientProfileByDID(identity.patientDID);
-        await syncIdentityPhoneNumber(identity.patientDID, latestProfile.phoneNumber);
+        // Only sync phone number if it exists
+        if (latestProfile.phoneNumber) {
+          await syncIdentityPhoneNumber(identity.patientDID, latestProfile.phoneNumber);
+        }
       }
       // Create session
       req.session.patientId = patientProfile.id;
@@ -202,6 +223,8 @@ export function registerSimplifiedPatientRoutes(app: Express): void {
         },
       });
     } catch (error: any) {
+      console.error('[VERIFY_OTP_ERROR] Full error:', error);
+      console.error('[VERIFY_OTP_ERROR] Stack:', error.stack);
       return res.status(400).json({ error: `Failed to verify OTP: ${error.message}` });
     }
   });
@@ -452,7 +475,10 @@ export function registerSimplifiedPatientRoutes(app: Express): void {
 
       console.log("=== CONSENT DEBUG START ===");
       console.log("Patient profile:", patientProfile);
-      console.log("Patient National ID:", patientProfile.nationalId);
+      if (process.env.NODE_ENV !== 'production') {
+        const nidRed = patientProfile?.nationalId ? `${patientProfile.nationalId.slice(0,2)}***${patientProfile.nationalId.slice(-2)}` : 'unknown';
+        console.log("Patient National ID:", nidRed);
+      }
 
       // Get all consent records for this patient (traditional + web3)
       let allConsentRecords: any[] = [];

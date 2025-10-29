@@ -557,33 +557,6 @@ export class StaffInvitationService {
       }
     }
 
-    // Fallback to SendGrid if configured
-    if (process.env.SENDGRID_API_KEY && process.env.SENDGRID_API_KEY !== 'your-sendgrid-api-key-here') {
-      try {
-        const sgMail = await import('@sendgrid/mail');
-        sgMail.default.setApiKey(process.env.SENDGRID_API_KEY);
-        const res = await sgMail.default.send({
-          to: msg.to as string,
-          from: smtpFrom,
-          subject: msg.subject,
-          html: msg.html as string,
-          text: msg.text as string,
-        });
-        const status = Array.isArray(res) && res[0] && 'statusCode' in res[0] ? (res[0] as any).statusCode : undefined;
-        console.log(`[EMAIL SENT] Staff invitation via SendGrid`, { to: email, status });
-        return;
-      } catch (err: any) {
-        console.error('[EMAIL ERROR] Failed to send staff invitation via SendGrid', {
-          to: email,
-          code: err?.code,
-          message: err?.message,
-          response: err?.response?.body,
-          status: err?.response?.statusCode,
-        });
-        // fall through to dev logs
-      }
-    }
-
     // Dev logs as last resort
     console.log(`[DEV MODE] Staff invitation email would be sent to ${email}`);
     console.log(`[DEV MODE] Activation URL: ${activationUrl}`);

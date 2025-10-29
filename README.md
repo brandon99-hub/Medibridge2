@@ -1,17 +1,160 @@
-# 🏥 MediBridge - Revolutionary Healthcare Data Interoperability Platform
+# 🏥 MediBridge - Healthcare Interoperability Powered by Hedera
 
 <div align="center">
 
+![MediBridge](https://img.shields.io/badge/MediBridge-Healthcare%20Interoperability-blue?style=for-the-badge)
+[![Hedera](https://img.shields.io/badge/Powered%20by-Hedera-00D4AA?style=for-the-badge)](https://hedera.com)
+[![Live Demo](https://img.shields.io/badge/Live-Demo-success?style=for-the-badge)](https://medibrigde.onrender.com/)
 
-**🏆  Bridging Healthcare with Web3 Technology**
+**🏆 Bridging Healthcare with Hedera Hashgraph Technology**
 
-*A secure, decentralized healthcare data interoperability platform with zero-knowledge proofs, USSD integration, and comprehensive emergency protocols designed for the future of medical record sharing in Kenya and beyond. Powered by invisible Web3 technology.*
+*Solving Kenya's healthcare trust crisis through enterprise blockchain, zero-knowledge proofs, and USSD integration. 7,000+ lives lost annually from missing medical data—MediBridge changes that.*
 
-**🏥 Purpose: Enabling seamless, secure sharing of patient medical records between hospitals while maintaining complete patient privacy and control through cryptographic consent and zero-knowledge proofs.**
+**🏥 Mission:** Enabling seamless, secure sharing of patient medical records between hospitals while maintaining complete patient privacy through cryptographic consent, immutable audit trails on Hedera, and NFT-based access control.
 
-[🚀 Live Demo](https://medibrigde.onrender.com/) • [📖 Documentation](#) • [🔐 Security Audit](#) • [💻 Source Code](#)
+[🚀 Live Demo](https://medibrigde.onrender.com/) • [📖 Hedera Integration](HEDERA_INTEGRATION.md) • [🔐 For Judges](#-for-judges-testing-the-mvp) • [💻 GitHub](#)
 
 </div>
+
+---
+
+## 🚨 The Problem: 7,000 Lives Lost Annually
+
+In Kenya, **over 7,000 people die every year from medication-related errors**—not from lack of doctors, but from missing data. Every hospital keeps its own records, many on paper, others locked in disconnected systems. When a patient moves, their history disappears.
+
+**Key Challenges:**
+- 📁 **12,000+ health facilities** with zero interoperability
+- 🔄 **60% of diagnostics** are duplicates across hospitals  
+- 💰 **KES 2.5B+ wasted annually** in redundant procedures
+- 🚫 **Trust deficit**: Hospitals don't trust each other's records; patients don't trust hospitals
+- 🔓 **No tamper-proof audit trail**: Traditional databases can be altered
+- ❌ **No cryptographic consent**: Database flags can be manipulated
+
+---
+
+## 💡 The Solution: MediBridge + Hedera
+
+MediBridge creates a **trusted digital highway** where medical records travel with the patient—securely, privately, instantly. Powered by **Hedera Hashgraph's enterprise blockchain**, we solve the trust problem through:
+
+- ⚡ **10,000+ TPS** - Handles Kenya's entire healthcare system at scale
+- 🔒 **Immutable Audit Trail** - Every action cryptographically verified on Hedera
+- 💰 **$0.0001 per transaction** - Affordable for public healthcare
+- 🌱 **Carbon Negative** - Aligns with Kenya's climate goals
+- 🏛️ **Enterprise Governance** - Trusted by Google, IBM, Boeing
+
+---
+
+## 🔗 Hedera Integration: 1,160+ Lines of Production Code
+
+MediBridge implements **5 comprehensive Hedera integrations**:
+
+### 1. 🗂️ **Hedera Consensus Service (HCS): Immutable Audit Trail**
+- **3 Dedicated Topics**: Audit (`0.0.7123958`), Consent (`0.0.7123959`), Security (`0.0.7123960`)
+- **99% cost reduction**: Hash-only storage vs. full data on-chain
+- **Tamper-evident**: Any database modification immediately detectable
+- **Compliance**: HIPAA/GDPR cryptographic proof
+
+### 2. 🎫 **Hedera Token Service (HTS): Medical Record NFTs**
+- **Token ID**: `0.0.7123961`
+- **Trustless consent**: Patient owns NFT = owns medical record
+- **Instant revocation**: Freeze NFT to revoke access in seconds
+- **Complete audit trail**: NFT transfer history on-chain
+
+### 3. 📜 **Smart Contracts: Automated Consent Enforcement**
+- **MediBridgeConsent.sol** deployed on Hedera
+- **Zero-trust**: No admin can bypass consent rules
+- **Auto-expiration**: Consent expires automatically after set period
+- **Emergency override**: Special contracts with dual-authorization
+
+### 4. 🆔 **Hedera DID: Portable Patient Identities**
+- **Format**: `did:hedera:testnet:{accountId}_{publicKey}`
+- **Universal ID**: Works across all hospitals nationwide
+- **QR + USSD**: Accessible via smartphone or feature phone
+- **Privacy-preserving**: Reveals nothing until patient consents
+
+### 5. ⏰ **Scheduled Transactions: Auto-Expiration**
+- **Guaranteed expiration**: Works even if servers fail
+- **Zero maintenance**: No cron jobs or background workers
+- **Patient control**: Temporary access truly temporary
+
+**View on HashScan:**
+- 🔍 [Audit Topic](https://hashscan.io/testnet/topic/0.0.7123958)
+- 🔍 [Consent Topic](https://hashscan.io/testnet/topic/0.0.7123959)
+- 🔍 [Security Topic](https://hashscan.io/testnet/topic/0.0.7123960)
+- 🔍 [Medical NFT Token](https://hashscan.io/testnet/token/0.0.7123961)
+- 🔍 [Operator Account](https://hashscan.io/testnet/account/0.0.7123857)
+
+---
+
+## 🧪 For Judges: Testing the MVP
+
+### What You're Testing
+**Fully functional MVP** with complete Hedera integration (not just a PoC):
+- ✅ Patient registration with Hedera DID creation
+- ✅ Hospital interfaces for data submission/retrieval
+- ✅ NFT minting on Hedera for medical records
+- ✅ Smart contract consent verification
+- ✅ Immutable audit logging to HCS
+- ✅ IPFS storage with AES-256 encryption
+- ✅ Zero-knowledge proofs
+- ✅ USSD integration for feature phones
+
+### 🔑 Hedera Testnet Credentials
+```
+Network: Hedera Testnet
+Account ID: 0.0.7123857
+Balance: 1070+ tℏ (sufficient for testing)
+Mirror Node: https://testnet.mirrornode.hedera.com
+```
+*Note: Private key configured on backend. Judges interact via UI.*
+
+### 🚀 Quick Test Guide
+
+**1. Access Live Demo:** https://medibrigde.onrender.com/
+
+**2. Test Patient Registration (Creates Hedera DID)**
+- Register with phone number
+- ✅ Hedera DID created: `did:hedera:testnet:0.0.xxx`
+- ✅ Account initialized on Hedera
+
+**3. Test Record Upload (Mints NFT)**
+- Login as Hospital A
+- Upload medical record
+- ✅ Encrypted with AES-256-GCM
+- ✅ Stored on IPFS
+- ✅ NFT minted on Hedera (Token: `0.0.7123961`)
+- ✅ Audit logged to HCS (Topic: `0.0.7123958`)
+- **Verify:** https://hashscan.io/testnet/token/0.0.7123961
+
+**4. Test Consent Management (NFT Transfer)**
+- Login as Patient
+- Grant 7-day consent to Hospital B
+- ✅ NFT transferred to Hospital B
+- ✅ Smart contract records consent
+- ✅ Scheduled transaction created (auto-revoke)
+- ✅ Logged to HCS (Topic: `0.0.7123959`)
+- **Verify:** https://hashscan.io/testnet/topic/0.0.7123959
+
+**5. Test Record Retrieval (Smart Contract Check)**
+- Login as Hospital B
+- Request patient record
+- ✅ Smart contract verifies consent on Hedera
+- ✅ If valid → Record retrieved from IPFS
+- ✅ Access logged to HCS
+
+**6. Test Consent Revocation (NFT Freeze)**
+- Login as Patient
+- Revoke consent for Hospital B
+- ✅ NFT frozen instantly
+- ✅ Hospital B loses access
+- ✅ Revocation logged to HCS
+
+**7. Verify on Hedera**
+All actions visible on public ledger:
+- Audit trail: https://hashscan.io/testnet/topic/0.0.7123958
+- Consent events: https://hashscan.io/testnet/topic/0.0.7123959
+- Security logs: https://hashscan.io/testnet/topic/0.0.7123960
+- NFT activity: https://hashscan.io/testnet/token/0.0.7123961
 
 ---
 
@@ -27,15 +170,16 @@
 - **Comprehensive Audit Logging** with real-time security violation tracking
 - **Secure Key Vault** with master key encryption and access monitoring
 
-### 🌐 **Advanced Web3 Integration**
-- **Decentralized Identity (DID)** using did:key format with automatic generation
-- **Verifiable Credentials** for cryptographic consent with JWT format
-- **IPFS Storage** for decentralized medical records with redundancy
-- **Filecoin Integration** for long-term archival storage with cryptographic proofs
-- **MetaMask Integration** for advanced users with wallet signature verification
-- **Triple Redundant Storage** (IPFS + Filecoin + Local backup)
-- **ZoKrates ZKP Integration** for privacy-preserving medical proof generation
-- **IPFS Status Monitoring** with real-time health checks and availability tracking
+### 🌐 **Hedera-Powered Web3 Integration**
+- **Hedera Hashgraph** - Enterprise blockchain (10,000+ TPS, $0.0001/tx, carbon-negative)
+- **Hedera Consensus Service (HCS)** - Immutable audit trail across 3 topics
+- **Hedera Token Service (HTS)** - Medical record NFTs for consent management
+- **Hedera Smart Contracts** - Automated consent enforcement (MediBridgeConsent.sol)
+- **Hedera DID** - Portable patient identities (`did:hedera:testnet:xxx`)
+- **Scheduled Transactions** - Automatic consent expiration
+- **IPFS Storage** - Decentralized medical records with Pinata gateway
+- **ZoKrates ZKP** - Privacy-preserving medical proof generation
+- **Verifiable Credentials** - Cryptographic consent with JWT format
 
 ### 🔒 **Zero-Knowledge Proofs (ZK-MedPass)**
 - **Privacy-Preserving Health Proofs** - Prove health status without revealing details
@@ -393,29 +537,34 @@ CMD ["npm", "start"]
 
 ---
 
-## 🏆 Hackathon Achievements
+## 🏆 Technical Achievements
 
-### **Technical Accomplishments**
-- ✅ **Complete Web3 Integration** - DID, IPFS, Filecoin, Verifiable Credentials
-- ✅ **Zero-Knowledge Proofs** - Privacy-preserving health proofs
-- ✅ **USSD Integration** - Mobile access via Africa's Talking
-- ✅ **Enterprise Security** - AES-256, HSTS, CSRF, Rate Limiting, Audit Logging
-- ✅ **Healthcare Compliance** - HIPAA-compliant data handling
-- ✅ **Emergency Protocols** - Time-limited emergency access
-- ✅ **Key Recovery** - Secure recovery mechanisms
-- ✅ **Staff Management** - Comprehensive invitation system
-- ✅ **User Experience** - Intuitive interfaces for all stakeholders
-- ✅ **Production Ready** - Comprehensive testing and deployment setup
+### **Hedera Integration (1,160+ Lines of Code)**
+- ✅ **HCS Audit Trail** - 3 dedicated topics for immutable logging (~200 lines)
+- ✅ **HTS Medical NFTs** - Token-based consent management (~220 lines)
+- ✅ **Smart Contracts** - MediBridgeConsent.sol on Hedera (~400 lines)
+- ✅ **Hedera DID** - Portable patient identities (~150 lines)
+- ✅ **Scheduled Transactions** - Auto-expiring consent (~160 lines)
+- ✅ **Mirror Node Integration** - Fast historical queries (~30 lines)
+
+### **Complete Healthcare Platform**
+- ✅ **Zero-Knowledge Proofs** - Privacy-preserving health verification
+- ✅ **USSD Integration** - Feature phone access via Africa's Talking
+- ✅ **Enterprise Security** - AES-256, HSTS, CSRF, Rate Limiting
+- ✅ **HIPAA Compliance** - Healthcare-grade data handling
+- ✅ **Emergency Protocols** - Time-limited emergency access with dual-auth
+- ✅ **IPFS Storage** - Decentralized encrypted medical records
+- ✅ **Production Deployment** - Live on Render with PostgreSQL
 
 ### **Innovation Highlights**
-- 🎯 **First Healthcare DID Platform** - Patient-controlled identities
-- 🔐 **Cryptographic Consent** - Verifiable credentials for data access
-- 🌐 **Decentralized Storage** - IPFS + Filecoin for data redundancy
-- 📱 **QR Code Integration** - Instant patient identification
-- 🚨 **Emergency Protocols** - Controlled emergency access
+- 🎯 **First Hedera Healthcare DID Platform** - Patient-controlled identities on enterprise blockchain
+- 🔐 **NFT-Based Consent** - Medical records as NFTs for trustless access control
+- 🌐 **Immutable Audit Trail** - Every action cryptographically verified on Hedera
+- 📱 **QR + USSD Integration** - Works on smartphones and feature phones
+- 🚨 **Smart Contract Enforcement** - Zero-trust consent verification
 - 🔒 **ZK-MedPass** - Privacy-preserving health proofs
-- 📞 **USSD Health Portal** - Mobile access for rural areas
-- 🎁 **Airtime Rewards** - Financial inclusion through participation
+- ⏰ **Scheduled Auto-Revocation** - Guaranteed consent expiration
+- 💰 **99% Cost Reduction** - Hash anchoring vs. full on-chain storage
 
 ---
 
@@ -426,28 +575,30 @@ CMD ["npm", "start"]
 ### **Brandon Mwenja** 
 **🏆 Fullstack Engineer | Kenya**
 
-*"Building the future of healthcare data interoperability with Web3 technology"*
+*"Building the future of healthcare data interoperability with Hedera Hashgraph"*
 
 **Expertise:**
 - 🏗️ System Architecture & Design
+- ⛓️ **Hedera Integration** (HCS, HTS, Smart Contracts, DID, Scheduled Transactions)
 - 🔐 Security Implementation (AES-256, HSTS, CSRF, Rate Limiting)
-- 🌐 Web3 Integration (DID, IPFS, Filecoin, Verifiable Credentials)
+- 🌐 Web3 Integration (DID, IPFS, Verifiable Credentials)
 - 🔒 Zero-Knowledge Proofs (ZK-MedPass, Privacy Preserving)
 - 📞 Mobile Integration (USSD, Voice Calls, SMS)
 - 🎨 Frontend Development (React, TypeScript)
 - ⚙️ Backend Development (Node.js, PostgreSQL, Redis)
 - 📊 Database Design & Optimization
 
-**Achievements:**
-- ✅ Implemented military-grade encryption (AES-256-GCM + PBKDF2 + HMAC)
-- ✅ Built comprehensive audit logging system with security violations
-- ✅ Integrated multiple Web3 technologies seamlessly
-- ✅ Created zero-knowledge proof system for privacy-preserving health data
-- ✅ Implemented USSD integration for mobile access
-- ✅ Built emergency access protocols with time-limited credentials
-- ✅ Created intuitive healthcare interfaces for all stakeholders
-- ✅ Achieved HIPAA compliance standards
-- ✅ Implemented airtime rewards for user engagement
+**Key Achievements:**
+- ✅ **1,160+ lines of Hedera integration** across 6 core services
+- ✅ Implemented **HCS audit trail** with 3 dedicated topics
+- ✅ Built **HTS NFT system** for medical record consent management
+- ✅ Deployed **smart contracts** on Hedera for automated consent
+- ✅ Created **Hedera DID system** for portable patient identities
+- ✅ Implemented **scheduled transactions** for auto-expiring consent
+- ✅ Military-grade encryption (AES-256-GCM + PBKDF2 + HMAC)
+- ✅ Zero-knowledge proof system for privacy-preserving health data
+- ✅ USSD integration for feature phone access
+- ✅ HIPAA compliance with immutable audit trail
 
 </div>
 
@@ -481,10 +632,17 @@ CMD ["npm", "start"]
 
 **🚀 Ready to revolutionize healthcare data sharing?**
 
-[🌐 Live Demo](https://medibrigde.onrender.com/) • [📧 Email](mailto:brandon@medibridge.health) • [🐦 Twitter](#) • [💼 LinkedIn](#) • [📖 Documentation](#)
+[🌐 Live Demo](https://medibrigde.onrender.com/) • [📖 Hedera Integration](HEDERA_INTEGRATION.md) • [🔍 HashScan](https://hashscan.io/testnet/account/0.0.7123857) • [📧 Contact](#)
 
+**View MediBridge on Hedera:**
+- [Audit Topic](https://hashscan.io/testnet/topic/0.0.7123958) • [Consent Topic](https://hashscan.io/testnet/topic/0.0.7123959) • [Security Topic](https://hashscan.io/testnet/topic/0.0.7123960)
+- [Medical NFT Token](https://hashscan.io/testnet/token/0.0.7123961) • [Operator Account](https://hashscan.io/testnet/account/0.0.7123857)
 
-*MediBridge - Where Healthcare Meets Web3 Innovation*
+---
+
+*MediBridge - Where Healthcare Meets Hedera Innovation*
+
+**Powered by Hedera Hashgraph** | **Built for Kenya** | **Designed for the Future**
 
 </div>
 

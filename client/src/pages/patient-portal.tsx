@@ -158,13 +158,18 @@ export default function PatientPortal() {
     }
   };
 
-  const handleProfileComplete = (completedPatient: any) => {
+  const handleProfileComplete = async (completedPatient: any) => {
     // Update the patient state with completed profile
     if (patient) {
       setPatient(completedPatient);
     }
     setShowProfileCompletion(false);
     setCurrentPatientForEdit(null);
+    
+    // Refetch patient data to get updated profile
+    await refetch();
+    await refetchRecords();
+    await refetchConsents();
     
     toast({
       title: "Profile Completed!",

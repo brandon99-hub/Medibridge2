@@ -76,7 +76,11 @@ export function registerWeb3Routes(app: Express): void {
 
       // Extract phone number from multiple possible field names
       const phoneNumber = recordData.phoneNumber || recordData.phone;
-      console.log('[WEB3_SUBMIT] Looking up patient with:', { phoneNumber, nationalId: recordData.nationalId });
+      const pnRed = phoneNumber ? `${phoneNumber.slice(0,2)}***${phoneNumber.slice(-2)}` : undefined;
+      const nidRed = recordData.nationalId ? `${recordData.nationalId.slice(0,2)}***${recordData.nationalId.slice(-2)}` : undefined;
+      if (process.env.NODE_ENV !== 'production') {
+        console.log('[WEB3_SUBMIT] Looking up patient with:', { phoneNumber: pnRed, nationalId: nidRed });
+      }
 
       // Find patient profile by phone or email first
       let patientProfile = null;
@@ -85,7 +89,9 @@ export function registerWeb3Routes(app: Express): void {
           phoneNumber.includes('@') ? phoneNumber : undefined,
           !phoneNumber.includes('@') ? phoneNumber : undefined
         );
-        console.log('[WEB3_SUBMIT] Phone/email lookup result:', patientProfile ? `Found DID: ${patientProfile.patientDID}` : 'Not found');
+        if (process.env.NODE_ENV !== 'production') {
+          console.log('[WEB3_SUBMIT] Phone/email lookup result:', patientProfile ? 'Found DID' : 'Not found');
+        }
       }
       if (patientProfile) {
         // If the profile is missing this identifier, update it
@@ -115,9 +121,21 @@ export function registerWeb3Routes(app: Express): void {
         }
       } else {
         // Check by nationalId as fallback
-        console.log('[WEB3_SUBMIT] Phone lookup failed, trying nationalId lookup');
+        if (process.env.NODE_ENV !== 'production') {
+          console.log('[WEB3_SUBMIT] Phone lookup failed, trying nationalId lookup');
+          console.log('[WEB3_SUBMIT] Searching for nationalId:', recordData.nationalId);
+        }
         patientProfile = await storage.getPatientProfileByNationalId(recordData.nationalId);
-        console.log('[WEB3_SUBMIT] NationalId lookup result:', patientProfile ? `Found DID: ${patientProfile.patientDID}` : 'Not found');
+        if (process.env.NODE_ENV !== 'production') {
+          console.log('[WEB3_SUBMIT] NationalId lookup result:', patientProfile ? 'Found DID' : 'Not found');
+          if (patientProfile) {
+            console.log('[WEB3_SUBMIT] Found patient:', {
+              did: patientProfile.patientDID,
+              nationalId: patientProfile.nationalId,
+              fullName: patientProfile.fullName
+            });
+          }
+        }
         
         if (!patientProfile) {
           return res.status(400).json({ 

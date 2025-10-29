@@ -19,8 +19,12 @@ app.use(helmet({
   contentSecurityPolicy: {
     directives: {
       defaultSrc: ["'self'"],
-      scriptSrc: ["'self'", "'unsafe-inline'"], // Allow inline scripts for development
-      styleSrc: ["'self'", "'unsafe-inline'"], // Allow inline styles
+      scriptSrc: process.env.NODE_ENV === 'production'
+        ? ["'self'"]
+        : ["'self'", "'unsafe-inline'"],
+      styleSrc: process.env.NODE_ENV === 'production'
+        ? ["'self'"]
+        : ["'self'", "'unsafe-inline'"],
       imgSrc: ["'self'", "data:", "https:"],
       connectSrc: ["'self'", "https:"],
       fontSrc: ["'self'", "https:"],
@@ -29,11 +33,11 @@ app.use(helmet({
       frameSrc: ["'none'"],
     },
   },
-  crossOriginEmbedderPolicy: false, // Disable for development
+  crossOriginEmbedderPolicy: false,
   hsts: {
-    maxAge: 31536000, // 1 year in seconds
+    maxAge: 31536000,
     includeSubDomains: true,
-    preload: true, // Enable HSTS preload for maximum security
+    preload: true,
   },
 }));
 

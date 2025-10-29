@@ -1,58 +1,310 @@
-# Node / TypeScript
+# ============================================
+# SENSITIVE FILES - NEVER COMMIT
+# ============================================
+
+# Environment files with secrets
+.env
+.env.*
+.env.local
+.env.development
+.env.test
+.env.production
+!.env.example
+
+# Private keys and credentials
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
+*.keystore
+private-key.txt
+secrets.json
+credentials.json
+service-account.json
+
+# Hedera specific
+hedera-*.key
+hedera-credentials.*
+operator-key.*
+
+# Database credentials
+database.config.json
+db-credentials.*
+
+# API keys and tokens
+api-keys.txt
+tokens.json
+.secrets
+
+# ============================================
+# NODE.JS / TYPESCRIPT
+# ============================================
+
+# Dependencies
 node_modules/
+jspm_packages/
+bower_components/
+
+# Logs
 logs/
 *.log
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
+lerna-debug.log*
+
+# Runtime data
+pids/
+*.pid
+*.seed
+*.pid.lock
+
+# TypeScript
 *.tsbuildinfo
+*.tsbuildinfo.*
+tsconfig.tsbuildinfo
+
+# ESLint
 .eslintcache
 
-# Builds (client via Vite, server via esbuild)
+# Optional npm cache directory
+.npm
+
+# Optional REPL history
+.node_repl_history
+
+# Yarn
+.yarn/cache
+.yarn/unplugged
+.yarn/build-state.yml
+.yarn/install-state.gz
+.pnp.*
+yarn.lock
+
+# Package manager locks (keep package-lock.json if you use npm)
+# package-lock.json
+
+# ============================================
+# BUILD OUTPUTS
+# ============================================
+
+# Client builds (Vite)
 dist/
+dist-ssr/
 build/
 out/
 .vite/
+*.local
 
-# Environment files
-.env
-.env.*
-!.env.example
+# Server builds
+server/dist/
+server/build/
 
-# IDE
-.vscode/
-.idea/
-*.code-workspace
+# Static files
+public/dist/
+public/build/
 
-# OS
-.DS_Store
-Thumbs.db
-desktop.ini
+# ============================================
+# PYTHON
+# ============================================
 
-# Python
+# Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
+*$py.class
+*.so
+
+# Virtual environments
 .venv/
 venv/
 env/
 ENV/
+env.bak/
+venv.bak/
+
+# Python package files
+*.egg
+*.egg-info/
+dist/
+build/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+
+# PyInstaller
+*.manifest
+*.spec
+
+# Unit test / coverage
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.nox/
 pip-log.txt
+pip-delete-this-directory.txt
 
-# Local storage (used by enhanced-storage-service)
-local_storage/
+# Jupyter Notebook
+.ipynb_checkpoints
+*.ipynb
 
-# Local databases
+# ============================================
+# IDE / EDITORS
+# ============================================
+
+# VSCode
+.vscode/
+*.code-workspace
+.history/
+
+# JetBrains (IntelliJ, WebStorm, PyCharm, etc.)
+.idea/
+*.iml
+*.iws
+*.ipr
+out/
+
+# Sublime Text
+*.sublime-project
+*.sublime-workspace
+
+# Vim
+*.swp
+*.swo
+*~
+.vim/
+
+# Emacs
+*~
+\#*\#
+.\#*
+
+# ============================================
+# OPERATING SYSTEMS
+# ============================================
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon
+._*
+.DocumentRevisions-V100
+.fseventsd
+.Spotlight-V100
+.TemporaryItems
+.Trashes
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
+.AppleDB
+.AppleDesktop
+Network Trash Folder
+Temporary Items
+.apdisk
+
+# Windows
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+ehthumbs_vista.db
+*.stackdump
+[Dd]esktop.ini
+$RECYCLE.BIN/
+*.cab
+*.msi
+*.msix
+*.msm
+*.msp
+*.lnk
+
+# Linux
+.directory
+.Trash-*
+.nfs*
+
+# ============================================
+# DATABASES
+# ============================================
+
+# SQLite
 *.db
 *.sqlite
 *.sqlite3
 *.db-journal
+*.db-shm
+*.db-wal
 
-# Coverage
+# PostgreSQL
+*.pgdata
+pgdata/
+
+# Redis
+dump.rdb
+
+# MongoDB
+*.bson
+
+# ============================================
+# TESTING & COVERAGE
+# ============================================
+
+# Test coverage
 coverage/
 .nyc_output/
+*.lcov
+.coverage
+htmlcov/
 
-# Zokrates: ignore heavy/generated artifacts, keep circuits and useful metadata
+# Test results
+test-results/
+junit.xml
+test-output/
+
+# E2E testing
+playwright-report/
+test-results/
+playwright/.cache/
+
+# ============================================
+# BLOCKCHAIN / WEB3
+# ============================================
+
+# Hedera
+hedera-*.json
+.hedera/
+
+# Smart contract artifacts (keep source .sol files)
+artifacts/
+cache/
+typechain/
+typechain-types/
+
+# Hardhat
+.hardhat/
+hardhat-cache/
+
+# Truffle
+.truffle/
+
+# Foundry
+out/
+cache_forge/
+
+# ============================================
+# ZOKRATES / ZERO-KNOWLEDGE PROOFS
+# ============================================
+
+# ZoKrates generated files
 zokrates/*.wtns
 zokrates/*.r1cs
 zokrates/out*
@@ -63,7 +315,122 @@ zokrates/**/*.temp
 zokrates/artifacts/**/*.key
 zokrates/artifacts/**/verifier.sol
 
+# Keep circuits and useful metadata
+!zokrates/circuits/
+!zokrates/abi.json
+!zokrates/README.md
+
+# ============================================
+# STORAGE & MEDIA
+# ============================================
+
+# Local storage (used by enhanced-storage-service)
+local_storage/
+uploads/
+temp/
+tmp/
+
 # IPFS/Filecoin local data
 .ipfs/
 ipfs/
 filecoin/
+.filecoin/
+
+# Large media files (if any)
+*.mp4
+*.mov
+*.avi
+*.mkv
+*.flv
+*.wmv
+
+# ============================================
+# DOCUMENTATION
+# ============================================
+
+# Generated docs
+docs/_build/
+docs/.doctrees/
+site/
+
+# ============================================
+# MISC
+# ============================================
+
+# Backup files
+*.bak
+*.backup
+*.old
+*.orig
+*.save
+*.swp
+*.tmp
+
+# Archive files
+*.zip
+*.tar
+*.tar.gz
+*.rar
+*.7z
+
+# Lock files (optional - uncomment if needed)
+# package-lock.json
+# yarn.lock
+# pnpm-lock.yaml
+
+# Temporary files
+.temp/
+.cache/
+.parcel-cache/
+
+# Next.js (if used)
+.next/
+next-env.d.ts
+
+# Nuxt.js (if used)
+.nuxt/
+.output/
+
+# Sentry
+.sentryclirc
+
+# Vercel
+.vercel
+
+# Terraform
+*.tfstate
+*.tfstate.*
+.terraform/
+
+# Docker
+.dockerignore
+docker-compose.override.yml
+
+# ============================================
+# PROJECT SPECIFIC
+# ============================================
+
+# Medical records (test data)
+test-records/
+sample-data/encrypted/
+
+# Audit logs (local)
+audit-logs/
+security-logs/
+
+# Session data
+sessions/
+.sessions/
+
+# Redis dumps
+dump.rdb
+
+# PM2
+.pm2/
+pm2.log
+
+# Replit specific
+.replit
+.upm/
+.config/
+replit.nix

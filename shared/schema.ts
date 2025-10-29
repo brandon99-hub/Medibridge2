@@ -27,7 +27,9 @@ export const patientProfiles = pgTable("patient_profiles", {
   id: serial("id").primaryKey(),
   patientDID: text("patient_did").notNull().unique(), // Decentralized Identifier
   nationalId: text("national_id").notNull().unique(), // National ID for traditional records
+  nationalIdHash: text("national_id_hash"),
   phoneNumber: text("phone_number").notNull().unique(), // Phone number for login
+  phoneNumberHash: text("phone_number_hash"),
   email: text("email"), // Optional email
   fullName: text("full_name").notNull(), // Patient's full name
   isProfileComplete: boolean("is_profile_complete").default(false), // Whether National ID has been provided
@@ -40,6 +42,7 @@ export const patientRecords = pgTable("patient_records", {
   id: serial("id").primaryKey(),
   patientDID: text("patient_did"), // Made optional for traditional records
   nationalId: text("national_id").notNull(), // Always required for traditional records
+  nationalIdHash: text("national_id_hash"),
   patientName: text("patient_name").notNull(),
   visitDate: text("visit_date").notNull(),
   visitType: text("visit_type"),

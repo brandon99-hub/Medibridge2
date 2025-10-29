@@ -1,18 +1,61 @@
 import { storage } from "./storage";
 import type { Request } from "express";
 import type { InsertAuditEvent, InsertSecurityViolation, InsertConsentAudit } from "@shared/audit-schema";
+import { Client, TopicMessageSubmitTransaction, TopicId } from "@hashgraph/sdk";
+import { createHash } from "crypto";
 
 /**
  * Comprehensive Audit Service for Healthcare Compliance
  */
 export class AuditService {
   private static instance: AuditService;
+  private hederaClient?: Client;
+  private auditTopicId?: TopicId;
+  private consentTopicId?: TopicId;
+  private securityTopicId?: TopicId;
+  private hederaEnabled: boolean = false;
+
+  private constructor() {
+    this.initializeHedera();
+  }
 
   static getInstance(): AuditService {
     if (!AuditService.instance) {
       AuditService.instance = new AuditService();
     }
     return AuditService.instance;
+  }
+
+  /**
+   * Initialize Hedera client and topics
+   */
+  private initializeHedera(): void {
+    try {
+      if (process.env.HEDERA_OPERATOR_ID && process.env.HEDERA_OPERATOR_KEY) {
+        this.hederaClient = Client.forTestnet();
+        this.hederaClient.setOperator(
+          process.env.HEDERA_OPERATOR_ID,
+          process.env.HEDERA_OPERATOR_KEY
+        );
+
+        // Load topic IDs
+        if (process.env.HEDERA_AUDIT_TOPIC_ID) {
+          this.auditTopicId = TopicId.fromString(process.env.HEDERA_AUDIT_TOPIC_ID);
+        }
+        if (process.env.HEDERA_CONSENT_TOPIC_ID) {
+          this.consentTopicId = TopicId.fromString(process.env.HEDERA_CONSENT_TOPIC_ID);
+        }
+        if (process.env.HEDERA_SECURITY_TOPIC_ID) {
+          this.securityTopicId = TopicId.fromString(process.env.HEDERA_SECURITY_TOPIC_ID);
+        }
+
+        this.hederaEnabled = true;
+        console.log('[HEDERA] Audit service initialized with HCS topics');
+      }
+    } catch (error) {
+      console.warn('[HEDERA] Failed to initialize Hedera client:', error);
+      this.hederaEnabled = false;
+    }
   }
 
   /**
@@ -26,11 +69,21 @@ export class AuditService {
         userAgent: req?.get('User-Agent') || event.userAgent,
       };
 
-      // For now, log to console - in production, store in database
       console.log(`[AUDIT] ${JSON.stringify(enrichedEvent)}`);
       
-      // Store in audit_events table
-      await storage.createAuditEvent(enrichedEvent);
+      // Store in PostgreSQL (source of truth for data)
+      const savedEvent = await storage.createAuditEvent(enrichedEvent);
+      
+      // Submit hash to Hedera HCS (source of truth for integrity)
+      if (this.hederaEnabled && savedEvent) {
+        this.submitHashToHCS(this.auditTopicId, {
+          eventId: savedEvent.id,
+          eventType: savedEvent.eventType,
+          timestamp: new Date().toISOString()
+        }, savedEvent).catch(err => 
+          console.error('[HCS_ERROR] Failed to submit audit hash:', err)
+        );
+      }
     } catch (error) {
       console.error(`[AUDIT_ERROR] Failed to log event: ${error}`);
     }
@@ -49,6 +102,22 @@ export class AuditService {
 
       console.log(`[CONSENT_AUDIT] ${JSON.stringify(enrichedAudit)}`);
       
+      // Store in consent audit table
+      const savedAudit = await storage.createConsentAudit(enrichedAudit);
+      
+      // Submit hash to Hedera consent topic
+      if (this.hederaEnabled && savedAudit) {
+        this.submitHashToHCS(this.consentTopicId, {
+          auditId: savedAudit.id,
+          patientDID: consentAudit.patientDID,
+          hospitalDID: consentAudit.hospitalDID,
+          action: consentAudit.consentAction,
+          timestamp: new Date().toISOString()
+        }, savedAudit).catch(err =>
+          console.error('[HCS_ERROR] Failed to submit consent hash:', err)
+        );
+      }
+
       // Log as general audit event too
       await this.logEvent({
         eventType: `CONSENT_${consentAudit.consentAction}`,
@@ -66,9 +135,6 @@ export class AuditService {
         },
         severity: "info",
       }, req);
-
-      // Store in consent audit table
-      await storage.createConsentAudit(enrichedAudit);
     } catch (error) {
       console.error(`[CONSENT_AUDIT_ERROR] Failed to log consent event: ${error}`);
     }
@@ -97,6 +163,21 @@ export class AuditService {
 
       console.log(`[SECURITY_VIOLATION] ${JSON.stringify(enrichedViolation)}`);
       
+      // Store in security violations table with hospital context
+      const savedViolation = await storage.createSecurityViolation(enrichedViolation, hospital_id);
+      
+      // Submit hash to Hedera security topic (high priority)
+      if (this.hederaEnabled && savedViolation) {
+        this.submitHashToHCS(this.securityTopicId, {
+          violationId: savedViolation.id,
+          type: violation.violationType,
+          severity: violation.severity,
+          timestamp: new Date().toISOString()
+        }, savedViolation).catch(err =>
+          console.error('[HCS_ERROR] Failed to submit security violation hash:', err)
+        );
+      }
+
       // Log as high-severity audit event
       await this.logEvent({
         eventType: "SECURITY_VIOLATION",
@@ -109,9 +190,6 @@ export class AuditService {
         metadata: violation.details,
         severity: violation.severity === "critical" ? "error" : "warning",
       }, req);
-
-      // Store in security violations table with hospital context
-      await storage.createSecurityViolation(enrichedViolation, hospital_id);
     } catch (error) {
       console.error(`[SECURITY_AUDIT_ERROR] Failed to log security violation: ${error}`);
     }
@@ -223,6 +301,100 @@ export class AuditService {
       },
       severity: action === "VIOLATION" ? "warning" : "info",
     }, req);
+  }
+
+  /**
+   * Submit hash to Hedera HCS topic (non-blocking)
+   * Uses hash anchoring: PostgreSQL stores data, Hedera stores proof
+   */
+  private async submitHashToHCS(
+    topicId: TopicId | undefined,
+    metadata: any,
+    fullData: any
+  ): Promise<void> {
+    if (!this.hederaClient || !topicId) {
+      return; // Hedera not configured, skip silently
+    }
+
+    try {
+      // Create cryptographic hash of the full data
+      const dataHash = createHash('sha256')
+        .update(JSON.stringify(fullData))
+        .digest('hex');
+
+      // Submit only hash + minimal metadata to Hedera
+      const message = JSON.stringify({
+        ...metadata,
+        dataHash,
+        version: '1.0'
+      });
+
+      const transaction = new TopicMessageSubmitTransaction()
+        .setTopicId(topicId)
+        .setMessage(message);
+
+      const response = await transaction.execute(this.hederaClient);
+      const receipt = await response.getReceipt(this.hederaClient);
+      
+      console.log(`[HCS_SUCCESS] Hash anchored to topic ${topicId.toString()}, seq: ${receipt.topicSequenceNumber?.toString()}`);
+    } catch (error) {
+      console.error(`[HCS_ERROR] Failed to submit to topic ${topicId}:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Verify audit event integrity against Hedera HCS
+   */
+  async verifyAuditIntegrity(eventId: number): Promise<boolean> {
+    try {
+      // Get event from PostgreSQL
+      const event = await storage.getAuditEventById(eventId);
+      if (!event) return false;
+
+      // Calculate current hash
+      const currentHash = createHash('sha256')
+        .update(JSON.stringify(event))
+        .digest('hex');
+
+      // Query Hedera Mirror Node for original hash
+      const mirrorNodeUrl = process.env.HEDERA_MIRROR_NODE_URL || 'https://testnet.mirrornode.hedera.com';
+      const topicId = this.auditTopicId?.toString();
+      
+      if (!topicId) return false;
+
+      const response = await fetch(
+        `${mirrorNodeUrl}/api/v1/topics/${topicId}/messages?limit=100`
+      );
+      const data = await response.json();
+
+      // Find matching event
+      const hcsMessage = data.messages?.find((msg: any) => {
+        try {
+          const decoded = JSON.parse(Buffer.from(msg.message, 'base64').toString());
+          return decoded.eventId === eventId;
+        } catch {
+          return false;
+        }
+      });
+
+      if (!hcsMessage) {
+        console.warn(`[HCS_VERIFY] No HCS record found for event ${eventId}`);
+        return false;
+      }
+
+      const hcsData = JSON.parse(Buffer.from(hcsMessage.message, 'base64').toString());
+      const originalHash = hcsData.dataHash;
+
+      // Compare hashes
+      const isValid = currentHash === originalHash;
+      console.log(`[HCS_VERIFY] Event ${eventId} integrity: ${isValid ? 'VALID' : 'TAMPERED'}`);
+      
+      return isValid;
+    } catch (error) {
+      console.error(`[HCS_VERIFY] Failed to verify event ${eventId}:`, error);
+      return false;
+    }
   }
 }
 

@@ -10,7 +10,9 @@ async function applyMigration() {
         "id" serial PRIMARY KEY NOT NULL,
         "patient_did" text NOT NULL,
         "national_id" text NOT NULL,
+        "national_id_hash" text,
         "phone_number" text NOT NULL,
+        "phone_number_hash" text,
         "email" text,
         "full_name" text NOT NULL,
         "is_profile_complete" boolean DEFAULT false,
@@ -33,6 +35,13 @@ async function applyMigration() {
         ) THEN
           ALTER TABLE "patient_records" ADD COLUMN "record_type" text DEFAULT 'traditional';
         END IF;
+        IF NOT EXISTS (
+          SELECT 1 FROM information_schema.columns 
+          WHERE table_name = 'patient_records' 
+          AND column_name = 'national_id_hash'
+        ) THEN
+          ALTER TABLE "patient_records" ADD COLUMN "national_id_hash" text;
+        END IF;
       END $$;
     `);
     
@@ -47,6 +56,27 @@ async function applyMigration() {
           AND is_nullable = 'NO'
         ) THEN
           ALTER TABLE "patient_records" ALTER COLUMN "patient_did" DROP NOT NULL;
+        END IF;
+      END $$;
+    `);
+    
+    // Add hash columns to existing patient_profiles if missing
+    await db.execute(`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_name = 'patient_profiles'
+          AND column_name = 'national_id_hash'
+        ) THEN
+          ALTER TABLE "patient_profiles" ADD COLUMN "national_id_hash" text;
+        END IF;
+        IF NOT EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_name = 'patient_profiles'
+          AND column_name = 'phone_number_hash'
+        ) THEN
+          ALTER TABLE "patient_profiles" ADD COLUMN "phone_number_hash" text;
         END IF;
       END $$;
     `);

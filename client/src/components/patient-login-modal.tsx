@@ -64,13 +64,34 @@ export default function PatientLoginModal({ isOpen, onClose, onSuccess }: Patien
     mutationFn: async () => {
       console.debug('[CSRF] Using apiRequestWithCsrf for /api/patient/verify-otp');
       const response = await apiRequestWithCsrf("POST", "/api/patient/verify-otp", {
-        phoneNumber: contact,
+        contact: contact,
         otpCode,
       });
       return response.json();
     },
     onSuccess: (data) => {
       console.log("OTP verification successful:", data);
+      
+      // Check if response has an error
+      if (data.error) {
+        toast({
+          title: "Verification Failed",
+          description: data.error,
+          variant: "destructive",
+        });
+        return;
+      }
+      
+      // Ensure patient data exists
+      if (!data.patient) {
+        toast({
+          title: "Verification Failed",
+          description: "Invalid response from server",
+          variant: "destructive",
+        });
+        return;
+      }
+      
       console.log("Patient data:", data.patient);
       console.log("isNewUser:", data.patient.isNewUser);
       console.log("isProfileComplete:", data.patient.isProfileComplete);

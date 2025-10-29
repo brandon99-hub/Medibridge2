@@ -30,6 +30,8 @@ import session from "express-session";
 import connectPg from "connect-pg-simple";
 import { pool } from "./db";
 import type { InsertPatientProfile } from "@shared/schema";
+import crypto from "crypto";
+import { enhancedEncryptionService } from "./enhanced-encryption-service";
 
 const PostgresSessionStore = connectPg(session);
 
@@ -151,13 +153,16 @@ export interface IStorage {
   sessionStore: session.Store;
 
   // Store a consent audit event in the consent_audit_trail table
-  createConsentAudit(audit: any): Promise<void>;
+  createConsentAudit(audit: any): Promise<any>;
 
   // Store an audit event in the audit_events table
-  createAuditEvent(audit: any, hospital_id?: number): Promise<void>;
+  createAuditEvent(audit: any, hospital_id?: number): Promise<any>;
 
   // Store a security violation in the security_violations table
-  createSecurityViolation(violation: any, hospital_id?: number): Promise<void>;
+  createSecurityViolation(violation: any, hospital_id?: number): Promise<any>;
+
+  // Get audit event by ID (for Hedera verification)
+  getAuditEventById(id: number): Promise<any>;
 
   // Fetch the N most recent audit events
   getRecentAuditEvents(limit?: number): Promise<any[]>;
@@ -269,21 +274,48 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createPatientRecord(record: Omit<InsertPatientRecord, "hospital_id"> & { submittedBy: number, hospital_id: number }): Promise<PatientRecord> {
+    const nationalIdHash = this.computeDeterministicHash(record.nationalId);
+    const encryptedRecord: any = { ...record, nationalIdHash };
+    try {
+      const patientDID = record.patientDID || "";
+      if (record.diagnosis) {
+        const encDiag = await enhancedEncryptionService.encryptRecord({ v: record.diagnosis }, patientDID);
+        encryptedRecord.diagnosis = encDiag.encryptedData;
+        encryptedRecord.storageMetadata = {
+          ...(record as any).storageMetadata,
+          encKeys: {
+            ...(record as any).storageMetadata?.encKeys,
+            diagnosis: encDiag.encryptionKey,
+          },
+        };
+      }
+      if (record.prescription) {
+        const encRx = await enhancedEncryptionService.encryptRecord({ v: record.prescription }, record.patientDID || "");
+        encryptedRecord.prescription = encRx.encryptedData;
+        encryptedRecord.storageMetadata = {
+          ...(encryptedRecord.storageMetadata || (record as any).storageMetadata),
+          encKeys: {
+            ...((encryptedRecord.storageMetadata || {}).encKeys || {}),
+            prescription: encRx.encryptionKey,
+          },
+        };
+      }
+    } catch (_e) {}
     const [patientRecord] = await db
       .insert(patientRecords)
-      .values(record)
+      .values(encryptedRecord)
       .returning();
     return patientRecord;
   }
 
   async getPatientRecordsByNationalId(nationalId: string): Promise<PatientRecord[]> {
+    const nationalIdHash = this.computeDeterministicHash(nationalId);
     const records = await db
       .select()
       .from(patientRecords)
-      .where(eq(patientRecords.nationalId, nationalId))
+      .where(or(eq(patientRecords.nationalIdHash, nationalIdHash), eq(patientRecords.nationalId, nationalId)))
       .orderBy(patientRecords.submittedAt);
-    
-    return records;
+    return await this.tryDecryptPatientRecords(records);
   }
 
   async getPatientRecordsByDID(patientDID: string): Promise<PatientRecord[]> {
@@ -292,8 +324,7 @@ export class DatabaseStorage implements IStorage {
       .from(patientRecords)
       .where(eq(patientRecords.patientDID, patientDID))
       .orderBy(patientRecords.submittedAt);
-    
-    return records;
+    return await this.tryDecryptPatientRecords(records);
   }
 
   async getWeb3PatientRecordsByDID(patientDID: string): Promise<PatientRecord[]> {
@@ -307,8 +338,7 @@ export class DatabaseStorage implements IStorage {
         )
       )
       .orderBy(patientRecords.submittedAt);
-    
-    return records;
+    return await this.tryDecryptPatientRecords(records);
   }
 
   async getPatientRecordById(id: number): Promise<PatientRecord | undefined> {
@@ -316,7 +346,9 @@ export class DatabaseStorage implements IStorage {
       .select()
       .from(patientRecords)
       .where(eq(patientRecords.id, id));
-    return record || undefined;
+    if (!record) return undefined;
+    const [dec] = await this.tryDecryptPatientRecords([record]);
+    return dec;
   }
 
   async createConsentRecord(consent: InsertConsentRecord): Promise<ConsentRecord> {
@@ -514,7 +546,10 @@ export class DatabaseStorage implements IStorage {
 
   // Patient Profiles
   async createPatientProfile(profile: InsertPatientProfile): Promise<any> {
-    const [newProfile] = await db.insert(patientProfiles).values(profile).returning();
+    const values: any = { ...profile };
+    if (values.nationalId) values.nationalIdHash = this.computeDeterministicHash(values.nationalId);
+    if (values.phoneNumber) values.phoneNumberHash = this.computeDeterministicHash(values.phoneNumber);
+    const [newProfile] = await db.insert(patientProfiles).values(values).returning();
     return newProfile;
   }
 
@@ -524,19 +559,30 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getPatientProfileByPhone(phoneNumber: string): Promise<any> {
-    const [profile] = await db.select().from(patientProfiles).where(eq(patientProfiles.phoneNumber, phoneNumber));
+    const phoneHash = this.computeDeterministicHash(phoneNumber);
+    const [profile] = await db
+      .select()
+      .from(patientProfiles)
+      .where(or(eq(patientProfiles.phoneNumberHash, phoneHash), eq(patientProfiles.phoneNumber, phoneNumber)));
     return profile;
   }
 
   async getPatientProfileByNationalId(nationalId: string): Promise<any> {
-    const [profile] = await db.select().from(patientProfiles).where(eq(patientProfiles.nationalId, nationalId));
+    const nidHash = this.computeDeterministicHash(nationalId);
+    const [profile] = await db
+      .select()
+      .from(patientProfiles)
+      .where(or(eq(patientProfiles.nationalIdHash, nidHash), eq(patientProfiles.nationalId, nationalId)));
     return profile;
   }
 
   async updatePatientProfile(did: string, updates: Partial<InsertPatientProfile>): Promise<any> {
+    const toSet: any = { ...updates, updatedAt: new Date() };
+    if ((updates as any).nationalId) toSet.nationalIdHash = this.computeDeterministicHash((updates as any).nationalId as any);
+    if ((updates as any).phoneNumber) toSet.phoneNumberHash = this.computeDeterministicHash((updates as any).phoneNumber as any);
     const [updatedProfile] = await db
       .update(patientProfiles)
-      .set({ ...updates, updatedAt: new Date() })
+      .set(toSet)
       .where(eq(patientProfiles.patientDID, did))
       .returning();
     return updatedProfile;
@@ -867,7 +913,11 @@ export class DatabaseStorage implements IStorage {
       if (profile) return profile;
     }
     if (phone) {
-      [profile] = await db.select().from(patientProfiles).where(eq(patientProfiles.phoneNumber, phone));
+      const phoneHash = this.computeDeterministicHash(phone);
+      [profile] = await db
+        .select()
+        .from(patientProfiles)
+        .where(or(eq(patientProfiles.phoneNumberHash, phoneHash), eq(patientProfiles.phoneNumber, phone)));
       if (profile) return profile;
     }
     return undefined;
@@ -877,7 +927,10 @@ export class DatabaseStorage implements IStorage {
   async updatePatientProfileIdentifiers(patientDID: string, identifiers: { email?: string, phoneNumber?: string }): Promise<any> {
     const updates: any = {};
     if (identifiers.email) updates.email = identifiers.email;
-    if (identifiers.phoneNumber) updates.phoneNumber = identifiers.phoneNumber;
+    if (identifiers.phoneNumber) {
+      updates.phoneNumber = identifiers.phoneNumber;
+      updates.phoneNumberHash = this.computeDeterministicHash(identifiers.phoneNumber);
+    }
     if (Object.keys(updates).length === 0) return undefined;
     const [updatedProfile]: any = await db
       .update(patientProfiles)
@@ -941,23 +994,32 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Store a consent audit event in the consent_audit_trail table
-  async createConsentAudit(audit: any): Promise<void> {
-    await db.insert(consentAuditTrail).values(audit);
+  async createConsentAudit(audit: any): Promise<any> {
+    const [result] = await db.insert(consentAuditTrail).values(audit).returning();
+    return result;
   }
 
   // Store an audit event in the audit_events table
-  async createAuditEvent(audit: any, hospital_id?: number): Promise<void> {
-    await db.insert(auditEvents).values({ ...audit, hospital_id }).returning();
+  async createAuditEvent(audit: any, hospital_id?: number): Promise<any> {
+    const [result] = await db.insert(auditEvents).values({ ...audit, hospital_id }).returning();
+    return result;
   }
 
   // Store a security violation in the security_violations table
-  async createSecurityViolation(violation: any, hospital_id?: number): Promise<void> {
+  async createSecurityViolation(violation: any, hospital_id?: number): Promise<any> {
     // Use hospital_id from violation object if provided, otherwise use parameter
     const finalHospitalId = violation.hospital_id ?? hospital_id;
-    await db.insert(securityViolations).values({ 
+    const [result] = await db.insert(securityViolations).values({ 
       ...violation, 
       hospital_id: finalHospitalId 
     }).returning();
+    return result;
+  }
+
+  // Get audit event by ID (for Hedera verification)
+  async getAuditEventById(id: number): Promise<any> {
+    const [event] = await db.select().from(auditEvents).where(eq(auditEvents.id, id));
+    return event;
   }
 
   // Fetch the N most recent audit events
@@ -1390,6 +1452,36 @@ export class DatabaseStorage implements IStorage {
   async createHospitalStaffInvitation(invitation: InsertHospitalStaffInvitation): Promise<HospitalStaffInvitation> {
     const [result] = await db.insert(hospitalStaffInvitations).values(invitation).returning();
     return result;
+  }
+
+  // === Helpers ===
+  private computeDeterministicHash(value: string): string {
+    const secret = process.env.MASTER_KEY || "dev-master-key";
+    return crypto.createHmac('sha256', secret).update(value).digest('hex');
+  }
+
+  private async tryDecryptPatientRecords(records: PatientRecord[]): Promise<PatientRecord[]> {
+    const out: PatientRecord[] = [] as any;
+    for (const rec of records as any[]) {
+      try {
+        const meta = (rec as any).storageMetadata || {};
+        const encKeys = meta.encKeys || {};
+        const did = (rec as any).patientDID || "";
+        const next: any = { ...rec };
+        if (typeof rec.diagnosis === 'string' && (rec.diagnosis as any).includes && (rec.diagnosis as any).includes(':') && encKeys.diagnosis) {
+          const dec = await enhancedEncryptionService.decryptRecord(rec.diagnosis as any, encKeys.diagnosis, did);
+          next.diagnosis = dec?.v ?? next.diagnosis;
+        }
+        if (typeof rec.prescription === 'string' && (rec.prescription as any).includes && (rec.prescription as any).includes(':') && encKeys.prescription) {
+          const dec = await enhancedEncryptionService.decryptRecord(rec.prescription as any, encKeys.prescription, did);
+          next.prescription = dec?.v ?? next.prescription;
+        }
+        out.push(next);
+      } catch (_e) {
+        out.push(rec as any);
+      }
+    }
+    return out;
   }
 
   async getInvitationByToken(token: string): Promise<HospitalStaffInvitation | undefined> {
