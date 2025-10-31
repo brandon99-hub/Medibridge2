@@ -12,7 +12,9 @@
 
 **🏥 Mission:** Enabling seamless, secure sharing of patient medical records between hospitals while maintaining complete patient privacy through cryptographic consent, immutable audit trails on Hedera, and NFT-based access control.
 
-[🚀 Live Demo](https://medibrigde.onrender.com/) • [📖 Hedera Integration](HEDERA_INTEGRATION.md) • [🔐 For Judges](#-for-judges-testing-the-mvp) • [💻 GitHub](#)
+
+[🚀 Live Demo](https://medibrigde.onrender.com/) • [📖 Hedera Integration](HEDERA_INTEGRATION.md) • [🔐 For Judges](#-for-judges-testing-the-mvp)  
+[🧠 View Pitch Deck](https://gamma.app/docs/MEDIBRIDGE-t4wsjrn6hnicct8) • [📜 View Hedera Developer Certificate](https://certs.hashgraphdev.com/cfd6d27b-1634-41d2-959f-1a181675d009.pdf)
 
 </div>
 
